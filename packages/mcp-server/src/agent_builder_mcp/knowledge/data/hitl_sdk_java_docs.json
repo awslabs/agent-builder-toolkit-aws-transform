@@ -1,0 +1,194 @@
+[
+  {
+    "name": "HitlClient",
+    "kind": "class",
+    "module": "com.amazon.elasticgumbyhitlcomponentjavasdk.client",
+    "description": "Java high-level client for HITL lifecycle management. Handles task creation, polling, artifact upload/download, refresh loops, and task closure.",
+    "signature": "new HitlClient(ElasticGumbyAgenticClient agenticClient, RequestContext requestContext)",
+    "parameters": [
+      {"name": "agenticClient", "type": "ElasticGumbyAgenticClient", "required": true, "description": "AWS SDK v2 client for ElasticGumbyAgenticService"},
+      {"name": "requestContext", "type": "RequestContext", "required": true, "description": "Built with RequestContext.builder().jobMetadata(...).agentInstanceId(...).authorizationToken(...).build()"},
+      {"name": "statusPollingIntervalSeconds", "type": "int", "required": false, "default": 15, "description": "Seconds between status polls (overload constructor)"},
+      {"name": "statusPollingTimeoutMinutes", "type": "int", "required": false, "default": 120, "description": "Max minutes to wait for human submission (overload constructor)"}
+    ],
+    "methods": ["createAndStartTask", "getTask", "waitForHumanSubmission", "pollUntilStatus", "closeTask", "executeWithRefresh", "uploadArtifact"],
+    "example": "ElasticGumbyAgenticClient agenticClient = ElasticGumbyAgenticClient.create();\nRequestContext requestContext = RequestContext.builder()\n    .jobMetadata(JobMetadata.builder().jobId(jobId).workspaceId(workspaceId).build())\n    .agentInstanceId(agentInstanceId)\n    .authorizationToken(token)\n    .build();\n\n// Default settings (15s poll, 2h timeout):\nHitlClient client = new HitlClient(agenticClient, requestContext);\n\n// Custom settings:\nHitlClient client = new HitlClient(agenticClient, requestContext, 5, 60);"
+  },
+  {
+    "name": "HitlClient.createAndStartTask",
+    "kind": "method",
+    "module": "com.amazon.elasticgumbyhitlcomponentjavasdk.client",
+    "description": "Create and start a HITL task. Calls both CreateHitlTask AND StartHitlTask API operations. The requestContext is injected automatically from the client.",
+    "signature": "String createAndStartTask(CreateHitlTaskRequest request)\nString createAndStartTask(CreateHitlTaskRequest request, boolean firstInChain)",
+    "parameters": [
+      {"name": "request", "type": "CreateHitlTaskRequest", "required": true, "description": "Built with builder pattern: uxComponentId, title, description, severity, hitlTaskType, blockingType, hitlRequestArtifact, etc."},
+      {"name": "firstInChain", "type": "boolean", "required": false, "default": true, "description": "True for first task in chain, false for refresh iterations"}
+    ],
+    "returns": {"type": "String", "description": "The created HITL task ID"},
+    "example": "CreateHitlTaskRequest request = CreateHitlTaskRequest.builder()\n    .uxComponentId(\"DynamicHITLRenderEngine\")\n    .title(\"Review Migration Plan\")\n    .description(\"Please review the proposed migration plan\")\n    .severity(Severity.STANDARD)\n    .hitlTaskType(HitlTaskType.NORMAL)\n    .blockingType(BlockingType.BLOCKING)\n    .hitlRequestArtifact(HitlTaskArtifact.builder().artifactId(artifactId).build())\n    .build();\nString taskId = client.createAndStartTask(request);"
+  },
+  {
+    "name": "HitlClient.getTask",
+    "kind": "method",
+    "module": "com.amazon.elasticgumbyhitlcomponentjavasdk.client",
+    "description": "Get the current state of a HITL task.",
+    "signature": "HitlTask getTask(String hitlTaskId)",
+    "parameters": [
+      {"name": "hitlTaskId", "type": "String", "required": true, "description": "The HITL task ID to retrieve"}
+    ],
+    "returns": {"type": "HitlTask", "description": "HitlTask with hitlTaskStatus() and humanArtifact()"},
+    "example": "HitlTask task = client.getTask(taskId);\nSystem.out.println(task.hitlTaskStatus()); // e.g. HitlTaskStatus.SUBMITTED"
+  },
+  {
+    "name": "HitlClient.waitForHumanSubmission",
+    "kind": "method",
+    "module": "com.amazon.elasticgumbyhitlcomponentjavasdk.client",
+    "description": "Wait for the human to submit their response. Blocks until task reaches SUBMITTED status. Delegates to pollUntilStatus internally.",
+    "signature": "HitlTask waitForHumanSubmission(String hitlTaskId) throws InterruptedException, TimeoutException",
+    "parameters": [
+      {"name": "hitlTaskId", "type": "String", "required": true, "description": "The HITL task ID to wait for"}
+    ],
+    "returns": {"type": "HitlTask", "description": "HitlTask with SUBMITTED status and humanArtifact().artifactId()"},
+    "raises": [
+      {"exception": "InterruptedException", "description": "If waiting thread is interrupted"},
+      {"exception": "TimeoutException", "description": "If polling timeout exceeded (default 2 hours)"},
+      {"exception": "IllegalStateException", "description": "If task reaches terminal status (CANCELLED, CLOSED) before SUBMITTED"}
+    ],
+    "example": "HitlTask task = client.waitForHumanSubmission(taskId);\nString humanArtifactId = task.humanArtifact().artifactId();"
+  },
+  {
+    "name": "HitlClient.pollUntilStatus",
+    "kind": "method",
+    "module": "com.amazon.elasticgumbyhitlcomponentjavasdk.client",
+    "description": "Poll until a HITL task reaches a specific status. Used internally by waitForHumanSubmission but can target any HitlTaskStatus.",
+    "signature": "HitlTask pollUntilStatus(String hitlTaskId, HitlTaskStatus targetStatus) throws InterruptedException, TimeoutException",
+    "parameters": [
+      {"name": "hitlTaskId", "type": "String", "required": true, "description": "The HITL task ID to poll"},
+      {"name": "targetStatus", "type": "HitlTaskStatus", "required": true, "description": "The status to wait for (e.g. HitlTaskStatus.SUBMITTED, HitlTaskStatus.DELIVERED)"}
+    ],
+    "returns": {"type": "HitlTask", "description": "HitlTask when target status is reached"},
+    "raises": [
+      {"exception": "InterruptedException", "description": "If waiting thread is interrupted"},
+      {"exception": "TimeoutException", "description": "If polling timeout exceeded"},
+      {"exception": "IllegalStateException", "description": "If task reaches terminal status before target"}
+    ],
+    "example": "HitlTask task = client.pollUntilStatus(taskId, HitlTaskStatus.DELIVERED);"
+  },
+  {
+    "name": "HitlClient.closeTask",
+    "kind": "method",
+    "module": "com.amazon.elasticgumbyhitlcomponentjavasdk.client",
+    "description": "Close a HITL task with a specified closure type.",
+    "signature": "HitlTaskStatus closeTask(String hitlTaskId, ClosureType closureType)",
+    "parameters": [
+      {"name": "hitlTaskId", "type": "String", "required": true, "description": "The HITL task ID to close"},
+      {"name": "closureType", "type": "ClosureType", "required": true, "description": "CLOSED (normal), CLOSED_PENDING_NEXT_TASK (refresh loop), or CANCELLED"}
+    ],
+    "returns": {"type": "HitlTaskStatus", "description": "Final HitlTaskStatus after closure"},
+    "example": "// Normal close:\nclient.closeTask(taskId, ClosureType.CLOSED);\n\n// Refresh loop (more tasks follow):\nclient.closeTask(taskId, ClosureType.CLOSED_PENDING_NEXT_TASK);"
+  },
+  {
+    "name": "HitlClient.executeWithRefresh",
+    "kind": "method",
+    "module": "com.amazon.elasticgumbyhitlcomponentjavasdk.client",
+    "description": "Execute HITL with automatic refresh loop and typed response deserialization. Handles: create task -> poll -> download artifact -> check QT_REFRESH -> close or refresh -> repeat. Unlike the Python SDK, returns a typed object via Jackson deserialization.",
+    "signature": "<T> T executeWithRefresh(CreateHitlTaskRequest initialRequest, Function<T, CreateHitlTaskRequest> onRefresh, int maxIterations, Class<T> responseType)",
+    "parameters": [
+      {"name": "initialRequest", "type": "CreateHitlTaskRequest", "required": true, "description": "Request for the first iteration"},
+      {"name": "onRefresh", "type": "Function<T, CreateHitlTaskRequest>", "required": true, "description": "Takes previous typed response, returns CreateHitlTaskRequest for next iteration"},
+      {"name": "maxIterations", "type": "int", "required": true, "description": "Maximum refresh iterations before forcing completion"},
+      {"name": "responseType", "type": "Class<T>", "required": true, "description": "Class for Jackson deserialization of human artifact (e.g. MyResponse.class)"}
+    ],
+    "returns": {"type": "T", "description": "Typed human artifact response, deserialized via Jackson"},
+    "example": "MyResponse response = client.executeWithRefresh(\n    initialRequest,\n    (prev) -> buildNextRequest(prev),\n    10,\n    MyResponse.class\n);"
+  },
+  {
+    "name": "HitlClient.uploadArtifact",
+    "kind": "method",
+    "module": "com.amazon.elasticgumbyhitlcomponentjavasdk.client",
+    "description": "Upload content as an artifact to the artifact store. Handles the full upload workflow: SHA256 digest, presigned URL, S3 PUT, and completion. The requestContext and contentDigest are set automatically.",
+    "signature": "String uploadArtifact(byte[] content, CreateArtifactUploadUrlRequest request)",
+    "parameters": [
+      {"name": "content", "type": "byte[]", "required": true, "description": "The content to upload (use jsonStr.getBytes() for JSON)"},
+      {"name": "request", "type": "CreateArtifactUploadUrlRequest", "required": true, "description": "Built with builder pattern: artifactReference (with categoryType and fileType), visibility"}
+    ],
+    "returns": {"type": "String", "description": "artifactId ready for use in createAndStartTask"},
+    "example": "String jsonStr = JsonUtils.serialize(artifact);\nCreateArtifactUploadUrlRequest request = CreateArtifactUploadUrlRequest.builder()\n    .artifactReference(ArtifactReference.builder()\n        .artifactType(ArtifactType.builder()\n            .categoryType(ArtifactCategoryType.HITL_FROM_AGENT)\n            .fileType(FileType.JSON)\n            .build())\n        .build())\n    .visibility(Visibility.INTERNAL)\n    .build();\nString artifactId = client.uploadArtifact(jsonStr.getBytes(), request);"
+  },
+  {
+    "name": "JsonUtils",
+    "kind": "class",
+    "module": "com.amazon.elasticgumbyhitlcomponentjavasdk.util",
+    "description": "Final utility class for HITL artifact serialization and deserialization. Uses Jackson ObjectMapper internally. All methods are static.",
+    "methods": [
+      {"name": "serialize", "signature": "static String serialize(Object artifact) throws SerializationException", "description": "Serialize any object to JSON with {\"properties\": {...}} wrapper. Works with schema-generated models or POJOs."},
+      {"name": "deserialize", "signature": "static <T> T deserialize(String json, Class<T> clazz) throws SerializationException", "description": "Deserialize JSON with {\"properties\": {...}} wrapper to typed object. Unlike Python SDK, does NOT return a should_refresh flag -- check QT_REFRESH manually."},
+      {"name": "getObjectMapper", "signature": "static ObjectMapper getObjectMapper()", "description": "Get the shared Jackson ObjectMapper for manual operations (e.g. checking QT_REFRESH flag)."}
+    ],
+    "example": "// Serialize:\nTextInput_schema input = new TextInput_schema().withLabel(\"Name\").withValue(\"\");\nString json = JsonUtils.serialize(input);\n// Result: {\"properties\": {\"label\": \"Name\", \"value\": \"\"}}\n\n// Deserialize:\nMyResponse response = JsonUtils.deserialize(content, MyResponse.class);\n\n// Manual QT_REFRESH check (Java-specific):\nMap<String, Object> data = JsonUtils.getObjectMapper().readValue(content, Map.class);\nboolean shouldRefresh = Boolean.TRUE.equals(data.get(\"QT_REFRESH\"));"
+  },
+  {
+    "name": "ArtifactHelper",
+    "kind": "class",
+    "module": "com.amazon.elasticgumbyhitlcomponentjavasdk.util",
+    "description": "Utility for uploading and downloading content via presigned S3 URLs. Uses java.net.http.HttpClient with 120-second default timeout.",
+    "signature": "new ArtifactHelper()\nnew ArtifactHelper(HttpClient httpClient)",
+    "parameters": [
+      {"name": "httpClient", "type": "HttpClient", "required": false, "description": "Custom HttpClient for testing. Default creates one with 120s timeout."}
+    ],
+    "methods": [
+      {"name": "upload", "signature": "void upload(String presignedUrl, Map<String, List<String>> headers, byte[] content) throws IOException", "description": "Upload content to presigned S3 URL."},
+      {"name": "download", "signature": "String download(String presignedUrl, Map<String, List<String>> headers) throws IOException", "description": "Download artifact content as UTF-8 string from presigned S3 URL."}
+    ],
+    "example": "ArtifactHelper helper = new ArtifactHelper();\nString content = helper.download(\n    downloadResponse.s3preSignedUrl(),\n    downloadResponse.requestHeaders()\n);"
+  },
+  {
+    "name": "SerializationException",
+    "kind": "exception",
+    "module": "com.amazon.elasticgumbyhitlcomponentjavasdk.exception",
+    "description": "Checked exception thrown by JsonUtils.serialize() and JsonUtils.deserialize() when serialization or deserialization fails. Extends java.lang.Exception.",
+    "signature": "new SerializationException(String message)\nnew SerializationException(String message, Throwable cause)\nnew SerializationException(Throwable cause)"
+  },
+  {
+    "name": "ComponentRegistry",
+    "kind": "enum",
+    "module": "com.amazon.elasticgumbyhitlcomponentjavasdk",
+    "description": "Enum of all registered UX component IDs. Each value has a string value matching the uxComponentId used in CreateHitlTaskRequest. Use ComponentRegistry.containsComponentId(String) to validate.",
+    "methods": [
+      {"name": "getValue", "signature": "String getValue()", "description": "Returns the uxComponentId string value"},
+      {"name": "containsComponentId", "signature": "static ComponentRegistry containsComponentId(String id) throws IllegalArgumentException", "description": "Look up a ComponentRegistry by uxComponentId string. Throws if not found."}
+    ],
+    "values": [
+      {"name": "AUTO_FORM", "description": "Dynamic form generator"},
+      {"name": "DYNAMIC_HITLRENDER_ENGINE", "description": "Renders arbitrary domTreeJson UI definitions"},
+      {"name": "TEXT_INPUT", "description": "Simple text input"},
+      {"name": "TABLE_COMPONENT", "description": "Data table with filtering and pagination"},
+      {"name": "MARKDOWN_RENDERER_COMPONENT", "description": "Renders GitHub Flavored Markdown"},
+      {"name": "GENERAL_CONNECTOR", "description": "Connector selection/creation wizard"},
+      {"name": "FILE_UPLOAD_COMPONENT", "description": "File upload with validation"},
+      {"name": "FILE_UPLOAD_V2", "description": "File upload with progress tracking"},
+      {"name": "SELECT_DROPDOWN_COMPONENT", "description": "Dropdown selection"},
+      {"name": "FEEDBACK_INPUT", "description": "Feedback input field"},
+      {"name": "FEEDBACK_RATING", "description": "Rating input"},
+      {"name": "FILE_DOWNLOAD", "description": "File download component"},
+      {"name": "INFORMATIONAL_MESSAGE_COMPONENT", "description": "Informational message display"},
+      {"name": "REPO_BRANCH_SELECTION", "description": "Repository and branch picker"}
+    ],
+    "example": "// Use enum value:\nString uxId = ComponentRegistry.AUTO_FORM.getValue();\n\n// Validate a string:\ntry {\n    ComponentRegistry.containsComponentId(\"AutoForm\");\n} catch (IllegalArgumentException e) {\n    // Not a valid component\n}"
+  },
+  {
+    "name": "Java vs Python SDK Differences",
+    "kind": "reference",
+    "description": "Key differences between the Java and Python HITL SDKs for developers choosing between them or porting code.",
+    "differences": [
+      {"aspect": "Builder pattern", "java": "CreateHitlTaskRequest.builder().uxComponentId(...).build()", "python": "client.create_and_start_task(ux_component_id=...) with kwargs"},
+      {"aspect": "executeWithRefresh return type", "java": "Generic <T> typed response via Class<T> parameter", "python": "dict (untyped)"},
+      {"aspect": "deserialize QT_REFRESH", "java": "Manual check via ObjectMapper: data.get(\"QT_REFRESH\")", "python": "Automatic: returns tuple (data, should_refresh)"},
+      {"aspect": "Exception types", "java": "SerializationException (checked), InterruptedException, TimeoutException, IllegalStateException", "python": "SerializationError, RuntimeError, TimeoutError"},
+      {"aspect": "Artifact upload content", "java": "byte[] (call jsonStr.getBytes())", "python": "bytes or str (auto-handled)"},
+      {"aspect": "Request context", "java": "AWS SDK v2 RequestContext model with builder", "python": "RequestContext dataclass or raw dict"},
+      {"aspect": "Enum source", "java": "Enums (Severity, BlockingType, etc.) from AWS SDK v2 model package", "python": "Enums defined in SDK itself (str, Enum)"},
+      {"aspect": "Schema types", "java": "JsonSchema2Pojo generated classes (e.g. TextInput_schema)", "python": "Pydantic models (e.g. TextInput)"}
+    ]
+  }
+]

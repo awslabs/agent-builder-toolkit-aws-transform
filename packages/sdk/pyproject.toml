@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-builder-sdk-aws-transform"
+version = "1.0.0"
+description = "Base agent SDK for building orchestrator and subagents on AWS Transform"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "AWS Transform Team" }]
+license = "Apache-2.0"
+license-files = ["LICEN[CS]E*"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "boto3>=1.28",
+    "botocore>=1.28",
+    "fastapi>=0.100",
+    "mcp>=1.0",
+    "strands-agents>=1.30.0",
+    "strands-agents-tools>=0.2",
+    "uvicorn>=0.20",
+    "structlog",
+    "starlette_context",
+    "defusedxml",
+    "aws-embedded-metrics>=3.0",
+]
+
+[project.optional-dependencies]
+test = ["pytest", "pytest-asyncio"]
+
+[project.scripts]
+agent-builder-sdk = "agent_builder_sdk.cli:run_main"
+
+[tool.setuptools.package-data]
+agent_builder_sdk = ["prompts/*.md"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.setuptools.packages.find]
+where = ["src"]

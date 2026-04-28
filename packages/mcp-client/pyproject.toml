@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-builder-mcp-client-aws-transform"
+version = "1.0.0"
+description = "Python MCP client provided by AWS Transform Platform team"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "AWS Transform Team" }]
+license = "Apache-2.0"
+license-files = ["LICEN[CS]E*"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "mcp>=1.0",
+    "anyio>=4.0",
+    "trio>=0.20",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

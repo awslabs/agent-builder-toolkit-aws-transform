@@ -1,0 +1,2747 @@
+[
+  {
+    "name": "BaseAgent",
+    "docstring": "Base protocol for all synchronous agent implementations.\n\nThis protocol defines the minimal interface that any agent must implement\nto be compatible with the platform's runtime infrastructure, including\nAgentRuntimeServer, QueueRequestHandler, and other core components.\n\nAll agent implementations (BaseOrchestrator, BaseSubagent, custom agents)\nmust implement either this protocol or AsyncBaseAgent to ensure compatibility.",
+    "file": "eg_platform_base_agent/interfaces.py"
+  },
+  {
+    "name": "AsyncBaseAgent",
+    "docstring": "Base protocol for all asynchronous agent implementations.\n\nThis protocol defines the minimal interface that any agent must implement\nto be compatible with the platform's runtime infrastructure, including\nAgentRuntimeServer, QueueRequestHandler, and other core components.\n\nAll agent implementations (BaseOrchestrator, BaseSubagent, custom agents)\nmust implement either this protocol or BaseAgent to ensure compatibility.",
+    "file": "eg_platform_base_agent/interfaces.py"
+  },
+  {
+    "name": "process_message",
+    "docstring": "Process a message request and return a structured response.\n\nThe default implementation creates an asyncio event loop in another\nthread (taken from a thread pool), and then runs process_message_async\nwithin. If your application already has a running event loop, then you\nshould use process_message_async instead.\n\nArgs:\n    request: The message request containing the message content and\n            conversation context.\n\nReturns:\n    A structured response containing the agent result",
+    "file": "eg_platform_base_agent/interfaces.py"
+  },
+  {
+    "name": "process_message_async",
+    "docstring": "Asynchronously process a message request and return a structured response.\n\nArgs:\n    request: The message request containing the message content and\n            conversation context.\n\nReturns:\n    A structured response containing the agent result",
+    "file": "eg_platform_base_agent/interfaces.py"
+  },
+  {
+    "name": "apply_tool_use_prompts",
+    "docstring": "Apply tool use prompts to the given prompt.\n\nArgs:\n    prompt: The prompt to apply tool use prompts to\n\nReturns:\n    The prompt with tool use prompts applied",
+    "file": "eg_platform_base_agent/tool_use_prompts.py"
+  },
+  {
+    "name": "get_subagent",
+    "docstring": "Dependency to get the subagent instance.",
+    "file": "eg_platform_base_agent/subagent_server.py"
+  },
+  {
+    "name": "ping",
+    "docstring": "Health check endpoint.",
+    "file": "eg_platform_base_agent/subagent_server.py"
+  },
+  {
+    "name": "send_notification",
+    "docstring": "Handle notification invocations from the platform.",
+    "file": "eg_platform_base_agent/subagent_server.py"
+  },
+  {
+    "name": "send_message",
+    "docstring": "Process a message request and return the agent's response.\n\nThis endpoint passes the input to the agent and returns the response.",
+    "file": "eg_platform_base_agent/subagent_server.py"
+  },
+  {
+    "name": "start_subagent_api_server",
+    "docstring": "Start the FastAPI server.",
+    "file": "eg_platform_base_agent/subagent_server.py"
+  },
+  {
+    "name": "get_notification_handler",
+    "docstring": "Dependency function to get notification handler from app state.",
+    "file": "eg_platform_base_agent/fastapi_server.py"
+  },
+  {
+    "name": "get_task_handler",
+    "docstring": "Dependency injection for TaskHandler.",
+    "file": "eg_platform_base_agent/fastapi_server.py"
+  },
+  {
+    "name": "handle_delayed_response",
+    "docstring": "Handle delayed agent responses that exceed the initial timeout period.\n\nArgs:\n    request_id: Unique identifier for the request\n    context_id: Context identifier for the conversation\n    original_message: The original A2A message that triggered the request\n    sender: The agent instance ID of the sender of the original message\n\nReturns:\n    None",
+    "file": "eg_platform_base_agent/fastapi_server.py"
+  },
+  {
+    "name": "ping",
+    "docstring": "Health check endpoint.",
+    "file": "eg_platform_base_agent/fastapi_server.py"
+  },
+  {
+    "name": "send_notification",
+    "docstring": "Handle notification invocations from the platform.",
+    "file": "eg_platform_base_agent/fastapi_server.py"
+  },
+  {
+    "name": "get_task",
+    "docstring": "Retrieve a task by ID following A2A protocol.\n\nArgs:\n    request: GetTask request parameters\n    task_handler: Injected TaskHandler dependency\n\nReturns:\n    GetTaskResponse with task data or error",
+    "file": "eg_platform_base_agent/fastapi_server.py"
+  },
+  {
+    "name": "send_message",
+    "docstring": "Process a message request and return the agent's response.\n\nThis endpoint passes the input to the agent and returns the response.",
+    "file": "eg_platform_base_agent/fastapi_server.py"
+  },
+  {
+    "name": "start_api_server",
+    "docstring": "Start the FastAPI server.",
+    "file": "eg_platform_base_agent/fastapi_server.py"
+  },
+  {
+    "name": "should_use_prod_bedrock_capacity",
+    "docstring": "Determine if prod Bedrock capacity should be used.\n\nReturns:\n    bool: True if prod Bedrock capacity should be used, False otherwise",
+    "file": "eg_platform_base_agent/env_var.py"
+  },
+  {
+    "name": "get_bedrock_shared_capacity_role_arn",
+    "docstring": "Get the appropriate BedrockSharedCapacityRole ARN based on region.\n\nArgs:\n    region: AWS region name\n\nReturns:\n    Role ARN if available, None otherwise",
+    "file": "eg_platform_base_agent/env_var.py"
+  },
+  {
+    "name": "get_agent_context_from_env",
+    "docstring": "Get agent context from environment variables.\n\nReturns:\n    AgenticApiRequestContext: The request context created from environment variables\n\nRaises:\n    ValueError: If required environment variables are missing",
+    "file": "eg_platform_base_agent/env_var.py"
+  },
+  {
+    "name": "_validate_mde_env_vars",
+    "docstring": "Validate MDE environment variables.\n\nArgs:\n    raise_on_missing: If True, raises ValueError on missing vars. If False, returns bool.\n\nReturns:\n    bool: True if all required vars present, False otherwise (only when raise_on_missing=False)\n\nRaises:\n    ValueError: When required vars missing and raise_on_missing=True",
+    "file": "eg_platform_base_agent/env_var.py"
+  },
+  {
+    "name": "has_mde_environment",
+    "docstring": "Check if MDE environment variables are available.",
+    "file": "eg_platform_base_agent/env_var.py"
+  },
+  {
+    "name": "get_agentic_api_request_context_with_current_token",
+    "docstring": "Get agentic API request context with current auth token, using base context for IDs.\n\nArgs:\n    base_context: Existing context with workspace_id, job_id, agent_instance_id\n\nReturns:\n    AgenticApiRequestContext with same IDs but current auth token",
+    "file": "eg_platform_base_agent/env_var.py"
+  },
+  {
+    "name": "get_initial_agent_runtime_context_from_env",
+    "docstring": "Get initial agent context from environment variables (including initial auth token).",
+    "file": "eg_platform_base_agent/env_var.py"
+  },
+  {
+    "name": "set_runtime_env_vars",
+    "docstring": "Set runtime environment variables for agent execution.\n\nArgs:\n    job_id: Job ID to set\n    workspace_id: Workspace ID to set\n    agent_instance_id: Agent instance ID to set",
+    "file": "eg_platform_base_agent/env_var.py"
+  },
+  {
+    "name": "configure_logging",
+    "docstring": "Configure logging based on stage",
+    "file": "eg_platform_base_agent/logging_config.py"
+  },
+  {
+    "name": "create_default_orchestrator",
+    "docstring": "Create a BaseOrchestrator instance with full memory and conversation support.\n\nThis function creates a fully-featured orchestrator with:\n- Episodic memory for storing agent experiences\n- Conversation tracking across multiple sources\n- Memory tools for agent self-reflection\n- Lifecycle hooks for conversation and memory events\n\nIf your application has a running asyncio event loop, then use create_default_async_orchestrator\ninstead. See BaseOrchestrators's documentation.\n\nArgs:\n    mcp_client: Optional MCP client for tool integration\n    storage_dir: Directory for agent data storage\n    system_prompt: Custom system prompt, defaults to test_orchestrator_prompt\n    custom_tools: Optional list of additional custom tools to add to the orchestrator\n    model_id: Optional model ID for Bedrock inference\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)\n\nReturns:\n    Configured BaseOrchestrator instance with memory, hooks, and tools",
+    "file": "eg_platform_base_agent/agent_factory.py"
+  },
+  {
+    "name": "create_default_async_orchestrator",
+    "docstring": "Create a AsyncBaseOrchestrator instance with full memory and conversation support.\n\nThis function creates a fully-featured orchestrator with:\n- Episodic memory for storing agent experiences\n- Conversation tracking across multiple sources\n- Memory tools for agent self-reflection\n- Lifecycle hooks for conversation and memory events\n\nArgs:\n    mcp_client: Optional MCP client for tool integration\n    storage_dir: Directory for agent data storage\n    system_prompt: Custom system prompt, defaults to test_orchestrator_prompt\n    custom_tools: Optional list of additional custom tools to add to the orchestrator\n    model_id: Optional model ID for Bedrock inference\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)\n\nReturns:\n    Configured AsyncBaseOrchestrator instance with memory, hooks, and tools",
+    "file": "eg_platform_base_agent/agent_factory.py"
+  },
+  {
+    "name": "create_default_orchestrator_with_subagent",
+    "docstring": "Create a BaseOrchestrator instance with full memory and conversation support and subagent tools.\n\nThis function creates a fully-featured orchestrator with:\n- Episodic memory for storing agent experiences\n- Conversation tracking across multiple sources\n- Memory tools for agent self-reflection\n- Lifecycle hooks for conversation and memory events\n- Subagent tools for communication and discovery (mocked)\n\nIf your application has a running asyncio event loop, then use\ncreate_default_async_orchestrator_with_subagent instead. See BaseOrchestrator's documentation.\n\nArgs:\n    mcp_client: Optional MCP client for tool integration\n    storage_dir: Directory for agent data storage\n    system_prompt: Custom system prompt, defaults to test_orchestrator_prompt\n    custom_tools: Optional list of additional custom tools to add to the orchestrator\n    model_id: Optional model ID for Bedrock inference\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)\n\nReturns:\n    Configured BaseOrchestrator instance with memory, hooks, and tools",
+    "file": "eg_platform_base_agent/agent_factory.py"
+  },
+  {
+    "name": "create_default_async_orchestrator_with_subagent",
+    "docstring": "Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.\n\nThis function creates a fully-featured orchestrator with:\n- Episodic memory for storing agent experiences\n- Conversation tracking across multiple sources\n- Memory tools for agent self-reflection\n- Lifecycle hooks for conversation and memory events\n- Subagent tools for communication and discovery (mocked)\n\nArgs:\n    mcp_client: Optional MCP client for tool integration\n    storage_dir: Directory for agent data storage\n    system_prompt: Custom system prompt, defaults to test_orchestrator_prompt\n    custom_tools: Optional list of additional custom tools to add to the orchestrator\n    model_id: Optional model ID for Bedrock inference\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)\n\nReturns:\n    Configured AsyncBaseOrchestrator instance with memory, hooks, and tools",
+    "file": "eg_platform_base_agent/agent_factory.py"
+  },
+  {
+    "name": "create_default_subagent",
+    "docstring": "Create a BaseSubagent instance with minimal configuration.\n\nThis function creates a lightweight subagent without memory or conversation tracking.\n\nIf your application has a running asyncio event loop, then use create_default_async_subagent\ninstead. See BaseSubagent's documentation.\n\nArgs:\n    mcp_client: Optional MCP client for tool integration\n    system_prompt: Custom system prompt, defaults to simple assistant prompt\n    model: Optional Strands Model instance or model ID string\n\nReturns:\n    Configured BaseSubagent instance",
+    "file": "eg_platform_base_agent/agent_factory.py"
+  },
+  {
+    "name": "create_default_async_subagent",
+    "docstring": "Create an AsyncBaseSubagent instance with minimal configuration.\n\nThis function creates a lightweight subagent without memory or conversation tracking.\n\nArgs:\n    mcp_client: Optional MCP client for tool integration\n    system_prompt: Custom system prompt, defaults to simple assistant prompt\n    model: Optional Strands Model instance or model ID string\n\nReturns:\n    Configured AsyncBaseSubagent instance",
+    "file": "eg_platform_base_agent/agent_factory.py"
+  },
+  {
+    "name": "TaskHandler",
+    "docstring": "Handles task-related operations for the base agent.",
+    "file": "eg_platform_base_agent/task_handler.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize TaskHandler.\n\nArgs:\n    task_manager: Optional TaskManager for task retrieval (experimental)",
+    "file": "eg_platform_base_agent/task_handler.py"
+  },
+  {
+    "name": "get_task",
+    "docstring": "Retrieve a task by ID.\n\nArgs:\n    request: GetTask request parameters\n\nReturns:\n    GetTaskResponse with task data or error",
+    "file": "eg_platform_base_agent/task_handler.py"
+  },
+  {
+    "name": "_get_task_legacy",
+    "docstring": "Legacy placeholder implementation (deprecated).",
+    "file": "eg_platform_base_agent/task_handler.py"
+  },
+  {
+    "name": "create_parser",
+    "docstring": "Create command line argument parser.",
+    "file": "eg_platform_base_agent/subagent_cli.py"
+  },
+  {
+    "name": "setup_agent",
+    "docstring": "Set up and configure the subagent.\n\nArgs:\n    args: Parsed command line arguments\n\nReturns:\n    Configured subagent",
+    "file": "eg_platform_base_agent/subagent_cli.py"
+  },
+  {
+    "name": "run_console",
+    "docstring": "Run the subagent in interactive console mode.\n\nArgs:\n    subagent: Configured subagent",
+    "file": "eg_platform_base_agent/subagent_cli.py"
+  },
+  {
+    "name": "run_api_server_sync",
+    "docstring": "Run the API server (synchronous entry point for multiprocessing).\n\nArgs:\n    args: Parsed command line arguments",
+    "file": "eg_platform_base_agent/subagent_cli.py"
+  },
+  {
+    "name": "main",
+    "docstring": "Main entry point.",
+    "file": "eg_platform_base_agent/subagent_cli.py"
+  },
+  {
+    "name": "run_main",
+    "docstring": "Entry point wrapper that handles the event loop and process orchestration.",
+    "file": "eg_platform_base_agent/subagent_cli.py"
+  },
+  {
+    "name": "MCPClientFactory",
+    "docstring": "Factory for creating and configuring MCP clients.",
+    "file": "eg_platform_base_agent/mcp_client_factory.py"
+  },
+  {
+    "name": "setup_eg_mcp_client",
+    "docstring": "Create and configure an EG MCP client using Strands framework.",
+    "file": "eg_platform_base_agent/mcp_client_factory.py"
+  },
+  {
+    "name": "create_parser",
+    "docstring": "Create command line argument parser.",
+    "file": "eg_platform_base_agent/cli.py"
+  },
+  {
+    "name": "setup_tracing",
+    "docstring": "Setup tracing based on tracing type configuration.",
+    "file": "eg_platform_base_agent/cli.py"
+  },
+  {
+    "name": "setup_eg_mcp_client",
+    "docstring": "Set up and connect the MCP client using Strands framework.\n\nArgs:\n    mcp_args: Parsed command line arguments\n\nReturns:\n    Connected Strands MCP client",
+    "file": "eg_platform_base_agent/cli.py"
+  },
+  {
+    "name": "create_orchestrator",
+    "docstring": "Create and configure the orchestrator agent.\n\nArgs:\n    args: Parsed command line arguments\n    mcp_client: Connected MCP client, or None if MCP is disabled\n\nReturns:\n    Configured orchestrator agent",
+    "file": "eg_platform_base_agent/cli.py"
+  },
+  {
+    "name": "setup_agent",
+    "docstring": "Set up and configure the orchestrator agent.\n\nArgs:\n    args: Parsed command line arguments\n    mcp_args: Parsed command line arguments for the mcp client\n\nReturns:\n    Tuple of (agent, queue_service, request_handler)",
+    "file": "eg_platform_base_agent/cli.py"
+  },
+  {
+    "name": "run_console",
+    "docstring": "Run the agent in interactive console mode.\n\nArgs:\n    orchestrator: Configured orchestrator agent",
+    "file": "eg_platform_base_agent/cli.py"
+  },
+  {
+    "name": "run_queue_mode",
+    "docstring": "Run the orchestrator in queue processing mode.\n\nArgs:\n    orchestrator: Configured orchestrator agent\n    queue_service: Queue service for request management\n    request_handler: Queue message processor\n    background_checkpointer: Background checkpointer",
+    "file": "eg_platform_base_agent/cli.py"
+  },
+  {
+    "name": "run_queue_mode_async",
+    "docstring": "Run the orchestrator in queue processing mode (async version that reuses existing objects).\n\nArgs:\n    orchestrator: Already configured orchestrator agent\n    queue_service: Already initialized queue service\n    request_handler: Already initialized message processor\n    background_checkpointer: Background checkpointer",
+    "file": "eg_platform_base_agent/cli.py"
+  },
+  {
+    "name": "run_api_server_sync",
+    "docstring": "Run the API server (synchronous entry point for multiprocessing).\n\nArgs:\n    args: Parsed command line arguments",
+    "file": "eg_platform_base_agent/cli.py"
+  },
+  {
+    "name": "create_checkpoint_trigger",
+    "docstring": "Create checkpoint trigger based on strategy.",
+    "file": "eg_platform_base_agent/cli.py"
+  },
+  {
+    "name": "initialize_background_checkpointer",
+    "docstring": "Initialize background checkpointer from CLI arguments.",
+    "file": "eg_platform_base_agent/cli.py"
+  },
+  {
+    "name": "main",
+    "docstring": "Main entry point.",
+    "file": "eg_platform_base_agent/cli.py"
+  },
+  {
+    "name": "run_main",
+    "docstring": "Entry point wrapper that handles the event loop and process orchestration.",
+    "file": "eg_platform_base_agent/cli.py"
+  },
+  {
+    "name": "extract_message_info",
+    "docstring": "Extract user information and process message parts from the request.\n\nReturns:\n    tuple: (user_id, sender, context_id, processed_parts)",
+    "file": "eg_platform_base_agent/utils.py"
+  },
+  {
+    "name": "process_extension_handlers",
+    "docstring": "Process extension handlers for A2A message extensions.\n\nArgs:\n    request: The invocation request\n    request_id: The request ID\n    context_id: The context ID\n    sender: The sender agent instance ID\n    user_id: The user ID\n    extension_handlers: List of extension handlers\n\nReturns:\n    Extension handler response if processed, None otherwise",
+    "file": "eg_platform_base_agent/utils.py"
+  },
+  {
+    "name": "extract_text_from_strands_agent_response",
+    "docstring": "Extracts the text from the response of the Strands agent.\n\nArgs:\n    response: The response from the Strands agent.\n\nReturns:\n    The text extracted from the response.",
+    "file": "eg_platform_base_agent/utils.py"
+  },
+  {
+    "name": "ElasticGumbyEndpointConfig",
+    "docstring": "Configuration utility for Elastic Gumby endpoints and region mappings.",
+    "file": "eg_platform_base_agent/utils.py"
+  },
+  {
+    "name": "build_agentic_api_endpoint_from_env",
+    "docstring": "Build the Agentic API endpoint URL from environment variables.\n\nReturns:\n    str: The fully constructed Agentic API endpoint URL\n\nRaises:\n    ValueError: If STAGE or AWS_REGION environment variables are not set or empty",
+    "file": "eg_platform_base_agent/utils.py"
+  },
+  {
+    "name": "get_default_auth_token_file_path",
+    "docstring": "Get the default file path for AWS authentication token storage.\n\nDetermines the appropriate location for storing AWS authentication tokens based on\nthe runtime environment. In containerized environments, uses the standard AWS\nlocation under the amazon user's home directory. In local development environments,\nuses the current user's home directory.\n\nReturns:\n    str: The absolute path to the authentication token file\n\nEnvironment Detection:\n    - Container (CONTAINER_ENV set): /home/amazon/.aws/transform-credentials\n    - Local development: ~/.aws/transform-credentials",
+    "file": "eg_platform_base_agent/utils.py"
+  },
+  {
+    "name": "build_mcp_args_from_parsed_args",
+    "docstring": "Build required MCP arguments dictionary from parsed command line arguments.\n\nArgs:\n    args: Parsed command line arguments containing MCP-related parameters\n\nReturns:\n    Dictionary containing required MCP arguments\n\nRaises:\n    AttributeError: If required arguments are missing from args",
+    "file": "eg_platform_base_agent/utils.py"
+  },
+  {
+    "name": "combine_tools",
+    "docstring": "Combine tools from MCP clients with custom tools, with optional filtering.\n\nArgs:\n    mcp_clients: List of MCP clients to get tools from\n    custom_tools: List of custom tools to include\n    excluded_tool_names: Set of tool names to exclude\n\nReturns:\n    Combined list of tools with duplicates checked and exclusions applied\n\nRaises:\n    ValueError: If duplicate tool names are found",
+    "file": "eg_platform_base_agent/utils.py"
+  },
+  {
+    "name": "cleanup_process_safely",
+    "docstring": "Safely cleanup a multiprocessing. Process to avoid deadlocks.\n\nArgs:\n    process: The process to cleanup\n    process_name: Name of the process for logging\n    timeout: Timeout in seconds for graceful termination",
+    "file": "eg_platform_base_agent/utils.py"
+  },
+  {
+    "name": "get_airport_code_for_region",
+    "docstring": "Maps AWS regions to their corresponding airport codes.\n\nArgs:\n    region: AWS region code (e.g., 'us-east-1')\n\nReturns:\n    The airport code corresponding to the region\n\nRaises:\n    ValueError: If the provided region is not supported",
+    "file": "eg_platform_base_agent/utils.py"
+  },
+  {
+    "name": "create_endpoint_url",
+    "docstring": "Creates the endpoint URL for Elastic Gumby services.\n\nArgs:\n    stage: Environment stage (e.g., 'prod', 'beta', 'gamma')\n    region: AWS region code\n    component_name: Service component name\n\nReturns:\n    The fully constructed endpoint URL\n\nRaises:\n    ValueError: If the provided region is not supported",
+    "file": "eg_platform_base_agent/utils.py"
+  },
+  {
+    "name": "create_bedrock_client",
+    "docstring": "Create a boto3 client for Bedrock.\n\nArgs:\n    region: AWS region (defaults to environment variable or us-east-1)\n    session: The boto3 Session to use to construct the client\n\nReturns:\n    A configured boto3 client",
+    "file": "eg_platform_base_agent/_boto_client.py"
+  },
+  {
+    "name": "Agent",
+    "docstring": "Base agent implementation.",
+    "file": "eg_platform_base_agent/agent.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the agent.\n\nArgs:\n    system_prompt: System prompt for the agent\n    bedrock_model_id: LLM model ID from Bedrock\n    mcp_client: Optional MCP client for tool execution\n    optimize_prompt_tooluse: Option to append tool use prompt to enhance agent's capabilities\n    bedrock_region: AWS region for Bedrock client\n    anthropic_version: Version of Anthropic API to use\n    max_tokens: Maximum number of tokens in the response\n    anthropic_beta: Beta features to enable in Anthropic API\n    guardrail_identifier: The identifier for the guardrail to use\n    guardrail_version: The version of the guardrail to use\n    session: The boto3 session to use",
+    "file": "eg_platform_base_agent/agent.py"
+  },
+  {
+    "name": "register_tool",
+    "docstring": "Register a tool with the agent.\n\nArgs:\n    tool: Tool to register",
+    "file": "eg_platform_base_agent/agent.py"
+  },
+  {
+    "name": "_create_mcp_tool_wrapper",
+    "docstring": "Create a wrapper function for an MCP tool.\n\nArgs:\n    tool_name: Name of the MCP tool\n\nReturns:\n    An async function that wraps the MCP tool call",
+    "file": "eg_platform_base_agent/agent.py"
+  },
+  {
+    "name": "register_mcp_tools",
+    "docstring": "Register tools from the MCP server.\n\nThis method connects to the MCP server and registers all available tools.",
+    "file": "eg_platform_base_agent/agent.py"
+  },
+  {
+    "name": "shutdown",
+    "docstring": "Shutdown the agent.",
+    "file": "eg_platform_base_agent/agent.py"
+  },
+  {
+    "name": "invoke_claude",
+    "docstring": "Invoke Claude via AWS Bedrock.\n\nArgs:\n    messages: List of message objects in the format Claude expects\n    tools: Optional list of tools to make available to Claude\n\nReturns:\n    The complete response from Claude",
+    "file": "eg_platform_base_agent/agent.py"
+  },
+  {
+    "name": "_format_tools_for_claude",
+    "docstring": "Format tools for Claude's API.\n\nReturns:\n    List of tool definitions in Claude's format",
+    "file": "eg_platform_base_agent/agent.py"
+  },
+  {
+    "name": "process",
+    "docstring": "Process a user request asynchronously.\n\nArgs:\n    user_input: User input to process\n\nReturns:\n    Response from the agent",
+    "file": "eg_platform_base_agent/agent.py"
+  },
+  {
+    "name": "__call__",
+    "docstring": "Process a user request (async version).\n\nArgs:\n    user_input: User input to process\n\nReturns:\n    Response from the agent",
+    "file": "eg_platform_base_agent/agent.py"
+  },
+  {
+    "name": "BedrockModelFactory",
+    "docstring": "Factory for creating Bedrock model clients.",
+    "file": "eg_platform_base_agent/bedrock_model_factory.py"
+  },
+  {
+    "name": "create_with_shared_capacity_role",
+    "docstring": "Create a BedrockModel with shared capacity role assumption.\n\nThis is useful for consuming Bedrock capacity from an account with higher\nBedrock capacity by assuming a role that has access to shared capacity resources.\n\nArgs:\n    **kwargs: BedrockModel arguments (must include model_id and region_name)\n\nReturns:\n    Initialized BedrockModel instance with shared capacity role configuration",
+    "file": "eg_platform_base_agent/bedrock_model_factory.py"
+  },
+  {
+    "name": "setup_initial_auth_token",
+    "docstring": "Set up initial auth token file to auth token file path and assign env var",
+    "file": "eg_platform_base_agent/_auth_token_refresher.py"
+  },
+  {
+    "name": "get_auth_token_refresher",
+    "docstring": "Start the authentication token refresher as a singleton.\n\nIf IDs are not provided, they will be retrieved from environment variables.\n\nArgs:\n    workspace_id: Workspace ID (optional, from env if not provided)\n    job_id: Job ID (optional, from env if not provided)\n    agent_instance_id: Agent instance ID (optional, from env if not provided)\n    session_duration: Duration in seconds for the auth token session\n    first_token: Initial token to use\n\nReturns:\n    AuthTokenRefresher: Singleton instance of the AuthTokenRefresher",
+    "file": "eg_platform_base_agent/_auth_token_refresher.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the AuthTokenRefresher and start the token refresh process.",
+    "file": "eg_platform_base_agent/_auth_token_refresher.py"
+  },
+  {
+    "name": "start_child_process_for_token_refresh",
+    "docstring": "Start a child process that handles token refreshing.\n\nReturns:\n    Process: The started child process",
+    "file": "eg_platform_base_agent/_auth_token_refresher.py"
+  },
+  {
+    "name": "child_process",
+    "docstring": "Get the child process that handles token refreshing.\n\nReturns:\n    Process: The token refresh child process",
+    "file": "eg_platform_base_agent/_auth_token_refresher.py"
+  },
+  {
+    "name": "shutdown",
+    "docstring": "Gracefully shutdown the auth token refresher process.",
+    "file": "eg_platform_base_agent/_auth_token_refresher.py"
+  },
+  {
+    "name": "_auth_process_main",
+    "docstring": "Main function for the token refresh process.\nContinuously refreshes the token and sleeps until next refresh.",
+    "file": "eg_platform_base_agent/_auth_token_refresher.py"
+  },
+  {
+    "name": "_refresh_token",
+    "docstring": "Refresh the authentication token and calculate time to sleep until next refresh.\n\nReturns:\n    int: Number of seconds to sleep before next refresh",
+    "file": "eg_platform_base_agent/_auth_token_refresher.py"
+  },
+  {
+    "name": "_write_token_to_file",
+    "docstring": "Write the authentication token to the token file.\n\nArgs:\n    auth_token: The authentication token to write",
+    "file": "eg_platform_base_agent/_auth_token_refresher.py"
+  },
+  {
+    "name": "_refresh_auth_token_from_agentic_api",
+    "docstring": "Call the Agentic API to refresh the authentication token.\n\nReturns:\n    Dict[str, Any]: Response containing the new token and expiration",
+    "file": "eg_platform_base_agent/_auth_token_refresher.py"
+  },
+  {
+    "name": "Tool",
+    "docstring": "Tool implementation that follows Claude's tool use specification.",
+    "file": "eg_platform_base_agent/tool.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the tool.\n\nArgs:\n    name: Name of the tool\n    func: Function to call when the tool is invoked\n    description: Description of the tool\n    input_schema: Schema of the input\n    is_mcp_tool: Whether this tool is an MCP tool",
+    "file": "eg_platform_base_agent/tool.py"
+  },
+  {
+    "name": "__call__",
+    "docstring": "Call the tool function with the provided input data.\n\nArgs:\n    input_data: The input data for the tool\n\nReturns:\n    The result of the function call",
+    "file": "eg_platform_base_agent/tool.py"
+  },
+  {
+    "name": "to_dict",
+    "docstring": "Convert the tool to a typing.Dictionary format compatible with Claude's tool use.\n\nReturns:\n    typing.Dictionary representation of the tool",
+    "file": "eg_platform_base_agent/tool.py"
+  },
+  {
+    "name": "BaseSubagent",
+    "docstring": "Base subagent implementation for ATX Platform partner teams.\n\nA subagent class that extends StrandsAgent to provide enhanced capabilities for\npartner teams building agents on the ATX Platform. Supports MCP tool integration,\ncustom tools, and configurable Bedrock models with shared capacity roles.\n\nIf your application has a running asyncio event loop, then use AsyncBaseSubagent instead.\nThis class's synchronous implementation ultimately calls the asynchronous implementation: it\ncreates an event loop in a separate thread taken from a pool. This is inefficient, but this is\nalso what you'd get if you synchronously and directly invoked StrandsAgent.\n\nAttributes:\n    system_prompt: The system prompt defining agent behavior.\n    model_id: Bedrock model identifier being used.\n    region_name: AWS region for Bedrock operations.\n    mcp_clients: List of MCP clients providing tool access.\n    custom_tools: List of custom tools available to the agent.\n\nExample:\n    Basic usage with system prompt only:\n\n        agent = BaseSubagent(\n            system_prompt=\"You are a helpful assistant.\",\n            model_id=\"us.anthropic.claude-sonnet-4-5-20250929-v1:0\"\n        )\n        result = agent.process_message(\"Hello, how can you help me?\")\n        print(result.message)\n\n    Advanced usage with MCP clients and custom tools:\n\n        from strands import tool\n        from strands.tools.mcp import MCPClient\n\n        @tool\n        def weather_forecast(city: str, days: int = 3) -> str:\n            return f\"Weather forecast for {city} for the next {days} days...\"\n\n\n        mcp_client = MCPClient(command=\"my-mcp-server\")\n\n        agent = BaseSubagent(\n            system_prompt=\"You are a specialized assistant with access to tools.\",\n            custom_tools=[weather_forecast],\n            mcp_clients=[mcp_client],\n            region_name=\"us-west-2\"\n        )\n\n        result = agent.process_message(\"What is the weather like in Seattle for the next 5 days?\")\n        print(result)",
+    "file": "eg_platform_base_agent/base_subagent/base_subagent.py"
+  },
+  {
+    "name": "AsyncBaseSubagent",
+    "docstring": "An asynchronous version of BaseSubagent.\n\nIf your application has a running asyncio event loop, then use this class, not BaseSubagent.\nThe equivalent of process_message is process_message_async.",
+    "file": "eg_platform_base_agent/base_subagent/base_subagent.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the subagent.\n\nArgs:\n    system_prompt: System prompt defining the subagent's behavior\n    custom_tools: List of custom tools for the subagent\n    mcp_clients: List of MCP clients for tool access\n    hooks: List of hook providers\n    guardrail_id: Optional Bedrock guardrail ID for content filtering (ignored if model is provided)\n    guardrail_version: Optional guardrail version (ignored if model is provided)\n    excluded_tool_names: Set of tool names to exclude (defaults to DEFAULT_SUBAGENT_EXCLUDED_TOOLS)\n    region_name: AWS region for Bedrock (ignored if model is provided)\n    model_id: Bedrock model identifier (ignored if model is provided)\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)",
+    "file": "eg_platform_base_agent/base_subagent/base_subagent.py"
+  },
+  {
+    "name": "_combine_tools",
+    "docstring": "Combine tools from the MCP clients with the custom tools, filtering out excluded tools.",
+    "file": "eg_platform_base_agent/base_subagent/base_subagent.py"
+  },
+  {
+    "name": "process_message",
+    "docstring": "Process a message and return the agent's response.\n\nArgs:\n    message: The message text to process\n\nReturns:\n    AgentResult containing:\n    - stop_reason: Why processing stopped ('end_turn', 'tool_use', 'max_tokens', etc.)\n    - message: Agent's response with content (List[ContentBlock]) and role\n    - metrics: Performance metrics from processing\n    - state: Additional event loop state information\n\n    See: https://strandsagents.com/latest/documentation/docs/api-reference/agent/#strands.agent.agent_result.AgentResult",
+    "file": "eg_platform_base_agent/base_subagent/base_subagent.py"
+  },
+  {
+    "name": "process_message_async",
+    "docstring": "Asynchronously process a message and return the agent's response.\n\nArgs:\n    message: The message text to process\n\nReturns:\n    AgentResult containing:\n    - stop_reason: Why processing stopped ('end_turn', 'tool_use', 'max_tokens', etc.)\n    - message: Agent's response with content (List[ContentBlock]) and role\n    - metrics: Performance metrics from processing\n    - state: Additional event loop state information\n\n    See: https://strandsagents.com/latest/documentation/docs/api-reference/agent/#strands.agent.agent_result.AgentResult",
+    "file": "eg_platform_base_agent/base_subagent/base_subagent.py"
+  },
+  {
+    "name": "QueueRequestHandler",
+    "docstring": "Message processor that handles tasks from a queue.\n\nThis processor integrates with the request queue system to:\n1. Receive messages from the request queue\n2. Process them through the agent\n3. Store responses in the response store",
+    "file": "eg_platform_base_agent/request_handler/queue_handler.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the queue message processor.\n\nArgs:\n    request_queue: QueueRequest queue to receive messages from\n    response_store: Response store to save processed results",
+    "file": "eg_platform_base_agent/request_handler/queue_handler.py"
+  },
+  {
+    "name": "receive_request",
+    "docstring": "Receive a request from the request queue.\n\nReturns:\n    Dict containing the request data and context, or None if no message available",
+    "file": "eg_platform_base_agent/request_handler/queue_handler.py"
+  },
+  {
+    "name": "store_response",
+    "docstring": "Store response for the current request.\n\nArgs:\n    message: The response message content\n    recipient_id: Not used in queue processor (responses are stored by request ID)\n\nReturns:\n    True if response was stored successfully, False otherwise",
+    "file": "eg_platform_base_agent/request_handler/queue_handler.py"
+  },
+  {
+    "name": "handle_request_error",
+    "docstring": "Handle an error that occurred while processing the current request.\n\nArgs:\n    error: The error that occurred\n\nReturns:\n    True if error was handled successfully, False otherwise",
+    "file": "eg_platform_base_agent/request_handler/queue_handler.py"
+  },
+  {
+    "name": "start_processing",
+    "docstring": "Start processing messages from the queue.",
+    "file": "eg_platform_base_agent/request_handler/queue_handler.py"
+  },
+  {
+    "name": "handle_request_timeout",
+    "docstring": "Handle a timeout that occurred while processing the current request.\n\nReturns:\n    True if timeout was handled successfully, False otherwise",
+    "file": "eg_platform_base_agent/request_handler/queue_handler.py"
+  },
+  {
+    "name": "get_current_request_id",
+    "docstring": "Get the ID of the currently processing request.\n\nReturns:\n    QueueRequest ID if there's a current request, None otherwise",
+    "file": "eg_platform_base_agent/request_handler/queue_handler.py"
+  },
+  {
+    "name": "RequestHandler",
+    "docstring": "Abstract base class for request handling.\n\nThis class defines the interface for processing incoming requests and storing responses.\nIt handles the complete request lifecycle: receiving requests from various sources\n(queues, HTTP endpoints, etc.), processing them, and storing the results for retrieval.",
+    "file": "eg_platform_base_agent/request_handler/interface.py"
+  },
+  {
+    "name": "receive_request",
+    "docstring": "Receive a request from a queue or external source.\n\nThis method retrieves the next available request for processing.\nIt should handle timeouts gracefully and return None when no requests\nare available or when the handler should stop processing.\n\nReturns:\n    Dict containing the request data and context, or None if no request available",
+    "file": "eg_platform_base_agent/request_handler/interface.py"
+  },
+  {
+    "name": "store_response",
+    "docstring": "Store the response for the current or specified request.\n\nThis method persists the processed response so it can be retrieved later.\nIt should handle the complete response lifecycle including status updates\nand error handling.\n\nArgs:\n    response: The response content to store\n    recipient_id: Optional identifier of the request (if None, uses current request)\n\nReturns:\n    True if response was stored successfully, False otherwise",
+    "file": "eg_platform_base_agent/request_handler/interface.py"
+  },
+  {
+    "name": "RequestContext",
+    "docstring": "Context information for request processing.\n\nThis class encapsulates contextual information that's passed along with requests,\nincluding identifiers for users and agent instances. Each orchestrator agent is\nbound to a single workspace+job combination, so those IDs are not needed in the context.\nThe sender field identifies the source of the request (e.g., \"subagent\" or \"chat\").",
+    "file": "eg_platform_base_agent/request_handler/context.py"
+  },
+  {
+    "name": "MessageHandler",
+    "docstring": "Handles A2A message processing operations with extension handler support.\n\nProcesses incoming A2A messages through configured extension handlers (e.g., acknowledgment)\nbefore routing to agent processing. Extension handlers can intercept requests to provide\nimmediate responses while allowing background processing to continue.\n\nExtension Negotiation:\n- Parses extension URIs from incoming message.extensions\n- Matches against supported extension handlers by URI\n- Logs supported extensions that are processed\n- Logs and ignores unsupported extensions",
+    "file": "eg_platform_base_agent/messages/message_handler.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize MessageHandler for either queued or direct processing.\n\nArgs:\n    queue: QueueService for orchestrator agents (optional, mutually exclusive with agent)\n    agent: BaseAgent for direct processing (optional, mutually exclusive with queue)\n    timeout: Request timeout in seconds\n    delayed_timeout: Extended timeout for delayed responses\n    extension_handlers: List of extension handlers for processing A2A extensions (e.g., acknowledgment)\n    task_manager: TaskManager for task creation and management (optional, experimental)\n\nNote:\n    Only one of queue or agent should be provided, not both.",
+    "file": "eg_platform_base_agent/messages/message_handler.py"
+  },
+  {
+    "name": "send_message",
+    "docstring": "Process a message request and return the agent's response.",
+    "file": "eg_platform_base_agent/messages/message_handler.py"
+  },
+  {
+    "name": "_should_create_task",
+    "docstring": "Determine if task should be created based on TaskManager logic.",
+    "file": "eg_platform_base_agent/messages/message_handler.py"
+  },
+  {
+    "name": "_should_process_task",
+    "docstring": "Determine if task should be processed by TaskManager logic.",
+    "file": "eg_platform_base_agent/messages/message_handler.py"
+  },
+  {
+    "name": "_create_task",
+    "docstring": "Create a task and return task response.",
+    "file": "eg_platform_base_agent/messages/message_handler.py"
+  },
+  {
+    "name": "_process_task",
+    "docstring": "Process the given request using the TaskManager",
+    "file": "eg_platform_base_agent/messages/message_handler.py"
+  },
+  {
+    "name": "_process_direct",
+    "docstring": "Process message directly with agent (no queue).",
+    "file": "eg_platform_base_agent/messages/message_handler.py"
+  },
+  {
+    "name": "_process_queued",
+    "docstring": "Process message with queue service (orchestrator agent).",
+    "file": "eg_platform_base_agent/messages/message_handler.py"
+  },
+  {
+    "name": "_handle_delayed_response",
+    "docstring": "Handle delayed agent responses that exceed the initial timeout period.",
+    "file": "eg_platform_base_agent/messages/message_handler.py"
+  },
+  {
+    "name": "send_message",
+    "docstring": "Send an A2A message during agent execution.\n\nArgs:\n    message: The text message to send\n    context_id: The conversation context ID. Only required when target_agent_instance_id\n        is ATX_CHAT. For agent-to-agent communication, this can be any identifier.\n    target_agent_instance_id: The agent instance to send the message to\n    message_id: Optional message ID (UUID generated if not provided)\n\nRaises:\n    Exception: If message sending fails\n\nExample:\n    >>> await send_message(\n    ...     message=\"Starting data processing...\",\n    ...     context_id=\"ctx-123\",\n    ...     target_agent_instance_id=\"agent-456\"\n    ... )",
+    "file": "eg_platform_base_agent/messages/a2a_message_helper.py"
+  },
+  {
+    "name": "CheckpointService",
+    "docstring": "Manages checkpoint lifecycle for agent runtime.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_service.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize checkpoint service.\n\nArgs:\n    storage_dir: Base directory for checkpoint storage\n    strategy: Checkpoint strategy enum (optional)\n    interval: Checkpoint interval - turns or minutes (default: 30)",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_service.py"
+  },
+  {
+    "name": "initialize",
+    "docstring": "Initialize checkpoint manager and restore if available.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_service.py"
+  },
+  {
+    "name": "create_callback",
+    "docstring": "Create checkpoint callback for conversation-based checkpointing.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_service.py"
+  },
+  {
+    "name": "start_background_checkpointing",
+    "docstring": "Start background checkpoint task.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_service.py"
+  },
+  {
+    "name": "shutdown",
+    "docstring": "Cleanup and final checkpoint.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_service.py"
+  },
+  {
+    "name": "CheckpointRepository",
+    "docstring": "Manages agent checkpointing operations.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_repository.py"
+  },
+  {
+    "name": "create_checkpoint_repository",
+    "docstring": "Create CheckpointRepository from environment variables.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_repository.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize CheckpointRepository.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_repository.py"
+  },
+  {
+    "name": "_get_default_location",
+    "docstring": "Get default checkpoint location.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_repository.py"
+  },
+  {
+    "name": "create_checkpoint",
+    "docstring": "Create new checkpoint - only when none exists.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_repository.py"
+  },
+  {
+    "name": "update_checkpoint",
+    "docstring": "Update existing checkpoint - override current one.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_repository.py"
+  },
+  {
+    "name": "retrieve_checkpoint",
+    "docstring": "Download and extract checkpoint.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_repository.py"
+  },
+  {
+    "name": "list_checkpoint",
+    "docstring": "List available checkpoints for this agent (should be 0 or 1).",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_repository.py"
+  },
+  {
+    "name": "_create_zip_from_path",
+    "docstring": "Create ZIP content from source path. Returns None if no files to checkpoint.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_repository.py"
+  },
+  {
+    "name": "_extract_zip_to_path",
+    "docstring": "Extract ZIP file to destination path.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_repository.py"
+  },
+  {
+    "name": "restore_if_available",
+    "docstring": "Restore checkpoint if available, return True if restored.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_repository.py"
+  },
+  {
+    "name": "CheckpointStrategy",
+    "docstring": "Checkpoint strategy options.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_triggers.py"
+  },
+  {
+    "name": "CheckpointTrigger",
+    "docstring": "Base class for checkpoint triggers",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_triggers.py"
+  },
+  {
+    "name": "TimeBasedTrigger",
+    "docstring": "Trigger checkpoint based on time interval",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_triggers.py"
+  },
+  {
+    "name": "ConversationTurnTrigger",
+    "docstring": "Trigger checkpoint based on conversation turns",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_triggers.py"
+  },
+  {
+    "name": "should_checkpoint",
+    "docstring": "Check if checkpoint should be triggered",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_triggers.py"
+  },
+  {
+    "name": "reset",
+    "docstring": "Reset trigger state after checkpoint",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_triggers.py"
+  },
+  {
+    "name": "should_checkpoint",
+    "docstring": "Check if enough time has passed last checkpoints",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_triggers.py"
+  },
+  {
+    "name": "reset",
+    "docstring": "Reset the timer",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_triggers.py"
+  },
+  {
+    "name": "should_checkpoint",
+    "docstring": "Check if turn threshold is reached",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_triggers.py"
+  },
+  {
+    "name": "increment_turn",
+    "docstring": "Increment conversation turn counter (thread-safe)",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_triggers.py"
+  },
+  {
+    "name": "reset",
+    "docstring": "Reset turn counter",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_triggers.py"
+  },
+  {
+    "name": "CheckpointManager",
+    "docstring": "Manages checkpoint operations based on triggers.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_manager.py"
+  },
+  {
+    "name": "BackgroundCheckpointer",
+    "docstring": "Background checkpointing with runtime configuration.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_manager.py"
+  },
+  {
+    "name": "_execute_checkpoint",
+    "docstring": "Execute checkpoint creation/update logic.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_manager.py"
+  },
+  {
+    "name": "attempt_checkpoint",
+    "docstring": "Attempt to create a checkpoint if trigger conditions are met.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_manager.py"
+  },
+  {
+    "name": "force_checkpoint",
+    "docstring": "Force a checkpoint creation bypassing trigger conditions.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_manager.py"
+  },
+  {
+    "name": "enable",
+    "docstring": "Enable background checkpointing.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_manager.py"
+  },
+  {
+    "name": "disable",
+    "docstring": "Disable background checkpointing.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_manager.py"
+  },
+  {
+    "name": "shutdown",
+    "docstring": "Graceful shutdown without final checkpoint.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_manager.py"
+  },
+  {
+    "name": "_background_loop",
+    "docstring": "Background checkpoint loop.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_manager.py"
+  },
+  {
+    "name": "increment_conversation_turn",
+    "docstring": "Increment conversation turn if using ConversationTurnTrigger.",
+    "file": "eg_platform_base_agent/checkpoint/checkpoint_manager.py"
+  },
+  {
+    "name": "MemoryTypeEnum",
+    "docstring": "Enum for memory type identifiers.",
+    "file": "eg_platform_base_agent/memory/memory_types.py"
+  },
+  {
+    "name": "MemoryTypeBase",
+    "docstring": "Base class for all memory types with built-in type identification.",
+    "file": "eg_platform_base_agent/memory/memory_types.py"
+  },
+  {
+    "name": "__str__",
+    "docstring": "Return the string value of the enum.",
+    "file": "eg_platform_base_agent/memory/memory_types.py"
+  },
+  {
+    "name": "memory_type",
+    "docstring": "Return the memory type enum.",
+    "file": "eg_platform_base_agent/memory/memory_types.py"
+  },
+  {
+    "name": "store",
+    "docstring": "Store a memory.",
+    "file": "eg_platform_base_agent/memory/memory_types.py"
+  },
+  {
+    "name": "retrieve",
+    "docstring": "Retrieve memories.",
+    "file": "eg_platform_base_agent/memory/memory_types.py"
+  },
+  {
+    "name": "clear",
+    "docstring": "Clear memories.",
+    "file": "eg_platform_base_agent/memory/memory_types.py"
+  },
+  {
+    "name": "get_context_for_message",
+    "docstring": "Get context for message.",
+    "file": "eg_platform_base_agent/memory/memory_types.py"
+  },
+  {
+    "name": "MemoryManager",
+    "docstring": "Memory manager for orchestrator agents.\n\nProvides context injection for messages and manages different types of memory.",
+    "file": "eg_platform_base_agent/memory/memory_manager.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize memory manager.\n\nArgs:\n    memories: List of memory type instances (they self-identify their type)",
+    "file": "eg_platform_base_agent/memory/memory_manager.py"
+  },
+  {
+    "name": "get_context_for_message",
+    "docstring": "Get relevant context to append to the incoming message.\n\nThis is the primary method that the orchestrator uses to enhance messages\nwith memory context.\n\nArgs:\n    message: The user message to get context for\n    memory_context: Structured context for memory retrieval\n    limit: Maximum number of context items to retrieve\n\nReturns:\n    Context string to prepend to the message, or empty string if no context",
+    "file": "eg_platform_base_agent/memory/memory_manager.py"
+  },
+  {
+    "name": "store_memory",
+    "docstring": "Store a memory.\n\nArgs:\n    memory_type: Type of memory to store (enum or string)\n    context: Conversation context for the memory\n    content: Natural language content to store\n    metadata: Optional metadata for the memory\n\nReturns:\n    Memory ID if stored successfully, empty string otherwise",
+    "file": "eg_platform_base_agent/memory/memory_manager.py"
+  },
+  {
+    "name": "retrieve_memories",
+    "docstring": "Retrieve memories.\n\nArgs:\n    memory_type: Type of memory to retrieve (enum or string)\n    context: Conversation context for the memory\n    memory_id: Optional memory ID to retrieve a specific memory\n    limit: Optional maximum number of items to retrieve\n\nReturns:\n    List of memories matching the criteria",
+    "file": "eg_platform_base_agent/memory/memory_manager.py"
+  },
+  {
+    "name": "clear_memory",
+    "docstring": "Clear memory for a given context.\n\nArgs:\n    memory_type: Optional type of memory to clear (enum or string)\n    context: Optional conversation context to clear memory for\n\nReturns:\n    Number of memory items cleared",
+    "file": "eg_platform_base_agent/memory/memory_manager.py"
+  },
+  {
+    "name": "MemoryRepository",
+    "docstring": "Interface for memory storage repositories.\n\nThis defines the contract for storing and retrieving memory items.",
+    "file": "eg_platform_base_agent/memory/memory_repository.py"
+  },
+  {
+    "name": "store",
+    "docstring": "Store a memory.\n\nArgs:\n    memory_id: Unique identifier for the memory\n    timestamp: Timestamp for the memory\n    context: Conversation context\n    content: Natural language content\n    metadata: Optional metadata\n\nReturns:\n    True if stored successfully, False otherwise",
+    "file": "eg_platform_base_agent/memory/memory_repository.py"
+  },
+  {
+    "name": "retrieve",
+    "docstring": "Retrieve memories.\n\nArgs:\n    memory_id: Optional memory ID to retrieve a specific memory\n    context: Optional conversation context to filter by\n    limit: Optional maximum number of memories to retrieve\n\nReturns:\n    List of memories",
+    "file": "eg_platform_base_agent/memory/memory_repository.py"
+  },
+  {
+    "name": "clear",
+    "docstring": "Clear memories.\n\nArgs:\n    memory_id: Optional memory ID to clear a specific memory\n    context: Optional conversation context to filter by\n\nReturns:\n    Number of memories cleared",
+    "file": "eg_platform_base_agent/memory/memory_repository.py"
+  },
+  {
+    "name": "FileSystemRepository",
+    "docstring": "File system repository for memory storage.\n\nStores memories in JSON files with daily partitioning.",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize file system repository.\n\nArgs:\n    storage_path: Path to the storage directory",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "_load_index",
+    "docstring": "Load memory index from existing partition files.",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "_get_partition_file",
+    "docstring": "Get the partition file path for a given date.",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "_load_partition",
+    "docstring": "Load a partition file, creating it if it doesn't exist.",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "_save_partition",
+    "docstring": "Save a partition file.",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "store",
+    "docstring": "Store a memory.\n\nArgs:\n    memory_id: Unique identifier for the memory\n    timestamp: Timestamp for the memory\n    context: Conversation context\n    content: Natural language content\n    metadata: Optional metadata\n\nReturns:\n    True if stored successfully, False otherwise",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "retrieve",
+    "docstring": "Retrieve memories.\n\nArgs:\n    memory_id: Optional memory ID to retrieve a specific memory\n    context: Optional conversation context to filter by\n    limit: Optional maximum number of memories to retrieve\n\nReturns:\n    List of memories",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "_retrieve_by_id",
+    "docstring": "Retrieve a specific memory by ID.",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "_retrieve_by_context",
+    "docstring": "Retrieve memories by context.",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "_matches_context",
+    "docstring": "Check if a memory context matches a conversation context.",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "clear",
+    "docstring": "Clear memories.\n\nArgs:\n    memory_id: Optional memory ID to clear a specific memory\n    context: Optional conversation context to filter by\n\nReturns:\n    Number of memories cleared",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "_clear_by_id",
+    "docstring": "Clear a specific memory by ID.",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "_clear_by_context",
+    "docstring": "Clear memories by context.",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "_clear_all",
+    "docstring": "Clear all memories.",
+    "file": "eg_platform_base_agent/memory/file_memory_repository.py"
+  },
+  {
+    "name": "EpisodicMemory",
+    "docstring": "Episodic memory implementation with built-in type identification.\n\nStores natural language memories with conversation context.",
+    "file": "eg_platform_base_agent/memory/episodic_memory.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize episodic memory.\n\nArgs:\n    repository: Repository for storing and retrieving memories",
+    "file": "eg_platform_base_agent/memory/episodic_memory.py"
+  },
+  {
+    "name": "memory_type",
+    "docstring": "Return the memory type.",
+    "file": "eg_platform_base_agent/memory/episodic_memory.py"
+  },
+  {
+    "name": "store",
+    "docstring": "Store a memory.\n\nArgs:\n    context: Conversation context\n    content: Natural language content to store\n    metadata: Optional metadata\n\nReturns:\n    Memory ID if stored successfully, empty string otherwise",
+    "file": "eg_platform_base_agent/memory/episodic_memory.py"
+  },
+  {
+    "name": "retrieve",
+    "docstring": "Retrieve memories.\n\nArgs:\n    context: Conversation context\n    memory_id: Optional memory ID to retrieve a specific memory\n    limit: Optional maximum number of memories to retrieve\n\nReturns:\n    List of memories",
+    "file": "eg_platform_base_agent/memory/episodic_memory.py"
+  },
+  {
+    "name": "clear",
+    "docstring": "Clear memories.\n\nArgs:\n    context: Conversation context\n    memory_id: Optional memory ID to clear a specific memory\n\nReturns:\n    Number of memories cleared",
+    "file": "eg_platform_base_agent/memory/episodic_memory.py"
+  },
+  {
+    "name": "format_for_context",
+    "docstring": "Format memories for inclusion in message context.\n\nArgs:\n    memories: List of memories to format\n\nReturns:\n    Formatted string for context",
+    "file": "eg_platform_base_agent/memory/episodic_memory.py"
+  },
+  {
+    "name": "get_context_for_message",
+    "docstring": "Get relevant context to append to the incoming message.\n\nArgs:\n    message: The user message to get context for\n    memory_context: Structured context for memory retrieval\n    limit: Maximum number of memories to retrieve\n\nReturns:\n    Context string to prepend to the message",
+    "file": "eg_platform_base_agent/memory/episodic_memory.py"
+  },
+  {
+    "name": "SuggestionsManager",
+    "docstring": "Manages pending suggestions for the current workflow step.",
+    "file": "eg_platform_base_agent/util/suggestions_manager.py"
+  },
+  {
+    "name": "add_suggestions",
+    "docstring": "Add suggestions for the next message.",
+    "file": "eg_platform_base_agent/util/suggestions_manager.py"
+  },
+  {
+    "name": "get_and_consume_suggestions",
+    "docstring": "Get and consume pending suggestions.",
+    "file": "eg_platform_base_agent/util/suggestions_manager.py"
+  },
+  {
+    "name": "clear_suggestions",
+    "docstring": "Clear pending suggestions.",
+    "file": "eg_platform_base_agent/util/suggestions_manager.py"
+  },
+  {
+    "name": "add_suggestions",
+    "docstring": "Add suggestions to be included in the next message.",
+    "file": "eg_platform_base_agent/util/suggestions_manager.py"
+  },
+  {
+    "name": "get_and_consume_suggestions",
+    "docstring": "Get suggestions and mark them as consumed (one-time use).",
+    "file": "eg_platform_base_agent/util/suggestions_manager.py"
+  },
+  {
+    "name": "clear_suggestions",
+    "docstring": "Clear all pending suggestions.",
+    "file": "eg_platform_base_agent/util/suggestions_manager.py"
+  },
+  {
+    "name": "experimental",
+    "docstring": "Decorator to mark classes or functions as experimental.\n\nEmits a FutureWarning when the decorated item is instantiated or called.\n\nArgs:\n    message: Custom warning message (optional)\n\nExample:\n    @experimental(\"TaskManager may change in future versions\")\n    class TaskManager:\n        pass",
+    "file": "eg_platform_base_agent/util/decorators.py"
+  },
+  {
+    "name": "notify",
+    "docstring": "Notify the waiter, if any, of the notification.\n\nReturn true if there is a waiter for the notification.",
+    "file": "eg_platform_base_agent/notification/notifier.py"
+  },
+  {
+    "name": "NotificationHandler",
+    "docstring": "Handles notifications using registerable processors, similar to Strands hooks.",
+    "file": "eg_platform_base_agent/notification/notification_handler.py"
+  },
+  {
+    "name": "register_processor",
+    "docstring": "Register a processor for a notification type.\n\nArgs:\n    notification_type: The notification type to handle\n    processor: Processor instance",
+    "file": "eg_platform_base_agent/notification/notification_handler.py"
+  },
+  {
+    "name": "handle_notification",
+    "docstring": "Handle notification invocations from the platform.\n\nArgs:\n    request: The notification request containing type and details\n\nReturns:\n    Dict containing the response message and any relevant data",
+    "file": "eg_platform_base_agent/notification/notification_handler.py"
+  },
+  {
+    "name": "NotificationProcessor",
+    "docstring": "Protocol for processing specific notification types.\n\nProcessors that need queue access should declare:\n    queue: QueueService | None = None\n\nThe NotificationHandler will inject the queue during registration\nfor processors that have this attribute.",
+    "file": "eg_platform_base_agent/notification/notification_processor.py"
+  },
+  {
+    "name": "process",
+    "docstring": "Process a notification and return response.\n\nArgs:\n    notification: The notification to process\n\nReturns:\n    Dict containing response message and relevant data",
+    "file": "eg_platform_base_agent/notification/notification_processor.py"
+  },
+  {
+    "name": "HitlNotifier",
+    "docstring": "Manage notifications about HITL (Human-In-The-Loop) task status changes.",
+    "file": "eg_platform_base_agent/notification/hitl_notifier.py"
+  },
+  {
+    "name": "wait",
+    "docstring": "Wait for a HITL task to be a certain status.",
+    "file": "eg_platform_base_agent/notification/hitl_notifier.py"
+  },
+  {
+    "name": "notify",
+    "docstring": "Notify the waiter, if any, that a HITL task's status has changed.\n\nReturn true if there is a waiter for the task ID with the new status.",
+    "file": "eg_platform_base_agent/notification/hitl_notifier.py"
+  },
+  {
+    "name": "HitlTaskProcessor",
+    "docstring": "Default processor for HITL task status change notifications.\n\nHandles NotificationType.HITL_TASK_STATUS_CHANGE events. Notifies waiting agent code\nor queues SUBMITTED tasks for processing.",
+    "file": "eg_platform_base_agent/notification/processors.py"
+  },
+  {
+    "name": "OrchAgentStopProcessor",
+    "docstring": "Default processor for orchestrator agent stop event notifications.\n\nHandles NotificationType.ORCH_AGENT_STOP_EVENT events. Performs graceful shutdown\nof all subagents and the orchestrator agent.",
+    "file": "eg_platform_base_agent/notification/processors.py"
+  },
+  {
+    "name": "SubagentStatusChangeProcessor",
+    "docstring": "Example processor that queues subagent status change notifications.\n\nHandles NotificationType.AGENT_STATUS_CHANGE events by queuing them for agent processing\nwhen the status change involves a subagent.",
+    "file": "eg_platform_base_agent/notification/processors.py"
+  },
+  {
+    "name": "A2AMessage",
+    "docstring": "A2AMessage data structure",
+    "file": "eg_platform_base_agent/custom_types/common_types.py"
+  },
+  {
+    "name": "A2AErrorCode",
+    "docstring": "A2A Protocol Standard Error Codes",
+    "file": "eg_platform_base_agent/custom_types/common_types.py"
+  },
+  {
+    "name": "A2AError",
+    "docstring": "A2AError response data structure",
+    "file": "eg_platform_base_agent/custom_types/common_types.py"
+  },
+  {
+    "name": "InvocationRequest",
+    "docstring": "Request model for invocation endpoints.",
+    "file": "eg_platform_base_agent/custom_types/common_types.py"
+  },
+  {
+    "name": "to_dict",
+    "docstring": "Convert A2AMessage to dictionary for serialization.",
+    "file": "eg_platform_base_agent/custom_types/common_types.py"
+  },
+  {
+    "name": "to_dict",
+    "docstring": "Convert MessageSendParams to dictionary for serialization.",
+    "file": "eg_platform_base_agent/custom_types/common_types.py"
+  },
+  {
+    "name": "SendMessageOutput",
+    "docstring": "Agent Response for chat",
+    "file": "eg_platform_base_agent/custom_types/response_types.py"
+  },
+  {
+    "name": "TaskState",
+    "docstring": "Task execution states.",
+    "file": "eg_platform_base_agent/custom_types/task_types.py"
+  },
+  {
+    "name": "TaskStatus",
+    "docstring": "The current state of the task's lifecycle.",
+    "file": "eg_platform_base_agent/custom_types/task_types.py"
+  },
+  {
+    "name": "A2ATask",
+    "docstring": "Represents a task in the A2A protocol.\nBased on https://a2a-protocol.org/latest/specification/#61-task-object",
+    "file": "eg_platform_base_agent/custom_types/task_types.py"
+  },
+  {
+    "name": "GetTaskRequest",
+    "docstring": "Request parameters for getting a task.\nBased on https://a2a-protocol.org/latest/specification/#73-tasksget",
+    "file": "eg_platform_base_agent/custom_types/task_types.py"
+  },
+  {
+    "name": "GetTaskResponse",
+    "docstring": "Response for GetTask operation.",
+    "file": "eg_platform_base_agent/custom_types/task_types.py"
+  },
+  {
+    "name": "to_dict",
+    "docstring": "Convert TaskStatus to dictionary for serialization.",
+    "file": "eg_platform_base_agent/custom_types/task_types.py"
+  },
+  {
+    "name": "to_dict",
+    "docstring": "Convert A2ATask to dictionary for serialization.",
+    "file": "eg_platform_base_agent/custom_types/task_types.py"
+  },
+  {
+    "name": "ExtensionResponse",
+    "docstring": "Standard response from extension handlers.",
+    "file": "eg_platform_base_agent/custom_types/extension_types.py"
+  },
+  {
+    "name": "JsonRpcMethods",
+    "docstring": "JSON-RPC method constants using slash notation.",
+    "file": "eg_platform_base_agent/custom_types/server_types.py"
+  },
+  {
+    "name": "MessageRole",
+    "docstring": "Enumeration of message roles.",
+    "file": "eg_platform_base_agent/custom_types/orchestrator_agent_types.py"
+  },
+  {
+    "name": "A2AContext",
+    "docstring": "Context for A2A (Agent-to-Agent) communication.",
+    "file": "eg_platform_base_agent/custom_types/orchestrator_agent_types.py"
+  },
+  {
+    "name": "ConversationContext",
+    "docstring": "Context for identifying and managing conversations.",
+    "file": "eg_platform_base_agent/custom_types/orchestrator_agent_types.py"
+  },
+  {
+    "name": "MessageMetadata",
+    "docstring": "Metadata associated with a message.",
+    "file": "eg_platform_base_agent/custom_types/orchestrator_agent_types.py"
+  },
+  {
+    "name": "ConversationMessage",
+    "docstring": "A message in a conversation with proper typing.\n\nThis replaces the generic Dict[str, Any] message format.",
+    "file": "eg_platform_base_agent/custom_types/orchestrator_agent_types.py"
+  },
+  {
+    "name": "MemoryContext",
+    "docstring": "Context for memory operations.\n\nThis provides structured context for memory retrieval and storage.\nThe actual query/message is passed separately to the memory manager methods.",
+    "file": "eg_platform_base_agent/custom_types/orchestrator_agent_types.py"
+  },
+  {
+    "name": "ProcessMessageRequest",
+    "docstring": "Request structure for event_loop messages.\n\nThis provides a strongly typed interface for message event_loop.",
+    "file": "eg_platform_base_agent/custom_types/orchestrator_agent_types.py"
+  },
+  {
+    "name": "ProcessMessageResponse",
+    "docstring": "Response structure for processed messages.\n\nThis provides a strongly typed response format.",
+    "file": "eg_platform_base_agent/custom_types/orchestrator_agent_types.py"
+  },
+  {
+    "name": "to_claude_format",
+    "docstring": "Convert to Claude API format.",
+    "file": "eg_platform_base_agent/custom_types/orchestrator_agent_types.py"
+  },
+  {
+    "name": "from_claude_format",
+    "docstring": "Create from Claude API format.",
+    "file": "eg_platform_base_agent/custom_types/orchestrator_agent_types.py"
+  },
+  {
+    "name": "AgentType",
+    "docstring": "Type of the agent.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "AgentVisibility",
+    "docstring": "Agent visibility status configured by the partner.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "VersionStatus",
+    "docstring": "Status of an agent version.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "MonitoringType",
+    "docstring": "Monitoring type for agents.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "NotificationStatus",
+    "docstring": "Notification status for agents.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "AgentExtension",
+    "docstring": "Agent extension definition.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "AgentSkill",
+    "docstring": "Agent skill - capability units that the agent can execute.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "AgentCapabilities",
+    "docstring": "Agent capability definitions.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "AgentProvider",
+    "docstring": "Agent service provider.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "SecurityScheme",
+    "docstring": "Security scheme definition.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "AgentCard",
+    "docstring": "Agent card - contains key information about the agent.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "AgentMetadata",
+    "docstring": "Metadata for an agent.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "ComputeConfiguration",
+    "docstring": "Compute configuration for an agent.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "LegacyAgentResiliencyConfiguration",
+    "docstring": "Legacy agent resiliency configuration.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "AgentConfiguration",
+    "docstring": "Configuration for an agent.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "GetAgentVersionOutput",
+    "docstring": "Output structure for getting agent version.",
+    "file": "eg_platform_base_agent/custom_types/agent_registry_types.py"
+  },
+  {
+    "name": "NotificationType",
+    "docstring": "Types of notifications supported by the platform.",
+    "file": "eg_platform_base_agent/custom_types/notification_types.py"
+  },
+  {
+    "name": "HitlTaskStatus",
+    "docstring": "Status values for HITL tasks.",
+    "file": "eg_platform_base_agent/custom_types/notification_types.py"
+  },
+  {
+    "name": "AgentInstanceStatus",
+    "docstring": "Status values for agent instances.",
+    "file": "eg_platform_base_agent/custom_types/notification_types.py"
+  },
+  {
+    "name": "NotificationDetail",
+    "docstring": "Base class for all notification details.\n    ",
+    "file": "eg_platform_base_agent/custom_types/notification_types.py"
+  },
+  {
+    "name": "HitlTaskStatusChangeDetail",
+    "docstring": "Detail for HitlTaskStatusChangeNotification type.",
+    "file": "eg_platform_base_agent/custom_types/notification_types.py"
+  },
+  {
+    "name": "JobStatusChangeDetail",
+    "docstring": "Detail for JobStatusChangeNotification type.",
+    "file": "eg_platform_base_agent/custom_types/notification_types.py"
+  },
+  {
+    "name": "AgentStatusChangeDetail",
+    "docstring": "Detail for AgentStatusChangeNotification type.",
+    "file": "eg_platform_base_agent/custom_types/notification_types.py"
+  },
+  {
+    "name": "OrchAgentStopEventDetail",
+    "docstring": "Detail for OrchAgentStopEvent type.",
+    "file": "eg_platform_base_agent/custom_types/notification_types.py"
+  },
+  {
+    "name": "Notification",
+    "docstring": "Base notification structure. ",
+    "file": "eg_platform_base_agent/custom_types/notification_types.py"
+  },
+  {
+    "name": "from_dict",
+    "docstring": "Factory method that creates Notification from dictionary.",
+    "file": "eg_platform_base_agent/custom_types/notification_types.py"
+  },
+  {
+    "name": "BaseServer",
+    "docstring": "Abstract base class for all server implementations.",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "_lifespan",
+    "docstring": "FastAPI lifespan context manager - (optional)",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "_startup",
+    "docstring": "Server startup logic - (optional)",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "_cleanup",
+    "docstring": "Cleanup all components during shutdown - (optional)",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "start",
+    "docstring": "Start the server (blocking call).",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "is_jsonrpc_request",
+    "docstring": "Check if request is JSON-RPC format (AgentCore).",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "ensure_initialized",
+    "docstring": "Ensure agent is initialized from JSON-RPC request (AgentCore mode only).",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "extract_and_initialize",
+    "docstring": "Extract initialization context from any request type and initialize.",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "handle_jsonrpc",
+    "docstring": "Handle JSON-RPC 2.0 formatted requests for both Bedrock AgentCore and ATX compatibility.",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "handle_notify",
+    "docstring": "Handle notification - override in subclasses if needed.",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "handle_message_send",
+    "docstring": "Handle message send - common implementation.",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "handle_tasks_get",
+    "docstring": "Handle tasks/get - common implementation.",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "_initialize_mde_mode",
+    "docstring": "Initialize agent for MDE mode from environment variables.",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "setup_common_routes",
+    "docstring": "Setup common routes shared by all server implementations.",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "handle_mde_notification",
+    "docstring": "Handle MDE notification - implementation varies by server type.",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "get_task",
+    "docstring": "Process a task retrieval request.",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "setup_tracing",
+    "docstring": "Setup tracing based on tracing type configuration.",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "ping",
+    "docstring": "Returns a status code indicating your agent's health. If your agent needs to process background tasks,\nyou can indicate it with the /ping status. If the ping status is HealthyBusy,\nthe runtime session is considered active.\n\nref: https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-service-contract.html\n:return:\n    status:\n        Healthy - System is ready to accept new work\n        HealthyBusy - System is operational but currently busy with async tasks\n    time_of_last_update\n        Used to determine how long the system has been in its current state",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "handle_invocations",
+    "docstring": "Handle both AgentCore JSON-RPC and MDE notification requests.",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "send_message_rest",
+    "docstring": "REST endpoint for message sending (MDE mode - agent already initialized).",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "get_task_rest",
+    "docstring": "REST endpoint for task retrieval (MDE mode - agent already initialized).",
+    "file": "eg_platform_base_agent/server/base_server.py"
+  },
+  {
+    "name": "AgentRuntimeServer",
+    "docstring": "Agent Runtime Server compatible with multiple agent execution environments.\n\nProvides JSON-RPC endpoints for agent communication, message processing, and health monitoring.\nSupports both Bedrock AgentCore runtime protocols and ATX internal messaging formats.\nIncludes support for extension handlers to process A2A extensions like acknowledgments.",
+    "file": "eg_platform_base_agent/server/agent_runtime_server.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the Agent Runtime Server.\n\nArgs:\n    agent_factory: Factory function for creating custom agents (required)\n    host: Server host address (default: \"0.0.0.0\")\n    port: Server port (default: 8080)\n    storage_dir: Base directory for all agent runtime data (default: \"/tmp/agent_runtime\")\n    binary_location: Path to the MCP binary for tool integration\n    queue_storage_path: DEPRECATED - use storage_dir instead (backward compatibility only)\n    storage_dir: Directory for agent data storage\n    timeout: Timeout in seconds for waiting for synchronous responses\n    delayed_timeout: Timeout in seconds for waiting for asynchronous responses after\n                   send_message API timeout (_timeout, default 28s) expires (default: 300)\n    checkpoint_strategy: Checkpoint strategy enum (optional)\n    checkpoint_interval: Checkpoint interval - turns or minutes (default: 30)\n    auto_transition_job_to_executing: Automatically transition job from ASSESSING to EXECUTING on agent initialization (default: True)\n    extension_handlers: List of extension handlers that will be used by the MessageHandler for processing A2A extensions (e.g., acknowledgment)\n    task_manager_factory: Factory function for creating TaskManager. Can accept **kwargs for maximum flexibility.\n                         Available kwargs: queue (QueueService), get_agent_func (Callable) (optional, experimental)\n    notification_processors: Dict mapping NotificationType to NotificationProcessor instances for custom notification handling (optional).\n    tracing: Type of tracing to use (cloudwatch or local) (optional)",
+    "file": "eg_platform_base_agent/server/agent_runtime_server.py"
+  },
+  {
+    "name": "_create_checkpoint_callback",
+    "docstring": "Create checkpoint callback for conversation-based checkpointing.",
+    "file": "eg_platform_base_agent/server/agent_runtime_server.py"
+  },
+  {
+    "name": "initialize_agent",
+    "docstring": "Initialize the agent with stored context and authentication token.\n\nArgs:\n    auth_token: Initial authentication token (optional)",
+    "file": "eg_platform_base_agent/server/agent_runtime_server.py"
+  },
+  {
+    "name": "_wait_for_non_invoking_and_initialize",
+    "docstring": "Wait for agent status to exit INVOKING state, then complete initialization.",
+    "file": "eg_platform_base_agent/server/agent_runtime_server.py"
+  },
+  {
+    "name": "_finalize_agent_setup",
+    "docstring": "Finalize agent setup with MCP client, auth refresher, and checkpointing.",
+    "file": "eg_platform_base_agent/server/agent_runtime_server.py"
+  },
+  {
+    "name": "_lifespan",
+    "docstring": "FastAPI lifespan for graceful startup/shutdown.",
+    "file": "eg_platform_base_agent/server/agent_runtime_server.py"
+  },
+  {
+    "name": "_startup",
+    "docstring": "Unified startup logic.",
+    "file": "eg_platform_base_agent/server/agent_runtime_server.py"
+  },
+  {
+    "name": "_get_ready_agent",
+    "docstring": "Get agent when ready (used by QueueService).",
+    "file": "eg_platform_base_agent/server/agent_runtime_server.py"
+  },
+  {
+    "name": "_cleanup",
+    "docstring": "Cleanup all components during shutdown.",
+    "file": "eg_platform_base_agent/server/agent_runtime_server.py"
+  },
+  {
+    "name": "handle_stop",
+    "docstring": "Handle stop agent request for orchestrator agents.\n\nAttempts to stop all subagents first, then stops the orchestrator agent.\nThe orchestrator shutdown proceeds regardless of subagent shutdown failures.\nEach shutdown operation is retried up to 3 times with exponential backoff.\n\nArgs:\n    params: Request parameters containing agentInstanceId\n\nReturns:\n    Dict containing:\n        - message: Summary of shutdown results\n        - agentInstanceId: The orchestrator agent instance ID\n        - failedSubagents: List of subagent IDs that failed to stop\n\nRaises:\n    ValueError: If agentInstanceId is missing from params",
+    "file": "eg_platform_base_agent/server/agent_runtime_server.py"
+  },
+  {
+    "name": "start",
+    "docstring": "Start the Agent Runtime Server.",
+    "file": "eg_platform_base_agent/server/agent_runtime_server.py"
+  },
+  {
+    "name": "shutdown_with_retry",
+    "docstring": "Shutdown agent with retry logic.",
+    "file": "eg_platform_base_agent/server/agent_runtime_server.py"
+  },
+  {
+    "name": "RequestContextMiddleware",
+    "docstring": "Middleware that includes HTTP request information in the context.",
+    "file": "eg_platform_base_agent/server/request_context.py"
+  },
+  {
+    "name": "AgentRuntimeContext",
+    "docstring": "Agent runtime context containing workspace, job, and instance identifiers.",
+    "file": "eg_platform_base_agent/server/server_models.py"
+  },
+  {
+    "name": "StatelessAgentRuntimeServer",
+    "docstring": "Stateless Agent Runtime Server compatible with multiple agent execution environments.\n\nProvides JSON-RPC endpoints for agent communication, message processing, and health monitoring.\nSupports both Bedrock AgentCore runtime protocols and ATX internal messaging formats.",
+    "file": "eg_platform_base_agent/server/stateless_agent_runtime_server.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the Stateless Agent Runtime Server.\n\nArgs:\n    agent_factory: Factory function for creating custom agents (required)\n    host: Server host address (default: \"0.0.0.0\")\n    port: Server port (default: 8080)\n    binary_location: Path to the MCP binary for tool integration\n    storage_dir: Directory for agent data storage\n    auto_transition_job_to_executing: Automatically transition job from ASSESSING to EXECUTING on agent initialization (default: True)\n    tracing: Type of tracing to use (optional)",
+    "file": "eg_platform_base_agent/server/stateless_agent_runtime_server.py"
+  },
+  {
+    "name": "initialize_agent",
+    "docstring": "Initialize the agent with stored context and authentication token.\n\nArgs:\n    auth_token: Initial authentication token (optional)",
+    "file": "eg_platform_base_agent/server/stateless_agent_runtime_server.py"
+  },
+  {
+    "name": "_wait_for_non_invoking_and_initialize",
+    "docstring": "Wait for agent status to exit INVOKING state, then complete initialization.",
+    "file": "eg_platform_base_agent/server/stateless_agent_runtime_server.py"
+  },
+  {
+    "name": "_lifespan",
+    "docstring": "FastAPI lifespan for graceful startup (no cleanup needed for stateless).",
+    "file": "eg_platform_base_agent/server/stateless_agent_runtime_server.py"
+  },
+  {
+    "name": "_startup",
+    "docstring": "Unified startup logic.",
+    "file": "eg_platform_base_agent/server/stateless_agent_runtime_server.py"
+  },
+  {
+    "name": "start",
+    "docstring": "Start the Stateless Agent Runtime Server with FastAPI\n\nInitializes the message handler and starts the FastAPI server with uvicorn. Supports only sync\nrequest processing modes.",
+    "file": "eg_platform_base_agent/server/stateless_agent_runtime_server.py"
+  },
+  {
+    "name": "BaseOrchestrator",
+    "docstring": "Enhanced orchestrator implementation for ATX Foundation partner teams.\n\nA multi-source orchestrator class that extends StrandsAgent to provide advanced capabilities for\npartner teams building orchestrator agents on the ATX Foundation. Supports handling messages from\ndifferent sources (human users, subagents, notifications), selective conversation history inclusion,\nMCP tool integration, custom tools, and configurable Bedrock models with shared capacity roles.\n\nIf your application has a running asyncio event loop, then use AsyncBaseOrchestrator instead.\nThis class's synchronous implementation ultimately calls the asynchronous implementation: it\ncreates an event loop in a separate thread taken from a pool. This is inefficient, but this is\nalso what you'd get if you synchronously and directly invoked StrandsAgent.\n\nTool Context:\n    Tools decorated with @tool(context=True) receive a ToolContext object with:\n    - invocation_state: Dict containing kwargs passed to invoke_with_source/process_message\n      - a2a_context: A2AContext object with context_id for A2A messaging (if provided)\n      - Additional custom kwargs can be passed through invoke_kwargs\n\nAttributes:\n    system_prompt: The system prompt defining orchestrator behavior.\n    model_id: Bedrock model identifier being used.\n    region_name: AWS region for Bedrock operations.\n    mcp_clients: List of MCP clients providing tool access.\n    custom_tools: List of custom tools available to the orchestrator.\n\nExample:\n    Basic usage with system prompt only:\n\n        orchestrator = BaseOrchestrator(\n            system_prompt=\"You are an orchestrator managing multiple agents.\",\n            model_id=\"us.anthropic.claude-sonnet-4-5-20250929-v1:0\"\n        )\n\n        request = ProcessMessageRequest(\n            message=\"Hello, how are you?\",\n            context=ConversationContext(user_id=\"user123\")\n        )\n        result = orchestrator.process_message(request)\n        print(result.message)\n\n    Advanced usage with MCP clients tools, and hooks:\n\n        from strands.tools.mcp import MCPClient\n        from eg_platform_base_agent.orchestrator_strands.base_orchestrator import BaseOrchestrator\n        from eg_platform_base_agent.orchestrator_strands.conversation.file_repository import FileMultiSourceConversationRepository\n        from eg_platform_base_agent.custom_types.orchestrator_agent_types import (\n            ConversationContext,\n            ProcessMessageRequest,\n        )\n        from eg_platform_base_agent.orchestrator_strands.hooks.conversation_hook_provider import ConversationHookProvider\n\n        from mcp import stdio_client, StdioServerParameters\n\n        # note that this uses a locally installed MCP server\n        mcp_client = MCPClient(lambda: stdio_client(\n            StdioServerParameters(\n                command=\"uvx\",\n                args=[\"awslabs.aws-documentation-mcp-server@latest\"]\n            )\n        ))\n\n        orchestrator = BaseOrchestrator(\n                     system_prompt=\"You are an advanced orchestrator with memory and coordination tools.\",\n                     custom_tools=[],\n                     mcp_clients=[mcp_client],\n                     hooks=[ConversationHookProvider(repository=FileMultiSourceConversationRepository(storage_dir=\"/tmp/conversations\"))],\n                     region_name=\"us-west-2\"\n            )\n\n        orchestrator.process_message(ProcessMessageRequest(\n                     message=\"How to build agents on AWS?\",\n                     context=ConversationContext(user_id=\"user456\")\n            ))",
+    "file": "eg_platform_base_agent/orchestrator_strands/base_orchestrator.py"
+  },
+  {
+    "name": "AsyncBaseOrchestrator",
+    "docstring": "An asynchronous version of BaseOrchestrator.\n\nIf your application has a running asyncio event loop, then use this class, not BaseOrchestrator.\nThe equivalent of process_message is process_message_async.\n\nTool Context:\n    Tools decorated with @tool(context=True) receive a ToolContext object with:\n    - invocation_state: Dict containing kwargs passed to invoke_with_source_async/process_message_async\n      - a2a_context: A2AContext object with context_id for A2A messaging (if provided)\n      - Additional custom kwargs can be passed through invoke_kwargs",
+    "file": "eg_platform_base_agent/orchestrator_strands/base_orchestrator.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the orchestrator with explicit configuration.\n\nArgs:\n    system_prompt: System prompt that defines the agent's behavior and capabilities\n    custom_tools: List of tool objects to make available to the agent\n    mcp_clients: List of MCP clients for tool execution\n    hooks: List of hook providers (defaults to empty list if None)\n    guardrail_id: Optional Bedrock guardrail ID for content filtering (ignored if model is provided)\n    guardrail_version: Optional guardrail version (ignored if model is provided)\n    excluded_tool_names: Optional set of tool names to exclude\n    region_name: AWS region name for Bedrock (ignored if model is provided)\n    model_id: Bedrock model identifier (ignored if model is provided)\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)",
+    "file": "eg_platform_base_agent/orchestrator_strands/base_orchestrator.py"
+  },
+  {
+    "name": "_combine_tools",
+    "docstring": "Combine tools from the MCP clients with the custom tools.",
+    "file": "eg_platform_base_agent/orchestrator_strands/base_orchestrator.py"
+  },
+  {
+    "name": "_build_kwargs",
+    "docstring": "Build kwargs for invoke_async calls, filtering out None values.",
+    "file": "eg_platform_base_agent/orchestrator_strands/base_orchestrator.py"
+  },
+  {
+    "name": "_process_agent_execution",
+    "docstring": "Run the agent, evaluate its trajectories, return result.\n\nThe evaluation is run based on the Eval card that was configured as a part of\ninitialization of the agent. If evaluation fails, agent execution is retried (if configured)\nand returns the new agent response with feedback incorporated.\n\nArgs:\n    message: The message text to process\n    **kwargs: Additional parameters to pass through to tools\n\nReturns:\n    The agent's response",
+    "file": "eg_platform_base_agent/orchestrator_strands/base_orchestrator.py"
+  },
+  {
+    "name": "_set_current_source_context",
+    "docstring": "Set the source context for the agent.\n\nArgs:\n    source_type: The type of the message source\n    source_id: The source ID",
+    "file": "eg_platform_base_agent/orchestrator_strands/base_orchestrator.py"
+  },
+  {
+    "name": "process_message",
+    "docstring": "Process a message based on its context.\n\nArgs:\n    request: The message request containing the message and context\n\nReturns:\n    The agent's response",
+    "file": "eg_platform_base_agent/orchestrator_strands/base_orchestrator.py"
+  },
+  {
+    "name": "invoke_with_source",
+    "docstring": "Process a message from a specific source.\n\nThis method handles messages from different sources (users, subagents, notifications)\nand ensures the appropriate conversation history is included.\n\nArgs:\n    message: The message text to process\n    source_id: Identifier for the message source (user ID, subagent ID, etc.)\n    source_type: Type of the message source\n    **kwargs: Additional parameters to pass through to tools\n\nReturns:\n    The agent's response",
+    "file": "eg_platform_base_agent/orchestrator_strands/base_orchestrator.py"
+  },
+  {
+    "name": "process_message_async",
+    "docstring": "Asynchronously process a message based on its context.\n\nArgs:\n    request: The message request containing the message and context\n\nReturns:\n    The agent's response",
+    "file": "eg_platform_base_agent/orchestrator_strands/base_orchestrator.py"
+  },
+  {
+    "name": "invoke_with_source_async",
+    "docstring": "Asynchronously process a message from a specific source.\n\nThis method handles messages from different sources (users, subagents, notifications)\nand ensures the appropriate conversation history is included.\n\nArgs:\n    message: The message text to process\n    source_id: Identifier for the message source (user ID, subagent ID, etc.)\n    source_type: Type of the message source\n    **kwargs: Additional parameters to pass through to tools\n\nReturns:\n    The agent's response",
+    "file": "eg_platform_base_agent/orchestrator_strands/base_orchestrator.py"
+  },
+  {
+    "name": "BaseAgentServer",
+    "docstring": "ATX Strands Agent Server with all the required bells and whistles.\n\nTODO: Decoupling Agent from AgentServer will come soon once\nwe consolidate BaseOrchestrator and BaseSubAgent initialization.\nRef: \n\nThis class provides an easy way to instantiate a new ATX strands-based agent (see BaseOrchestrator),\nfronted by a webserver through which requests to this agent are processed asynchronously.\n\nKey features:\n- BaseOrchestrator features (see BaseOrchestrator class)\n- WebServer to receive incoming requests (SendMessage, Notification and Healthcheck)\n- QueueService to process incoming requests asynchronously\n\nSample Initialization:\n    base_agent = BaseAgentServer(\n    system_prompt=SYSTEM_PROMPT,\n    custom_tools=[\n        # file_read,\n        # file_write,\n        self.discover_repositories,\n        self.discover_databases,\n        self.assess_database,\n        self.assess_repository,\n        self.generate_wave_plan,\n    ],\n    model_id=DEFAULT_MODEL_ID,\n    agent_evaluation_card=agent_eval_card,\n    agent_config_override={\n        AgentConfiguration.AUTO_PLATFORM_MCP_SUPPORT.value: False,\n        AgentConfiguration.AUTO_ATX_AGENT_LIFECYCLE_UPDATES.value: False,\n    }",
+    "file": "eg_platform_base_agent/orchestrator_strands/_base_agent_server.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the orchestrator with explicit configuration.\n\nArgs:\n    system_prompt: System prompt that defines the agent's behavior and capabilities\n    custom_tools: List of tool objects to make available to the agent\n    custom_mcp_clients: List of mcp clients to make available to the agent\n    agent_lifecycle_hooks: List of hook providers (see Strands SDK documentation)\n    model_id: Bedrock model identifier to use for the agent\n    agent_evaluation_card: Evaluation configuration, used to run evaluation at the end of each agent execution.\n    agent_config_override: List of overrides for agent configuration (uses default values otherwise)",
+    "file": "eg_platform_base_agent/orchestrator_strands/_base_agent_server.py"
+  },
+  {
+    "name": "_setup_agent_configuration",
+    "docstring": "Sets up agent configuration from env variables, overriding if necessary\n\nArgs:\n    agent_config_override: list of config to override\n\nReturns:\n    agent_config (Dict): A dictionary of agent configuration with keys corresponding to AgentConfiguration",
+    "file": "eg_platform_base_agent/orchestrator_strands/_base_agent_server.py"
+  },
+  {
+    "name": "_setup_auto_token_refresher",
+    "docstring": "Initialize auth-token refresher so auto-token would be immediately available for boto client and MCP\n\nArgs: None\n\nReturns: None",
+    "file": "eg_platform_base_agent/orchestrator_strands/_base_agent_server.py"
+  },
+  {
+    "name": "_setup_platform_mcp",
+    "docstring": "Set up platform MCP client for use by the strands agent.\n\nArgs: None\n\nReturns:\n    Connected Strands MCP client",
+    "file": "eg_platform_base_agent/orchestrator_strands/_base_agent_server.py"
+  },
+  {
+    "name": "_setup_base_agent",
+    "docstring": "Setup the base strands agent with config. Setup MCP clients, tools, hooks\nand initialize the strands agent with them.\n\nArgs: None\n\nReturns:\n    Configured agent",
+    "file": "eg_platform_base_agent/orchestrator_strands/_base_agent_server.py"
+  },
+  {
+    "name": "_start_api_server",
+    "docstring": "Run the API server (synchronous entry point for multiprocessing).\n\nArgs: None",
+    "file": "eg_platform_base_agent/orchestrator_strands/_base_agent_server.py"
+  },
+  {
+    "name": "_process_requests",
+    "docstring": "Async method to process incoming requests (queued by api server).\n\nArgs: None",
+    "file": "eg_platform_base_agent/orchestrator_strands/_base_agent_server.py"
+  },
+  {
+    "name": "MemoryTool",
+    "docstring": "Simplified memory tool for episodic memory operations.",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/memory_tool.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the memory tool.\n\nArgs:\n    memory_manager: Memory manager instance to use for operations",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/memory_tool.py"
+  },
+  {
+    "name": "memory",
+    "docstring": "Store and retrieve episodic memories from job orchestration activities.\n\nThis tool maintains episodic memory - a record of specific events, activities,\nand experiences that occurred during job execution. Use it to remember what\nhappened, when it happened, and the context around specific orchestration events.\n\nEpisodic memories capture:\n- Specific activities performed during orchestration phases\n- Events that occurred during job execution\n- Experiences and interactions during the orchestration process\n\nArgs:\n    operation: Memory operation - either 'store' or 'retrieve'\n    content: Description of the episodic event/activity (required for 'store' operation)\n    limit: Maximum number of memories to retrieve for 'retrieve' operation (default: 10)\n\nReturns:\n    String result of the operation",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/memory_tool.py"
+  },
+  {
+    "name": "SendMessageTools",
+    "docstring": "Send message tools for communicating with other agents via ATX platform.",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/send_message_tools.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the send message tools.",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/send_message_tools.py"
+  },
+  {
+    "name": "_construct_message",
+    "docstring": "Construct an A2AMessage from text.\n\nArgs:\n    text: The message text to send\n\nReturns:\n    Constructed A2AMessage",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/send_message_tools.py"
+  },
+  {
+    "name": "send_message_to_subagent",
+    "docstring": "Send a message to a subagent.\n\nArgs:\n    subagent_instance_id: The ID of the subagent to send the message to\n    message: The text message to send to the subagent\n\nReturns:\n    Response from the subagent\n\nExample:\n    response = send_message_to_subagent(\"subagent-123\", \"What is the status?\")",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/send_message_tools.py"
+  },
+  {
+    "name": "async_send_message_to_subagent",
+    "docstring": "Send a message to a subagent asynchronously.\n\nArgs:\n    subagent_instance_id: The ID of the subagent to send the message to\n    message: The text message to send to the subagent\n\nReturns:\n    Response from the subagent\n\nExample:\n    response = await async_send_message_to_subagent(\"subagent-123\", \"What is the status?\")",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/send_message_tools.py"
+  },
+  {
+    "name": "SubagentRegistryTools",
+    "docstring": "Subagent registry tools for fetching subagents registered with ATX platform.",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/subagent_registry_tools.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the subagent registry tools.",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/subagent_registry_tools.py"
+  },
+  {
+    "name": "discover_subagents",
+    "docstring": "Get the list of subagents registered with the ATX platform.\n\nReturns:\n    List[GetAgentVersionOutput]: Version information of subagents registered with the ATX platform",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/subagent_registry_tools.py"
+  },
+  {
+    "name": "ApprovableTools",
+    "docstring": "A base class to support tools that use the requires_approval decorator.\n\nTools using the requires_approval decorator must be defined in a class that inherits this.",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/approval.py"
+  },
+  {
+    "name": "requires_approval",
+    "docstring": "Intercept a Strands tool call to require approval from a human before proceeding.\n\nStart a HITL task and wait for the HITL to be SUBMITTED before calling the tool.\nThis decorator should go before (below) the @tool decorator.\n\nRequirements:\n    - Define the tool in a subclass of ApprovableTools.\n    - If using AgentRuntimeServer, use_hitl_notifier must be true when instantiating it.\n\nArgs:\n    name: Customer-facing name for the action\n    description: Customer-facing description for the action\n    component_id: HITL component ID to present the approval\n    properties_callback: Function which accepts the name, description, and tool args/kwargs,\n        and returns properties for the HITL component\n\nReturns:\n    A decorator.",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/approval.py"
+  },
+  {
+    "name": "_do_research_background",
+    "docstring": "Background research task that sends progress updates.",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/example_tools.py"
+  },
+  {
+    "name": "research_topic",
+    "docstring": "Conduct research on a topic.\n\nPerforms comprehensive research on the specified topic, including gathering sources,\nanalyzing findings, cross-referencing data, and synthesizing insights. Progress updates\nare sent during the research process.\n\nArgs:\n    topic: The research topic to investigate\n\nReturns:\n    Confirmation that research has started",
+    "file": "eg_platform_base_agent/orchestrator_strands/tools/example_tools.py"
+  },
+  {
+    "name": "ConversationHookProvider",
+    "docstring": "Hook provider for managing conversations from different sources.\n\nProvides conversation history management for different message sources:\n- User messages include user-specific history and notifications\n- Subagent messages include task-specific conversations\n- Notifications are shared across user contexts\n\nArgs:\n    repository: Repository for storing and retrieving conversations.\n               If None, a FileConversationRepository with default settings is used.\n    storage_dir: Directory to store conversation history (only used if repository is None).\n                If None, conversations are only kept in memory.",
+    "file": "eg_platform_base_agent/orchestrator_strands/hooks/conversation_hook_provider.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the conversation hook provider.",
+    "file": "eg_platform_base_agent/orchestrator_strands/hooks/conversation_hook_provider.py"
+  },
+  {
+    "name": "register_hooks",
+    "docstring": "Register hooks for conversation management.",
+    "file": "eg_platform_base_agent/orchestrator_strands/hooks/conversation_hook_provider.py"
+  },
+  {
+    "name": "_before_invocation",
+    "docstring": "Set the conversation history before agent invocation.\n\nArgs:\n    event: The BeforeInvocationEvent containing the agent and invocation state",
+    "file": "eg_platform_base_agent/orchestrator_strands/hooks/conversation_hook_provider.py"
+  },
+  {
+    "name": "_on_message_added",
+    "docstring": "Store a message when it's added to the agent.\n\nArgs:\n    event: The MessageAddedEvent containing the message and agent",
+    "file": "eg_platform_base_agent/orchestrator_strands/hooks/conversation_hook_provider.py"
+  },
+  {
+    "name": "_after_invocation",
+    "docstring": "Save the conversation state after agent invocation.\n\nArgs:\n    event: The AfterInvocationEvent containing the agent",
+    "file": "eg_platform_base_agent/orchestrator_strands/hooks/conversation_hook_provider.py"
+  },
+  {
+    "name": "MemoryHookProvider",
+    "docstring": "Hook provider for automatic memory management",
+    "file": "eg_platform_base_agent/orchestrator_strands/hooks/memory_hook_provider.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the memory hook provider.\n\nArgs:\n    memory_manager: The memory manager to use for retrieving and storing memories",
+    "file": "eg_platform_base_agent/orchestrator_strands/hooks/memory_hook_provider.py"
+  },
+  {
+    "name": "retrieve_memories",
+    "docstring": "Retrieve relevant memories before processing user message.\n\nThis method is called when a new message is added to the agent's conversation.\nIt retrieves relevant memories based on the message content and injects them\ninto the user message as context.\n\nArgs:\n    event: The MessageAddedEvent containing the message and agent",
+    "file": "eg_platform_base_agent/orchestrator_strands/hooks/memory_hook_provider.py"
+  },
+  {
+    "name": "register_hooks",
+    "docstring": "Register memory hooks.\n\nArgs:\n    registry: The hook registry to register callbacks with\n    **kwargs: Additional arguments",
+    "file": "eg_platform_base_agent/orchestrator_strands/hooks/memory_hook_provider.py"
+  },
+  {
+    "name": "_extract_metrics",
+    "docstring": "Extract key metrics from the agent's metrics summary and format them as EMF.\n\nArgs:\n    strands_metrics_summary (dict): The metrics summary from agent.metrics.get_summary()\n    eval_output (EvaluationOutput): Output of agent evaluation after execution\n\nReturns:\n    dict: EMF-formatted metrics",
+    "file": "eg_platform_base_agent/orchestrator_strands/evaluation/metrics_helper.py"
+  },
+  {
+    "name": "emit_metrics",
+    "docstring": "Save the extracted metrics to a file in EMF format.\n\nArgs:\n    strands_metrics_summary (dict): The metrics summary from agent.metrics.get_summary()\n    eval_output (EvaluationOutput): Output of agent evaluation after execution",
+    "file": "eg_platform_base_agent/orchestrator_strands/evaluation/metrics_helper.py"
+  },
+  {
+    "name": "evaluate",
+    "docstring": "Evaluate function of agent result based on its trajectories and metrics\n\nThe following are the steps\n  - Read eval card\n  - Read agent metrics\n  - Evaluate (see evaluation_card.py for details on these checks)\n    - Output format\n    - ToolUsage (needs to include required tools, optional tools need not be used, look for auth errors)\n    - Task Efficiency Checks\n    - Check if domain-level validation was performed\n    - Task Manipulation Checks\n    - HITL Usage Checks\n    - Connector Usage Checks\n    - Subagent Invocation Checks\n  - Emit CW metrics w/agent metrics and eval results\n\nArgs:\n    agent_result(StrandsAgentResult): Result object from agent response\n\nReturns:\n    EvaluationOutput",
+    "file": "eg_platform_base_agent/orchestrator_strands/evaluation/evaluate_agent_trajectory.py"
+  },
+  {
+    "name": "_update_eval_details",
+    "docstring": "Updates the EvaluationDetail based on observation\n\nArgs:\n    eval_category (EvaluationCategory): What evaluation category does this observation correspond to\n    eval_status (EvaluationStatus): Pass/Fail\n    eval_msg (str): message to include",
+    "file": "eg_platform_base_agent/orchestrator_strands/evaluation/evaluate_agent_trajectory.py"
+  },
+  {
+    "name": "encode_bytes_values",
+    "docstring": "Recursively encode any bytes values in an object to base64.\n\nHandles dictionaries, lists, and nested structures.",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/message_type.py"
+  },
+  {
+    "name": "decode_bytes_values",
+    "docstring": "Recursively decode any base64-encoded bytes values in an object.\n\nHandles dictionaries, lists, and nested structures.",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/message_type.py"
+  },
+  {
+    "name": "ConversationMessage",
+    "docstring": "Custom message class for conversation storage.\n\nThis class wraps the Strands Message class and adds additional metadata\nneeded for conversation management, such as timestamps for ordering.\n\nAttributes:\n    message: Original message content\n    created_at: ISO format timestamp for when this message was created",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/message_type.py"
+  },
+  {
+    "name": "from_message",
+    "docstring": "Create a ConversationMessage from a Strands Message.\n\nArgs:\n    message: The Strands Message to wrap\n\nReturns:\n    A new ConversationMessage instance",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/message_type.py"
+  },
+  {
+    "name": "to_message",
+    "docstring": "Get the original Strands Message.\n\nReturns:\n    The original Strands Message",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/message_type.py"
+  },
+  {
+    "name": "from_dict",
+    "docstring": "Create a ConversationMessage from a dictionary.\n\nArgs:\n    data: Dictionary representation of a ConversationMessage\n\nReturns:\n    A new ConversationMessage instance",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/message_type.py"
+  },
+  {
+    "name": "to_dict",
+    "docstring": "Convert to a dictionary for serialization.\n\nReturns:\n    A dictionary representation of this message",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/message_type.py"
+  },
+  {
+    "name": "MessageSourceType",
+    "docstring": "Types of message sources.",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/constants.py"
+  },
+  {
+    "name": "FileMultiSourceConversationRepository",
+    "docstring": "File-based implementation of the multi-source conversation repository.\n\nStores conversations in a JSON file on disk. If no storage directory is provided,\na default directory in the system's temporary directory is used.",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/file_repository.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the file-based conversation repository.\n\nArgs:\n    storage_dir: Directory to store conversation history. If None, a default\n                directory in the system's temporary directory is used.",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/file_repository.py"
+  },
+  {
+    "name": "_get_source_info",
+    "docstring": "Extract source type and ID from agent state.\n\nArgs:\n    agent: The agent containing the source information\n\nReturns:\n    Tuple of (source_type, source_id)",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/file_repository.py"
+  },
+  {
+    "name": "add_message_for_agent",
+    "docstring": "Add a message to the appropriate conversation based on agent state.\n\nArgs:\n    message: The message to add\n    agent: The agent whose state determines the message context",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/file_repository.py"
+  },
+  {
+    "name": "get_conversation_history_for_agent",
+    "docstring": "Get the conversation history relevant to an agent based on its state.\n\nArgs:\n    agent: The agent whose state determines which conversations to retrieve\n\nReturns:\n    List of messages relevant to the agent's context",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/file_repository.py"
+  },
+  {
+    "name": "_read_file",
+    "docstring": "Read JSON file.",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/file_repository.py"
+  },
+  {
+    "name": "_write_file",
+    "docstring": "Write JSON file.",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/file_repository.py"
+  },
+  {
+    "name": "save",
+    "docstring": "Save the conversations to disk.",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/file_repository.py"
+  },
+  {
+    "name": "load",
+    "docstring": "Load the conversations from disk.",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/file_repository.py"
+  },
+  {
+    "name": "ConversationRepository",
+    "docstring": "Repository interface for managing multi-source conversations.\n\nProvides storage and retrieval of conversation histories for different\nmessage sources, with support for user-specific, task-specific, and\nnotification messages.",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/repository.py"
+  },
+  {
+    "name": "add_message_for_agent",
+    "docstring": "Store a message in the appropriate conversation context.\n\nArgs:\n    message: The message to store\n    agent: The agent providing the conversation context",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/repository.py"
+  },
+  {
+    "name": "get_conversation_history_for_agent",
+    "docstring": "Retrieve conversation history for an agent's context.\n\nArgs:\n    agent: The agent whose context determines the relevant history\n\nReturns:\n    List of messages relevant to the agent's context",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/repository.py"
+  },
+  {
+    "name": "save",
+    "docstring": "Persist conversations to storage.",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/repository.py"
+  },
+  {
+    "name": "load",
+    "docstring": "Load conversations from storage.",
+    "file": "eg_platform_base_agent/orchestrator_strands/conversation/repository.py"
+  },
+  {
+    "name": "BaseExtensionHandler",
+    "docstring": "Abstract base class for all extension handler implementations.",
+    "file": "eg_platform_base_agent/extensions/base_extension_handler.py"
+  },
+  {
+    "name": "should_process",
+    "docstring": "Determine if the extension handler should process the request.",
+    "file": "eg_platform_base_agent/extensions/base_extension_handler.py"
+  },
+  {
+    "name": "process_request",
+    "docstring": "Process the request and return the response.",
+    "file": "eg_platform_base_agent/extensions/base_extension_handler.py"
+  },
+  {
+    "name": "AcknowledgmentHandler",
+    "docstring": "Extension handler that provides automatic acknowledgment for incoming messages.\n\nSends immediate acknowledgment responses to specific senders (e.g., ATX_CHAT)\nwhile allowing the actual message processing to continue asynchronously.\nThis improves user experience by providing instant feedback that the request\nwas received and is being processed.",
+    "file": "eg_platform_base_agent/extensions/acknowledgments/acknowledgment_handler.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the Acknowledgment Handler.\n\nArgs:\n    required (bool): Whether the extension is required.\n    description (str): The description of the extension.\n    params (dict): The parameters of the extension.",
+    "file": "eg_platform_base_agent/extensions/acknowledgments/acknowledgment_handler.py"
+  },
+  {
+    "name": "process_request",
+    "docstring": "Create a structured acknowledgment to be sent back to the requester",
+    "file": "eg_platform_base_agent/extensions/acknowledgments/acknowledgment_handler.py"
+  },
+  {
+    "name": "AgenticApiHelper",
+    "docstring": "Base class for agentic API helpers.",
+    "file": "eg_platform_base_agent/agentic_framework/agentic_api_helper.py"
+  },
+  {
+    "name": "_check_arg",
+    "docstring": "Validate required arguments.",
+    "file": "eg_platform_base_agent/agentic_framework/agentic_api_helper.py"
+  },
+  {
+    "name": "_create_request_context",
+    "docstring": "Build request context for API calls.",
+    "file": "eg_platform_base_agent/agentic_framework/agentic_api_helper.py"
+  },
+  {
+    "name": "_inject_request_context",
+    "docstring": "Build request context for API calls.",
+    "file": "eg_platform_base_agent/agentic_framework/agentic_api_helper.py"
+  },
+  {
+    "name": "HitlClient",
+    "docstring": "A wrapper around Elastic Gumby's HITL (human-in-the-loop) APIs.",
+    "file": "eg_platform_base_agent/agentic_framework/hitl.py"
+  },
+  {
+    "name": "AgentInstanceManager",
+    "docstring": "Manages agent instance lifecycle operations.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "get_agent_instance_manager",
+    "docstring": "Get cached AgentInstanceManager from environment variables.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "get_agent_instance_manager_with_context",
+    "docstring": "Get cached AgentInstanceManager with provided context.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "initialize_base_orchestrator_agent_instance",
+    "docstring": "Initialize base orchestrator instance with provided context.\nReturn if agent is set to RUNNING",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "create_agent_instance_manager",
+    "docstring": "Create AgentInstanceManager from environment variables.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "initialize_agent_instance",
+    "docstring": "Initialize agent instance using environment variables.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "shutdown_base_orchestrator_agent_instance",
+    "docstring": "Shutdown base orchestrator instance using environment variables.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "shutdown_subagent_instance",
+    "docstring": "Shutdown subagent instance using environment variables.\n\nReturns:\n    bool: True if the subagent was successfully stopped, False otherwise.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "get_subagent_instances",
+    "docstring": "Get all subagent instances.\n\nArgs:\n    requester_agent_instance_id: Optional ID to filter agents by requester. The requester is the agent instance that invoked the underlying agent.\n\nReturns:\n    List[Dict[str, str]]: List of subagent summaries with agentInstanceId, agentType, and agentInstanceStatus.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "set_agent_running",
+    "docstring": "Set agent to RUNNING with retry logic",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "wait_for_agent_non_invoking",
+    "docstring": "Wait for agent status to exit INVOKING state.\n\nArgs:\n    workspace_id: The workspace ID\n    job_id: The job ID\n    agent_instance_id: The agent instance ID\n    timeout: Maximum time to wait in seconds (default: 10)\n\nReturns:\n    Final agent status after waiting (could be RUNNING, INVOKED, etc.)",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize AgentInstanceManager.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "list_agent_instances",
+    "docstring": "List agent instances, optionally filtered by requester agent instance ID.\n\nArgs:\n    requester_agent_instance_id: Optional ID to filter agents by requester. The requester is the agent instance that invoked the underlying agent.\n\nReturns:\n    dict: Response containing agentInstanceSummaries and other metadata.\n\nRaises:\n    Exception: If there's an error listing agent instances.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "get_status",
+    "docstring": "Get the status of any agent instance by its ID.\n\nArgs:\n    agent_instance_id: The unique identifier of the agent instance.\n\nReturns:\n    dict: The agent instance status response from the API.\n\nRaises:\n    Exception: If there's an error retrieving the agent instance status.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "update_status",
+    "docstring": "Update the status of any agent instance by its ID.\n\nArgs:\n    agent_instance_id: The unique identifier of the agent instance.\n    status: The new status to set for the agent instance.\n    status_reason: Optional reason for the status change.\n    agent_output: Optional output data from the agent.\n\nReturns:\n    dict: The update response from the API.\n\nRaises:\n    Exception: If there's an error updating the agent instance status.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "stop_agent",
+    "docstring": "Stop the agent instance by its ID.\n\nArgs:\n    agent_instance_id: The unique identifier of the agent instance.\n\nReturns:\n    dict: The stop response from the API.\n\nRaises:\n    Exception: If there's an error stopping the agent instance.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "set_running",
+    "docstring": "Set agent instance status to RUNNING.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "set_stopped",
+    "docstring": "Set agent instance status to STOPPED.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "set_failed",
+    "docstring": "Set agent instance status to FAILED.",
+    "file": "eg_platform_base_agent/agentic_framework/agent_lifecycle.py"
+  },
+  {
+    "name": "JobStatus",
+    "docstring": "Job status values.",
+    "file": "eg_platform_base_agent/agentic_framework/job_manager.py"
+  },
+  {
+    "name": "JobManager",
+    "docstring": "Manages job lifecycle operations.",
+    "file": "eg_platform_base_agent/agentic_framework/job_manager.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize JobManager.",
+    "file": "eg_platform_base_agent/agentic_framework/job_manager.py"
+  },
+  {
+    "name": "update_job_status",
+    "docstring": "Update job status.\n\nArgs:\n    status: The new job status\n    status_info: Optional status information\n\nReturns:\n    dict: Response from the API\n\nRaises:\n    Exception: If there's an error updating the job status",
+    "file": "eg_platform_base_agent/agentic_framework/job_manager.py"
+  },
+  {
+    "name": "get_job_status",
+    "docstring": "Get current job status.\n\nReturns:\n    str: Current job status\n\nRaises:\n    Exception: If there's an error retrieving the job status",
+    "file": "eg_platform_base_agent/agentic_framework/job_manager.py"
+  },
+  {
+    "name": "transition_to_executing_if_assessing",
+    "docstring": "Transition job from ASSESSING to EXECUTING if currently in ASSESSING status.",
+    "file": "eg_platform_base_agent/agentic_framework/job_manager.py"
+  },
+  {
+    "name": "InternalServerException",
+    "docstring": "Internal server exception.",
+    "file": "eg_platform_base_agent/agentic_framework/common.py"
+  },
+  {
+    "name": "handle_boto_error",
+    "docstring": "Handle boto3 client errors.",
+    "file": "eg_platform_base_agent/agentic_framework/common.py"
+  },
+  {
+    "name": "get_agentic_api_client",
+    "docstring": "Get cached agentic API client.",
+    "file": "eg_platform_base_agent/agentic_framework/client_factory.py"
+  },
+  {
+    "name": "create_agentic_api_client",
+    "docstring": "Create boto3 client for ElasticGumbyAgenticAPI.\n\nArgs:\n    stage: Environment stage (defaults to env var)\n    region: AWS region (defaults to env var)\n    endpoint_url: Direct endpoint URL (overrides stage/region)\n    max_retries: Maximum retries for API calls\n    timeout: Timeout in seconds\n\nReturns:\n    Configured boto3 client",
+    "file": "eg_platform_base_agent/agentic_framework/client_factory.py"
+  },
+  {
+    "name": "ArtifactStore",
+    "docstring": "Manages artifact storage operations.",
+    "file": "eg_platform_base_agent/agentic_framework/artifact_store.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize ArtifactStore.",
+    "file": "eg_platform_base_agent/agentic_framework/artifact_store.py"
+  },
+  {
+    "name": "list_artifacts",
+    "docstring": "List artifacts by agent instance ID and category type.",
+    "file": "eg_platform_base_agent/agentic_framework/artifact_store.py"
+  },
+  {
+    "name": "upload_artifact",
+    "docstring": "Upload artifact with specified category. Returns artifactId.",
+    "file": "eg_platform_base_agent/agentic_framework/artifact_store.py"
+  },
+  {
+    "name": "download_artifact",
+    "docstring": "Download artifact by ID and put to the destination file path",
+    "file": "eg_platform_base_agent/agentic_framework/artifact_store.py"
+  },
+  {
+    "name": "A2AManager",
+    "docstring": "Manager for A2A protocol operations (SendMessage, GetTask).",
+    "file": "eg_platform_base_agent/agentic_framework/a2a_manager.py"
+  },
+  {
+    "name": "get_a2a_manager",
+    "docstring": "Get cached A2AManager singleton from environment variables.",
+    "file": "eg_platform_base_agent/agentic_framework/a2a_manager.py"
+  },
+  {
+    "name": "send_message",
+    "docstring": "Send a message via A2A SendMessage API.\n\nArgs:\n    agent_instance_id: The agent instance ID to send the message to\n    message: The A2AMessage object to send\n\nReturns:\n    API response dictionary\n\nRaises:\n    ClientError: If API call fails after retries",
+    "file": "eg_platform_base_agent/agentic_framework/a2a_manager.py"
+  },
+  {
+    "name": "send_task",
+    "docstring": "Send a task via A2A SendMessage API.\n\nArgs:\n    agent_instance_id: The agent instance ID to send the task to\n    task: The A2ATask object to send\n\nReturns:\n    API response dictionary\n\nRaises:\n    ClientError: If API call fails after retries",
+    "file": "eg_platform_base_agent/agentic_framework/a2a_manager.py"
+  },
+  {
+    "name": "get_task",
+    "docstring": "Get task information via A2A GetTask API.\n\nArgs:\n    task_id: The task ID to retrieve\n    agent_instance_id: The agent instance ID to query the task from\n\nReturns:\n    Task information dictionary\n\nRaises:\n    ClientError: If API call fails after retries",
+    "file": "eg_platform_base_agent/agentic_framework/a2a_manager.py"
+  },
+  {
+    "name": "CategoryType",
+    "docstring": "Artifact category types.",
+    "file": "eg_platform_base_agent/agentic_framework/api_model.py"
+  },
+  {
+    "name": "FileType",
+    "docstring": "File types for artifacts.",
+    "file": "eg_platform_base_agent/agentic_framework/api_model.py"
+  },
+  {
+    "name": "Visibility",
+    "docstring": "Artifact visibility levels.",
+    "file": "eg_platform_base_agent/agentic_framework/api_model.py"
+  },
+  {
+    "name": "ApiShapeMixin",
+    "docstring": "Base mixin for API request/response shapes.",
+    "file": "eg_platform_base_agent/agentic_framework/api_model.py"
+  },
+  {
+    "name": "AgenticApiRequestContext",
+    "docstring": "Request context for Elastic Gumby Agentic API calls.\nContains job metadata and agent identification information.",
+    "file": "eg_platform_base_agent/agentic_framework/api_model.py"
+  },
+  {
+    "name": "to_dict",
+    "docstring": "Converting dataclass to AgenticAPI requests expected format.",
+    "file": "eg_platform_base_agent/agentic_framework/api_model.py"
+  },
+  {
+    "name": "to_dict",
+    "docstring": "Convert to dictionary format expected by the API.",
+    "file": "eg_platform_base_agent/agentic_framework/api_model.py"
+  },
+  {
+    "name": "TaskStore",
+    "docstring": "Abstract interface for task storage that consumers implement.",
+    "file": "eg_platform_base_agent/task/task_store.py"
+  },
+  {
+    "name": "store_task",
+    "docstring": "Store a new task.\n\nArgs:\n    task: Task to store\n\nRaises:\n    Exception: If task already exists or storage fails",
+    "file": "eg_platform_base_agent/task/task_store.py"
+  },
+  {
+    "name": "get_task",
+    "docstring": "Retrieve a task by ID.\n\nArgs:\n    task_id: Task ID to retrieve\n\nReturns:\n    Task if found, None otherwise",
+    "file": "eg_platform_base_agent/task/task_store.py"
+  },
+  {
+    "name": "update_task",
+    "docstring": "Update an existing task.\n\nArgs:\n    task: Task with updated information\n\nRaises:\n    Exception: If task not found or update fails",
+    "file": "eg_platform_base_agent/task/task_store.py"
+  },
+  {
+    "name": "FileTaskStore",
+    "docstring": "File-based task storage using JSON files.\n\nPersistent storage suitable for:\n- Single-instance deployments needing persistence across restarts\n- Development and testing with state preservation\n- Checkpointing task state for recovery\n\nEach task is stored as a separate JSON file named {task_id}.json\nin the configured storage directory.\n\nFor checkpointing: Use the same storage_dir as AgentRuntimeServer\nto ensure tasks are included in checkpoint artifacts and restored\non agent restart or failover.",
+    "file": "eg_platform_base_agent/task/file_task_store.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the file-based task store.\n\nArgs:\n    storage_dir: Directory path where task files will be stored",
+    "file": "eg_platform_base_agent/task/file_task_store.py"
+  },
+  {
+    "name": "_get_task_path",
+    "docstring": "Get the file path for a task ID.",
+    "file": "eg_platform_base_agent/task/file_task_store.py"
+  },
+  {
+    "name": "store_task",
+    "docstring": "Store a new task as a JSON file.",
+    "file": "eg_platform_base_agent/task/file_task_store.py"
+  },
+  {
+    "name": "get_task",
+    "docstring": "Retrieve a task from a JSON file.",
+    "file": "eg_platform_base_agent/task/file_task_store.py"
+  },
+  {
+    "name": "update_task",
+    "docstring": "Update an existing task JSON file.",
+    "file": "eg_platform_base_agent/task/file_task_store.py"
+  },
+  {
+    "name": "_dict_to_task",
+    "docstring": "Convert dictionary to A2ATask object.",
+    "file": "eg_platform_base_agent/task/file_task_store.py"
+  },
+  {
+    "name": "InMemoryTaskStore",
+    "docstring": "In-memory task storage using a dictionary.\n\nFast and simple storage suitable for:\n- Testing and development\n- Single-instance deployments\n- Short-lived tasks that don't need persistence\n\nNote: All tasks are lost when the process restarts.",
+    "file": "eg_platform_base_agent/task/in_memory_task_store.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the in-memory task store.",
+    "file": "eg_platform_base_agent/task/in_memory_task_store.py"
+  },
+  {
+    "name": "store_task",
+    "docstring": "Store a new task in memory.",
+    "file": "eg_platform_base_agent/task/in_memory_task_store.py"
+  },
+  {
+    "name": "get_task",
+    "docstring": "Retrieve a task from memory.",
+    "file": "eg_platform_base_agent/task/in_memory_task_store.py"
+  },
+  {
+    "name": "update_task",
+    "docstring": "Update an existing task in memory.",
+    "file": "eg_platform_base_agent/task/in_memory_task_store.py"
+  },
+  {
+    "name": "TaskManager",
+    "docstring": "Abstract interface for task management that consumers implement.\n\nTaskManager provides hooks for:\n1. Deciding when to create tasks vs return messages\n2. Processing tasks in background\n3. Updating task status during processing\n4. Retrieving task status for GetTask API\n\nConsumers implement their own logic for task creation, processing,\nand storage using the provided TaskStore interface.",
+    "file": "eg_platform_base_agent/task/task_manager.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize TaskManager with storage backend.\n\nArgs:\n    task_store: Storage backend for task persistence",
+    "file": "eg_platform_base_agent/task/task_manager.py"
+  },
+  {
+    "name": "should_create_task",
+    "docstring": "Determine if this request should create a task vs return message.\n\nCalled by MessageHandler when TaskManager is configured.\n\nConsider:\n- Client type (chat vs agent)\n- Message content (keywords, patterns)\n- Operation complexity\n- Expected duration\n\nArgs:\n    request: The incoming A2A invocation request\n\nReturns:\n    True if task should be created, False for immediate message response",
+    "file": "eg_platform_base_agent/task/task_manager.py"
+  },
+  {
+    "name": "on_send_task",
+    "docstring": "Called when agent creates a task.\n\nConsumer implements task creation and background processing logic:\n- Store task using upsert_task()\n- Start background processing (worker, subagent, etc.)\n- Update task status during processing\n\nArgs:\n    task: Task information to process",
+    "file": "eg_platform_base_agent/task/task_manager.py"
+  },
+  {
+    "name": "should_process_task",
+    "docstring": "Determine if this request should be processed by the TaskManager. This should return True if the requester\nsends a message to provide task related information. Consumer should then implement handling behavior with\n`on_receive_task` below.\n\nCalled by MessageHandler when TaskManager is configured\n\nConsider:\n- Does this SendMessage request have a taskId?\n\nArgs:\n    request: The incoming A2A invocation request\n\nReturns:\n    True if this request should be handled by TaskManager, False if not",
+    "file": "eg_platform_base_agent/task/task_manager.py"
+  },
+  {
+    "name": "on_receive_task",
+    "docstring": "Called when a should_process_task resolves to True, normally if the incoming request has a taskId\n\nOverride to customize behavior when a SendMessage request is received with a taskId\n\nArgs:\n    task: The Task created in direct response\n    request: The incoming request that has a taskId",
+    "file": "eg_platform_base_agent/task/task_manager.py"
+  },
+  {
+    "name": "get_task_process_message",
+    "docstring": "Get initial response message when task is being processed.\n\nOverride to customize the message shown to the caller immediately\nafter task processing (before background processing completes).\n\nArgs:\n    request: The incoming request that triggered task creation\n\nReturns:\n    A2AMessage with initial response (default: \"I'm working on your request...\")",
+    "file": "eg_platform_base_agent/task/task_manager.py"
+  },
+  {
+    "name": "get_task_creation_message",
+    "docstring": "Get initial response message when task is created.\n\nOverride to customize the message shown to users immediately\nafter task creation (before background processing completes).\n\nArgs:\n    request: The incoming request that triggered task creation\n\nReturns:\n    A2AMessage with initial response (default: \"I'm working on your request...\")",
+    "file": "eg_platform_base_agent/task/task_manager.py"
+  },
+  {
+    "name": "supports_auto_upgrade",
+    "docstring": "Enable automatic task upgrade on timeout.\n\nTODO: Auto-upgrade functionality not yet implemented in MessageHandler.\nWhen implemented, MessageHandler will automatically upgrade to task\nif processing exceeds timeout threshold.\n\nReturns:\n    True to enable auto-upgrade, False to disable (default)",
+    "file": "eg_platform_base_agent/task/task_manager.py"
+  },
+  {
+    "name": "on_get_task",
+    "docstring": "Called when GetTask API is invoked.\n\nDefault implementation uses TaskStore. Override for custom logic.\n\nArgs:\n    task_id: The task ID to retrieve\n\nReturns:\n    A2ATask with current state, or None if not found",
+    "file": "eg_platform_base_agent/task/task_manager.py"
+  },
+  {
+    "name": "upsert_task",
+    "docstring": "Store or update task information.\n\nDefault implementation uses TaskStore. Override for custom logic.\n\nNote: Not atomic. For concurrent environments, override with atomic operations.\n\nArgs:\n    task: Task information to store/update",
+    "file": "eg_platform_base_agent/task/task_manager.py"
+  },
+  {
+    "name": "ExampleAlwaysCreateTaskManager",
+    "docstring": "Example TaskManager demonstrating always-create-task pattern.\n\nThis is a reference implementation for testing - it does NOT invoke\nactual LLM models or perform real work. Instead, it simulates ~90 seconds\nof processing with periodic status updates.\n\nKey behaviors:\n- should_create_task(): Always returns True\n- Background processing: Mock updates every 15 seconds\n- Designed for testing with ATX_CHAT (3-minute timeout)\n\nFor agent implementations, consumers can:\n- Add conditional logic in should_create_task() based on request analysis\n- Use queue for orchestrator pattern: await self.queue.submit_request(...)\n- Customize status update frequency and messaging",
+    "file": "eg_platform_base_agent/task/example_task_manager.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize with dependencies from TaskManagerContext.\n\nArgs:\n    task_store: Storage backend for tasks\n    queue: Queue service for background processing",
+    "file": "eg_platform_base_agent/task/example_task_manager.py"
+  },
+  {
+    "name": "should_create_task",
+    "docstring": "Always create tasks - useful for testing task flow.",
+    "file": "eg_platform_base_agent/task/example_task_manager.py"
+  },
+  {
+    "name": "on_send_task",
+    "docstring": "Store task and start background processing.",
+    "file": "eg_platform_base_agent/task/example_task_manager.py"
+  },
+  {
+    "name": "should_process_task",
+    "docstring": "Check if taskId is populated in the request",
+    "file": "eg_platform_base_agent/task/example_task_manager.py"
+  },
+  {
+    "name": "on_receive_task",
+    "docstring": "Store task and start background processing.",
+    "file": "eg_platform_base_agent/task/example_task_manager.py"
+  },
+  {
+    "name": "_process_task_with_fast_updates",
+    "docstring": "Simulate background processing with periodic status updates.",
+    "file": "eg_platform_base_agent/task/example_task_manager.py"
+  },
+  {
+    "name": "_update_task_status",
+    "docstring": "Update task status - clients can poll via GetTask.",
+    "file": "eg_platform_base_agent/task/example_task_manager.py"
+  },
+  {
+    "name": "create_parser",
+    "docstring": "Create command line argument parser.",
+    "file": "eg_platform_base_agent/entrypoints/_simple_stateless_cli_agent_core.py"
+  },
+  {
+    "name": "main",
+    "docstring": "Main entry point.",
+    "file": "eg_platform_base_agent/entrypoints/_simple_stateless_cli_agent_core.py"
+  },
+  {
+    "name": "create_parser",
+    "docstring": "Create command line argument parser.",
+    "file": "eg_platform_base_agent/entrypoints/simple_cli_agent_core.py"
+  },
+  {
+    "name": "main",
+    "docstring": "Main entry point.",
+    "file": "eg_platform_base_agent/entrypoints/simple_cli_agent_core.py"
+  },
+  {
+    "name": "task_manager_factory",
+    "docstring": "Create TaskManager with access to queue.\n\nArgs:\n    context: Contains queue for background processing\n\nReturns:\n    Configured TaskManager instance",
+    "file": "eg_platform_base_agent/entrypoints/simple_cli_agent_core.py"
+  },
+  {
+    "name": "create_parser",
+    "docstring": "Create command line argument parser.",
+    "file": "eg_platform_base_agent/entrypoints/simple_subagent_cli.py"
+  },
+  {
+    "name": "main",
+    "docstring": "Main entry point.",
+    "file": "eg_platform_base_agent/entrypoints/simple_subagent_cli.py"
+  },
+  {
+    "name": "QueueService",
+    "docstring": "Service manager for request queue operations.\n\nThis class coordinates between the request queue, response store,\nand provides high-level operations for request management.",
+    "file": "eg_platform_base_agent/message_queue/service.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the queue service.\n\nArgs:\n    request_queue: Request queue implementation (defaults to LocalRequestQueue)\n    response_store: Response store implementation (defaults to LocalResponseStore)\n    storage_path: Base storage path for default implementations",
+    "file": "eg_platform_base_agent/message_queue/service.py"
+  },
+  {
+    "name": "start",
+    "docstring": "Start the queue service and background tasks.",
+    "file": "eg_platform_base_agent/message_queue/service.py"
+  },
+  {
+    "name": "stop",
+    "docstring": "Stop the queue service and background tasks.",
+    "file": "eg_platform_base_agent/message_queue/service.py"
+  },
+  {
+    "name": "submit_request",
+    "docstring": "Submit a new request to the queue.\n\nArgs:\n    message: The message/request content\n    user_id: User identifier\n    sender: Sender identifier\n    priority: Request priority\n\nReturns:\n    Request ID of the submitted request",
+    "file": "eg_platform_base_agent/message_queue/service.py"
+  },
+  {
+    "name": "get_request_status",
+    "docstring": "Get the status of a request.\n\nArgs:\n    request_id: ID of the request\n\nReturns:\n    Status of the request if found, None otherwise",
+    "file": "eg_platform_base_agent/message_queue/service.py"
+  },
+  {
+    "name": "get_response",
+    "docstring": "Get the response for a completed request.\n\nArgs:\n    request_id: ID of the request\n\nReturns:\n    Response if found, None otherwise",
+    "file": "eg_platform_base_agent/message_queue/service.py"
+  },
+  {
+    "name": "wait_for_response",
+    "docstring": "Wait for a request response with timeout.\n\nArgs:\n    request_id: Request identifier\n    timeout: Maximum time to wait in seconds\n    poll_interval: How often to check for response in seconds\n\nReturns:\n    Request response if available within timeout, None otherwise",
+    "file": "eg_platform_base_agent/message_queue/service.py"
+  },
+  {
+    "name": "health_check",
+    "docstring": "Perform health check on queue service components.\n\nReturns:\n    Health status information",
+    "file": "eg_platform_base_agent/message_queue/service.py"
+  },
+  {
+    "name": "_cleanup_loop",
+    "docstring": "Background task for periodic cleanup operations.",
+    "file": "eg_platform_base_agent/message_queue/service.py"
+  },
+  {
+    "name": "RequestStatus",
+    "docstring": "Status of a request in the queue.",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "RequestPriority",
+    "docstring": "Priority of a request in the queue.",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "QueueRequest",
+    "docstring": "Represents a request to be processed by the agent.\n\nThis class encapsulates all the information needed to process a request,\nincluding the message content, context, and metadata.",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "QueueResponse",
+    "docstring": "Represents a response to a processed request.\n\nThis class encapsulates the response from processing a request,\nincluding the result message and metadata.",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "RequestQueue",
+    "docstring": "Abstract base class for request queue implementations.\n\nThis interface defines the contract for request queue implementations,\nsupporting operations like enqueue, dequeue, and request status management.",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "ResponseStore",
+    "docstring": "Abstract base class for response storage implementations.\n\nThis interface defines the contract for storing and retrieving request responses,\nsupporting the async communication pattern where responses are stored\nfor later retrieval by the API server.",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "to_dict",
+    "docstring": "Convert request to dictionary for serialization.",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "from_dict",
+    "docstring": "Create request from dictionary.",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "to_dict",
+    "docstring": "Convert response to dictionary for serialization.",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "from_dict",
+    "docstring": "Create response from dictionary.",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "enqueue",
+    "docstring": "Add a request to the queue.\n\nArgs:\n    request: The request to add to the queue\n\nReturns:\n    True if request was successfully enqueued, False otherwise",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "dequeue",
+    "docstring": "Remove and return the next request from the queue.\n\nArgs:\n    timeout: Maximum time to wait for a request (None for no timeout)\n\nReturns:\n    The next request to process, or None if no request available within timeout",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "peek",
+    "docstring": "Return the next request without removing it from the queue.\n\nReturns:\n    The next request to process, or None if queue is empty",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "update_request_status",
+    "docstring": "Update the status of a request.\n\nArgs:\n    request_id: Identifier of the request to update\n    status: New status for the request\n    error_message: Optional error message if status is FAILED\n\nReturns:\n    True if request was successfully updated, False otherwise",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "get_request",
+    "docstring": "Retrieve a request by its ID.\n\nArgs:\n    request_id: Identifier of the request to retrieve\n\nReturns:\n    The request if found, None otherwise",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "size",
+    "docstring": "Get the number of requests in the queue.\n\nReturns:\n    Number of requests currently in the queue",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "clear",
+    "docstring": "Remove all requests from the queue.\n\nReturns:\n    True if queue was successfully cleared, False otherwise",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "health_check",
+    "docstring": "Check if the queue is healthy and operational.\n\nReturns:\n    True if queue is healthy, False otherwise",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "store_response",
+    "docstring": "Store a request response.\n\nArgs:\n    response: The response to store\n\nReturns:\n    True if response was successfully stored, False otherwise",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "get_response",
+    "docstring": "Retrieve a response by request ID.\n\nArgs:\n    request_id: Identifier of the request whose response to retrieve\n\nReturns:\n    The response if found, None otherwise",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "delete_response",
+    "docstring": "Delete a response by request ID.\n\nArgs:\n    request_id: Identifier of the request whose response to delete\n\nReturns:\n    True if response was successfully deleted, False otherwise",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "list_responses",
+    "docstring": "List stored responses.\n\nArgs:\n    limit: Maximum number of responses to return (None for all)\n\nReturns:\n    List of stored responses",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "cleanup_old_responses",
+    "docstring": "Remove responses older than the specified age.\n\nArgs:\n    max_age_hours: Maximum age of responses to keep in hours\n\nReturns:\n    Number of responses that were cleaned up",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "health_check",
+    "docstring": "Check if the response store is healthy and operational.\n\nReturns:\n    True if store is healthy, False otherwise",
+    "file": "eg_platform_base_agent/message_queue/interface.py"
+  },
+  {
+    "name": "LocalRequestQueue",
+    "docstring": "File-based request queue implementation that persists to disk.\n\nThis implementation uses JSON files to store requests and provides\npersistence across container restarts. It uses file locking\nto ensure thread safety in concurrent environments.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "LocalResponseStore",
+    "docstring": "File-based response store implementation that persists to disk.\n\nThis implementation uses JSON files to store responses and provides\npersistence across container restarts.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the local request queue.\n\nArgs:\n    storage_path: Directory path where queue data will be stored",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "_initialize_storage",
+    "docstring": "Initialize storage files if they don't exist.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "_file_lock",
+    "docstring": "Async context manager for file locking.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "_load_from_disk",
+    "docstring": "Load requests from disk if file has been modified.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "_save_to_disk",
+    "docstring": "Save current requests to disk.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "_sort_queue_by_priority",
+    "docstring": "Sort the queue order by priority and creation time.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "enqueue",
+    "docstring": "Add a task to the queue.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "dequeue",
+    "docstring": "Remove and return the next task from the queue.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "peek",
+    "docstring": "Return the next task without removing it from the queue.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "update_request_status",
+    "docstring": "Update the status of a task.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "get_request",
+    "docstring": "Retrieve a task by its ID.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "size",
+    "docstring": "Get the number of pending requests in the queue.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "clear",
+    "docstring": "Remove all requests from the queue.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "health_check",
+    "docstring": "Check if the queue is healthy and operational.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "__init__",
+    "docstring": "Initialize the local response store.\n\nArgs:\n    storage_path: Directory path where response data will be stored",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "_initialize_storage",
+    "docstring": "Initialize storage files if they don't exist.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "_file_lock",
+    "docstring": "Async context manager for file locking.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "_load_from_disk",
+    "docstring": "Load responses from disk if file has been modified.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "_save_to_disk",
+    "docstring": "Save current responses to disk.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "store_response",
+    "docstring": "Store a task response.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "get_response",
+    "docstring": "Retrieve a response by task ID.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "delete_response",
+    "docstring": "Delete a response by task ID.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "list_responses",
+    "docstring": "List stored responses.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "cleanup_old_responses",
+    "docstring": "Remove responses older than the specified age.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  },
+  {
+    "name": "health_check",
+    "docstring": "Check if the response store is healthy and operational.",
+    "file": "eg_platform_base_agent/message_queue/local_queue.py"
+  }
+]

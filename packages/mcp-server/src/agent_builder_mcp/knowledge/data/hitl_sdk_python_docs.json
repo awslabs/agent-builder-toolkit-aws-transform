@@ -1,0 +1,510 @@
+[
+  {
+    "name": "HitlClient",
+    "kind": "class",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "High-level client for HITL lifecycle management. Handles task creation, polling, artifact download, refresh loops, and task closure.",
+    "signature": "HitlClient(agentic_client, request_context, poll_interval_seconds=15, poll_timeout_minutes=120)",
+    "parameters": [
+      {"name": "agentic_client", "type": "AgenticClientProtocol", "required": true, "description": "boto3 ElasticGumbyAgenticService client"},
+      {"name": "request_context", "type": "RequestContext | RequestContextTypeDef", "required": true, "description": "Snake_case dataclass or camelCase dict with job_id, workspace_id, agent_instance_id, authorization_token"},
+      {"name": "poll_interval_seconds", "type": "int", "required": false, "default": 15, "description": "Seconds between status polls"},
+      {"name": "poll_timeout_minutes", "type": "int", "required": false, "default": 120, "description": "Max minutes to wait for human submission (2 hours default)"}
+    ],
+    "methods": ["create_and_start_task", "get_task", "wait_for_human_submission", "poll_until_status", "close_task", "execute_with_refresh"],
+    "example": "from elastic_gumby_hitl_component_python_sdk import HitlClient, RequestContext\nimport os\n\nrequest_context = RequestContext(\n    job_id=os.environ['JOB_ID'],\n    workspace_id=os.environ['WORKSPACE_ID'],\n    agent_instance_id=os.environ['AGENT_INSTANCE_ID'],\n    authorization_token=os.environ['AUTHORIZATION_TOKEN'],\n)\nclient = HitlClient(agentic_client, request_context)"
+  },
+  {
+    "name": "HitlClient.create_and_start_task",
+    "kind": "method",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Create and start a HITL task. Calls both CreateHitlTask AND StartHitlTask API operations in sequence.",
+    "signature": "create_and_start_task(ux_component_id, title, description, hitl_request_artifact=None, first_in_chain=True, *, severity=Severity.STANDARD, hitl_task_type=HitlTaskType.NORMAL, blocking_type=BlockingType.BLOCKING, category=Category.REGULAR, step_id=None, tag=None, expired_at=None, idempotency_token=None) -> str",
+    "parameters": [
+      {"name": "ux_component_id", "type": "str", "required": true, "description": "UX component to render (e.g. 'TextInput', 'DynamicHITLRenderEngine', 'AutoForm', 'GeneralConnector', 'FileUploadComponent', 'TableComponent', 'MarkdownRendererComponent', 'SelectDropdownComponent', 'FeedbackInput')"},
+      {"name": "title", "type": "str", "required": true, "description": "Displayed in the project plan (max 1024 chars)"},
+      {"name": "description", "type": "str", "required": true, "description": "Displayed in the execution log (max 1024 chars)"},
+      {"name": "hitl_request_artifact", "type": "HitlTaskArtifact | dict[str, Any] | None", "required": false, "default": "None", "description": "Artifact containing data for the UX component. Dict must have 'artifactId' key."},
+      {"name": "first_in_chain", "type": "bool", "required": false, "default": true, "description": "True if first task in chain, False for refresh iterations"},
+      {"name": "severity", "type": "Severity", "required": false, "default": "Severity.STANDARD", "description": "Task priority level. CRITICAL requires admin approval."},
+      {"name": "hitl_task_type", "type": "HitlTaskType", "required": false, "default": "HitlTaskType.NORMAL", "description": "NORMAL for standard tasks, DASHBOARD for read-only dashboard display"},
+      {"name": "blocking_type", "type": "BlockingType", "required": false, "default": "BlockingType.BLOCKING", "description": "BLOCKING pauses workflow until human responds, NON_BLOCKING continues execution"},
+      {"name": "category", "type": "Category", "required": false, "default": "Category.REGULAR", "description": "REGULAR for standard tasks, TOOL_APPROVAL for tool usage approval"},
+      {"name": "step_id", "type": "str | None", "required": false, "default": "None", "description": "Job plan step ID to associate this task with"},
+      {"name": "tag", "type": "str | None", "required": false, "default": "None", "description": "Logical identifier to group related HITL tasks, commonly used in refresh loops"},
+      {"name": "expired_at", "type": "int | None", "required": false, "default": "None", "description": "Expiration timestamp. If not provided, expires when agent stops."},
+      {"name": "idempotency_token", "type": "str | None", "required": false, "default": "None", "description": "Token for idempotent task creation"}
+    ],
+    "returns": {"type": "str", "description": "The created HITL task ID"},
+    "example": "task_id = client.create_and_start_task(\n    ux_component_id='DynamicHITLRenderEngine',\n    title='Review Migration Plan',\n    description='Please review the proposed migration plan',\n    hitl_request_artifact={'artifactId': artifact_id},\n    severity=Severity.STANDARD,\n    blocking_type=BlockingType.BLOCKING,\n)"
+  },
+  {
+    "name": "HitlClient.get_task",
+    "kind": "method",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Get the current state of a HITL task.",
+    "signature": "get_task(hitl_task_id) -> HitlTask",
+    "parameters": [
+      {"name": "hitl_task_id", "type": "str", "required": true, "description": "The HITL task ID to retrieve"}
+    ],
+    "returns": {"type": "HitlTask", "description": "HitlTask with hitl_task_id, hitl_task_status, and human_artifact (if submitted)"},
+    "example": "task = client.get_task(task_id)\nprint(task.hitl_task_status)  # e.g. HitlTaskStatus.SUBMITTED"
+  },
+  {
+    "name": "HitlClient.wait_for_human_submission",
+    "kind": "method",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Wait for the human to submit their response. Blocks until task reaches SUBMITTED status. Delegates to poll_until_status.",
+    "signature": "wait_for_human_submission(hitl_task_id) -> HitlTask",
+    "parameters": [
+      {"name": "hitl_task_id", "type": "str", "required": true, "description": "The HITL task ID to wait for"}
+    ],
+    "returns": {"type": "HitlTask", "description": "HitlTask with SUBMITTED status and human_artifact.artifact_id"},
+    "raises": [
+      {"exception": "RuntimeError", "description": "If task reaches a terminal status (CANCELLED, CLOSED, CLOSED_PENDING_NEXT_TASK) before SUBMITTED"},
+      {"exception": "TimeoutError", "description": "If polling timeout is exceeded (default 2 hours)"}
+    ],
+    "example": "task = client.wait_for_human_submission(task_id)\nhuman_artifact_id = task.human_artifact.artifact_id"
+  },
+  {
+    "name": "HitlClient.poll_until_status",
+    "kind": "method",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Poll until a HITL task reaches a specific status. Used internally by wait_for_human_submission but can target any status.",
+    "signature": "poll_until_status(hitl_task_id, target_status) -> HitlTask",
+    "parameters": [
+      {"name": "hitl_task_id", "type": "str", "required": true, "description": "The HITL task ID to poll"},
+      {"name": "target_status", "type": "HitlTaskStatus", "required": true, "description": "The status to wait for (e.g. HitlTaskStatus.SUBMITTED, HitlTaskStatus.DELIVERED)"}
+    ],
+    "returns": {"type": "HitlTask", "description": "HitlTask when target status is reached"},
+    "raises": [
+      {"exception": "RuntimeError", "description": "If task reaches a terminal status before target"},
+      {"exception": "TimeoutError", "description": "If polling timeout is exceeded"}
+    ],
+    "example": "task = client.poll_until_status(task_id, HitlTaskStatus.DELIVERED)"
+  },
+  {
+    "name": "HitlClient.close_task",
+    "kind": "method",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Close a HITL task with a specified closure type.",
+    "signature": "close_task(hitl_task_id, closure_type) -> HitlTaskStatus",
+    "parameters": [
+      {"name": "hitl_task_id", "type": "str", "required": true, "description": "The HITL task ID to close"},
+      {"name": "closure_type", "type": "ClosureType", "required": true, "description": "CLOSED (task completed), CLOSED_PENDING_NEXT_TASK (another task follows, used in refresh loops), or CANCELLED (task was cancelled)"}
+    ],
+    "returns": {"type": "HitlTaskStatus", "description": "Final HitlTaskStatus after closure"},
+    "example": "# Normal close:\nclient.close_task(task_id, ClosureType.CLOSED)\n\n# Refresh loop (more tasks follow):\nclient.close_task(task_id, ClosureType.CLOSED_PENDING_NEXT_TASK)"
+  },
+  {
+    "name": "HitlClient.execute_with_refresh",
+    "kind": "method",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Execute HITL with automatic refresh loop. Handles the full lifecycle: create task -> poll -> download artifact -> check QT_REFRESH flag -> close or refresh -> repeat. Automatically manages first_in_chain, artifact download, deserialization, and task closure.",
+    "signature": "execute_with_refresh(initial_request_fn, on_refresh, max_iterations=10) -> dict[str, Any]",
+    "parameters": [
+      {"name": "initial_request_fn", "type": "Callable[[], dict[str, Any]]", "required": true, "description": "Returns dict of create_and_start_task kwargs (ux_component_id, title, description, hitl_request_artifact, etc.)"},
+      {"name": "on_refresh", "type": "Callable[[dict[str, Any]], dict[str, Any]]", "required": true, "description": "Takes previous human response dict, returns dict of create_and_start_task kwargs for the next iteration"},
+      {"name": "max_iterations", "type": "int", "required": false, "default": 10, "description": "Maximum refresh iterations before forcing completion"}
+    ],
+    "returns": {"type": "dict[str, Any]", "description": "Human artifact response as dict (deserialized JSON from the final submission)"},
+    "raises": [
+      {"exception": "RuntimeError", "description": "If no response received or task has no human artifact"}
+    ],
+    "example": "response = client.execute_with_refresh(\n    initial_request_fn=lambda: {\n        'ux_component_id': 'DynamicHITLRenderEngine',\n        'title': 'Review Plan',\n        'description': 'Please review',\n        'hitl_request_artifact': {'artifactId': artifact_id},\n    },\n    on_refresh=lambda prev: {\n        'ux_component_id': 'DynamicHITLRenderEngine',\n        'title': 'Review Plan (Updated)',\n        'description': 'Updated based on your feedback',\n        'hitl_request_artifact': {'artifactId': new_artifact_id},\n    },\n    max_iterations=5,\n)\nselected_option = response.get('selected_option')"
+  },
+  {
+    "name": "HitlTaskStatus",
+    "kind": "enum",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "HITL task status values matching the ElasticGumby Agentic API. Inherits from str and Enum.",
+    "values": [
+      {"name": "CREATED", "value": "CREATED", "description": "Task has been created but not yet started"},
+      {"name": "AWAITING_HUMAN_INPUT", "value": "AWAITING_HUMAN_INPUT", "description": "Task is waiting for the human to interact"},
+      {"name": "IN_PROGRESS", "value": "IN_PROGRESS", "description": "Human is actively working on the task"},
+      {"name": "SUBMITTED", "value": "SUBMITTED", "description": "Human has submitted their response. Human artifact is available."},
+      {"name": "DELIVERED", "value": "DELIVERED", "description": "Response has been delivered to the agent"},
+      {"name": "AWAITING_APPROVAL", "value": "AWAITING_APPROVAL", "description": "Task requires approval (used with CRITICAL severity)"},
+      {"name": "CANCELLED", "value": "CANCELLED", "description": "Task was cancelled (terminal status)"},
+      {"name": "CLOSED", "value": "CLOSED", "description": "Task completed normally (terminal status)"},
+      {"name": "CLOSED_PENDING_NEXT_TASK", "value": "CLOSED_PENDING_NEXT_TASK", "description": "Task completed, another task follows in the chain (terminal status, used in refresh loops)"}
+    ],
+    "terminal_statuses": ["CANCELLED", "CLOSED", "CLOSED_PENDING_NEXT_TASK"],
+    "example": "from elastic_gumby_hitl_component_python_sdk import HitlTaskStatus\n\nif task.hitl_task_status == HitlTaskStatus.SUBMITTED:\n    # Human has responded\n    pass"
+  },
+  {
+    "name": "ClosureType",
+    "kind": "enum",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Closure types for HITL tasks. Determines how a task ends.",
+    "values": [
+      {"name": "CANCELLED", "value": "CANCELLED", "description": "Task was cancelled before completion"},
+      {"name": "CLOSED", "value": "CLOSED", "description": "Task completed normally, no more tasks in chain"},
+      {"name": "CLOSED_PENDING_NEXT_TASK", "value": "CLOSED_PENDING_NEXT_TASK", "description": "Task completed, another task follows. MUST use this in refresh loops before creating the next task."}
+    ],
+    "example": "from elastic_gumby_hitl_component_python_sdk import ClosureType\n\n# Normal completion:\nclient.close_task(task_id, ClosureType.CLOSED)\n\n# Refresh loop (user requested changes):\nclient.close_task(task_id, ClosureType.CLOSED_PENDING_NEXT_TASK)"
+  },
+  {
+    "name": "Severity",
+    "kind": "enum",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "HITL task severity levels. Affects routing and approval requirements.",
+    "values": [
+      {"name": "STANDARD", "value": "STANDARD", "description": "Normal priority task (default). No special approval needed."},
+      {"name": "CRITICAL", "value": "CRITICAL", "description": "High priority task requiring admin approval before human can interact."}
+    ],
+    "example": "from elastic_gumby_hitl_component_python_sdk import Severity\n\n# Standard task:\nclient.create_and_start_task(..., severity=Severity.STANDARD)\n\n# Critical task (requires admin approval):\nclient.create_and_start_task(..., severity=Severity.CRITICAL)"
+  },
+  {
+    "name": "HitlTaskType",
+    "kind": "enum",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "HITL task types determining how the task is displayed.",
+    "values": [
+      {"name": "NORMAL", "value": "NORMAL", "description": "Standard interactive HITL task (default). Human can submit responses."},
+      {"name": "DASHBOARD", "value": "DASHBOARD", "description": "Read-only task displayed on the dashboard. No human input captured."}
+    ],
+    "example": "from elastic_gumby_hitl_component_python_sdk import HitlTaskType\n\n# Dashboard (read-only display):\nclient.create_and_start_task(\n    ux_component_id='MarkdownRendererComponent',\n    hitl_task_type=HitlTaskType.DASHBOARD,\n    ...)"
+  },
+  {
+    "name": "BlockingType",
+    "kind": "enum",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "HITL task blocking behavior. Controls whether the agent workflow pauses.",
+    "values": [
+      {"name": "BLOCKING", "value": "BLOCKING", "description": "Task blocks workflow until human completes it (default). Agent waits."},
+      {"name": "NON_BLOCKING", "value": "NON_BLOCKING", "description": "Task does not block workflow. Agent continues executing while human works."}
+    ],
+    "example": "from elastic_gumby_hitl_component_python_sdk import BlockingType\n\n# Non-blocking task (agent continues):\nclient.create_and_start_task(..., blocking_type=BlockingType.NON_BLOCKING)"
+  },
+  {
+    "name": "Category",
+    "kind": "enum",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "HITL task categories.",
+    "values": [
+      {"name": "REGULAR", "value": "REGULAR", "description": "Standard task category (default)"},
+      {"name": "TOOL_APPROVAL", "value": "TOOL_APPROVAL", "description": "Task for approving tool usage"}
+    ]
+  },
+  {
+    "name": "Visibility",
+    "kind": "enum",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Artifact visibility types. Controls who can access the artifact.",
+    "values": [
+      {"name": "INTERNAL", "value": "INTERNAL", "description": "Artifact visible only within the agent system (default for upload_artifact)"},
+      {"name": "EXTERNAL", "value": "EXTERNAL", "description": "Artifact visible to external consumers"}
+    ]
+  },
+  {
+    "name": "HitlTask",
+    "kind": "dataclass",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Represents a HITL task returned from the API. Returned by get_task(), wait_for_human_submission(), and poll_until_status().",
+    "fields": [
+      {"name": "hitl_task_id", "type": "str", "description": "The unique HITL task ID"},
+      {"name": "hitl_task_status", "type": "HitlTaskStatus", "description": "Current task status (e.g. SUBMITTED, AWAITING_HUMAN_INPUT)"},
+      {"name": "human_artifact", "type": "HitlTaskArtifact | None", "default": "None", "description": "Reference to the human's submitted artifact. Only populated when status is SUBMITTED or later."}
+    ],
+    "example": "task = client.wait_for_human_submission(task_id)\nassert task.hitl_task_status == HitlTaskStatus.SUBMITTED\nartifact_id = task.human_artifact.artifact_id"
+  },
+  {
+    "name": "HitlTaskArtifact",
+    "kind": "dataclass",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Reference to a HITL artifact. Used in HitlTask.human_artifact and as input to create_and_start_task.",
+    "fields": [
+      {"name": "artifact_id", "type": "str", "description": "The unique artifact ID. Use with create_artifact_download_url to get content."}
+    ]
+  },
+  {
+    "name": "RequestContext",
+    "kind": "dataclass",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Context for HITL requests with snake_case interface. All four fields come from agent environment variables set by ATX platform.",
+    "fields": [
+      {"name": "job_id", "type": "str", "description": "From os.environ['JOB_ID']"},
+      {"name": "workspace_id", "type": "str", "description": "From os.environ['WORKSPACE_ID']"},
+      {"name": "agent_instance_id", "type": "str", "description": "From os.environ['AGENT_INSTANCE_ID']"},
+      {"name": "authorization_token", "type": "str", "description": "From os.environ['AUTHORIZATION_TOKEN']"}
+    ],
+    "methods": [
+      {"name": "to_dict", "signature": "to_dict() -> RequestContextTypeDef", "description": "Convert to camelCase dict for API calls: {'jobMetadata': {'jobId': ..., 'workspaceId': ...}, 'agentInstanceId': ..., 'authorizationToken': ...}"},
+      {"name": "from_dict", "signature": "from_dict(data: RequestContextTypeDef) -> RequestContext", "description": "Class method. Create from camelCase API dict format."}
+    ],
+    "example": "import os\nfrom elastic_gumby_hitl_component_python_sdk import RequestContext\n\nrequest_context = RequestContext(\n    job_id=os.environ['JOB_ID'],\n    workspace_id=os.environ['WORKSPACE_ID'],\n    agent_instance_id=os.environ['AGENT_INSTANCE_ID'],\n    authorization_token=os.environ['AUTHORIZATION_TOKEN'],\n)"
+  },
+  {
+    "name": "RequestContextTypeDef",
+    "kind": "type",
+    "module": "elastic_gumby_hitl_component_python_sdk.client.hitl_client",
+    "description": "TypedDict for request context in camelCase format. Alternative to RequestContext dataclass when you already have the dict.",
+    "fields": [
+      {"name": "jobMetadata", "type": "JobMetadataTypeDef", "description": "Dict with 'jobId' and 'workspaceId' keys"},
+      {"name": "agentInstanceId", "type": "str", "description": "Agent instance identifier"},
+      {"name": "authorizationToken", "type": "str", "description": "Authorization token"}
+    ],
+    "example": "request_context: RequestContextTypeDef = {\n    'jobMetadata': {'jobId': 'job-123', 'workspaceId': 'ws-456'},\n    'agentInstanceId': 'agent-789',\n    'authorizationToken': 'token-abc',\n}\nclient = HitlClient(agentic_client, request_context)"
+  },
+  {
+    "name": "serialize",
+    "kind": "function",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Serialize a Pydantic model to request artifact JSON with {\"properties\": {...}} wrapper. This wrapper is REQUIRED by the HITL Render Engine for request artifacts (agent -> UI).",
+    "signature": "serialize(artifact: BaseModel) -> str",
+    "parameters": [
+      {"name": "artifact", "type": "BaseModel", "required": true, "description": "Pydantic model from elastic_gumby_hitl_component_python_sdk.types (e.g. TextInput, AutoForm, MarkdownRendererComponent)"}
+    ],
+    "returns": {"type": "str", "description": "JSON string with {\"properties\": {...}} wrapper"},
+    "raises": [
+      {"exception": "SerializationError", "description": "If artifact is None or serialization fails"}
+    ],
+    "example": "from elastic_gumby_hitl_component_python_sdk import serialize\nfrom elastic_gumby_hitl_component_python_sdk.types import TextInput\n\nartifact = TextInput(label='Enter name', value='John Doe')\njson_str = serialize(artifact)\n# Result: {\"properties\": {\"label\": \"Enter name\", \"value\": \"John Doe\"}}"
+  },
+  {
+    "name": "deserialize",
+    "kind": "function",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Deserialize human artifact JSON response. Human artifacts are raw JSON returned by the UI when the user submits. They do NOT have the {\"properties\": {...}} wrapper. Checks for QT_REFRESH flag to detect refresh requests.",
+    "signature": "deserialize(json_str: str) -> tuple[dict[str, Any], bool]",
+    "parameters": [
+      {"name": "json_str", "type": "str", "required": true, "description": "Raw JSON string from human artifact (downloaded via ArtifactHelper or create_artifact_download_url)"}
+    ],
+    "returns": {"type": "tuple[dict, bool]", "description": "(data_dict, should_refresh). should_refresh is True when QT_REFRESH flag is set, meaning user clicked 'Request Changes'."},
+    "raises": [
+      {"exception": "SerializationError", "description": "If JSON string is null, empty, or invalid JSON"}
+    ],
+    "example": "from elastic_gumby_hitl_component_python_sdk import deserialize, ClosureType\n\ndata, should_refresh = deserialize(artifact_content)\nif should_refresh:\n    client.close_task(task_id, ClosureType.CLOSED_PENDING_NEXT_TASK)\n    # Create next task with updated data\nelse:\n    client.close_task(task_id, ClosureType.CLOSED)\n    selected_option = data.get('selected_option')"
+  },
+  {
+    "name": "to_hitl_json",
+    "kind": "function",
+    "module": "elastic_gumby_hitl_component_python_sdk.util.json_utils",
+    "description": "Convert a dict or Pydantic model to request artifact JSON with {\"properties\": {...}} wrapper. Fallback for when a Pydantic type model is not available. Prefer serialize() when possible.",
+    "signature": "to_hitl_json(data: dict | BaseModel, *, indent: int | None = None) -> str",
+    "parameters": [
+      {"name": "data", "type": "dict | BaseModel", "required": true, "description": "Dict or Pydantic model to serialize"},
+      {"name": "indent", "type": "int | None", "required": false, "default": "None", "description": "Optional indentation for pretty-printing"}
+    ],
+    "returns": {"type": "str", "description": "JSON string with {\"properties\": {...}} wrapper"},
+    "raises": [
+      {"exception": "SerializationError", "description": "If data is None or serialization fails"}
+    ],
+    "example": "from elastic_gumby_hitl_component_python_sdk.util import to_hitl_json\n\n# When you have a raw dict instead of a Pydantic model:\njson_str = to_hitl_json({'label': 'Name', 'value': 'data'})\n# Result: {\"properties\": {\"label\": \"Name\", \"value\": \"data\"}}"
+  },
+  {
+    "name": "wrap_properties",
+    "kind": "function",
+    "module": "elastic_gumby_hitl_component_python_sdk.util.json_utils",
+    "description": "Wrap data in the required {\"properties\": {...}} structure without JSON serialization. Returns a dict, not a string.",
+    "signature": "wrap_properties(data: dict | BaseModel) -> dict[str, Any]",
+    "parameters": [
+      {"name": "data", "type": "dict | BaseModel", "required": true, "description": "Dict or Pydantic model to wrap"}
+    ],
+    "returns": {"type": "dict", "description": "Dict with {\"properties\": <data>} structure. Pydantic models are dumped with by_alias=True, exclude_none=True."}
+  },
+  {
+    "name": "SerializationError",
+    "kind": "exception",
+    "module": "elastic_gumby_hitl_component_python_sdk",
+    "description": "Raised when serialization or deserialization fails. Thrown by serialize(), deserialize(), and to_hitl_json() when given None, empty, or invalid input."
+  },
+  {
+    "name": "ArtifactHelper",
+    "kind": "class",
+    "module": "elastic_gumby_hitl_component_python_sdk.util",
+    "description": "Downloads content from presigned S3 URLs. Used internally by execute_with_refresh() but can also be used directly. Uses streaming downloads with S3-compatible headers. The 120-second default timeout accommodates FileUploadComponent responses which can be large (base64-encoded file content).",
+    "signature": "ArtifactHelper(timeout_seconds=120)",
+    "parameters": [
+      {"name": "timeout_seconds", "type": "int", "required": false, "default": 120, "description": "HTTP request timeout in seconds"}
+    ],
+    "methods": [
+      {"name": "download", "signature": "download(presigned_url: str, headers: Mapping[str, list[str]]) -> str", "description": "Download artifact content as UTF-8 string. Raises requests.RequestException on failure."}
+    ],
+    "example": "from elastic_gumby_hitl_component_python_sdk.util import ArtifactHelper\n\nhelper = ArtifactHelper(timeout_seconds=120)\n\n# Get download URL from API:\ndownload_response = agentic_client.create_artifact_download_url(\n    requestContext=request_context.to_dict(),\n    artifactId=task.human_artifact.artifact_id,\n    visibility='INTERNAL',\n)\ncontent = helper.download(\n    download_response['s3preSignedUrl'],\n    download_response['requestHeaders'],\n)"
+  },
+  {
+    "name": "AgenticClientProtocol",
+    "kind": "protocol",
+    "module": "elastic_gumby_hitl_component_python_sdk.client.hitl_client",
+    "description": "Protocol defining the boto3 ElasticGumbyAgenticService client methods used by HitlClient. Any object implementing these methods can be passed as agentic_client.",
+    "methods": [
+      {"name": "create_hitl_task", "signature": "create_hitl_task(requestContext, uxComponentId, title, description, hitlRequestArtifact, **kwargs) -> dict"},
+      {"name": "start_hitl_task", "signature": "start_hitl_task(requestContext, hitlTaskId, firstInChain=True) -> dict"},
+      {"name": "get_hitl_task", "signature": "get_hitl_task(requestContext, hitlTaskId) -> dict"},
+      {"name": "close_hitl_task", "signature": "close_hitl_task(requestContext, hitlTaskId, closureType) -> dict"},
+      {"name": "create_artifact_download_url", "signature": "create_artifact_download_url(requestContext, artifactId, visibility) -> dict"}
+    ]
+  },
+  {
+    "name": "TextInput",
+    "kind": "type",
+    "module": "elastic_gumby_hitl_component_python_sdk.types",
+    "description": "A text input field component. Use with ux_component_id='TextInput'.",
+    "fields": [
+      {"name": "label", "type": "str", "required": true, "description": "The label text for the input field"},
+      {"name": "value", "type": "str", "required": true, "description": "The initial value of the input field"},
+      {"name": "description", "type": "str | None", "required": false, "description": "Description text displayed below the label"},
+      {"name": "placeholder", "type": "str | None", "required": false, "description": "Placeholder text when field is empty"},
+      {"name": "maxLength", "type": "int | None", "required": false, "description": "Maximum allowed length of the input value"},
+      {"name": "errorAlert", "type": "ErrorAlert | None", "required": false, "description": "Error alert with header and optional description"}
+    ],
+    "example": "from elastic_gumby_hitl_component_python_sdk.types import TextInput\nfrom elastic_gumby_hitl_component_python_sdk import serialize\n\nartifact = TextInput(label='Enter your name', value='', placeholder='John Doe')\njson_str = serialize(artifact)"
+  },
+  {
+    "name": "AutoForm",
+    "kind": "type",
+    "module": "elastic_gumby_hitl_component_python_sdk.types",
+    "description": "A dynamic form generator component that renders flexible forms using CloudScape components. Supports field types: text, textarea, select, radiogroup, multiselect, checkbox, infocontainer (display-only), jsonBlock, fileUpload, fileUploadV2. Use with ux_component_id='AutoForm'.",
+    "fields": [
+      {"name": "title", "type": "str | None", "required": false, "description": "Optional form title displayed at the top"},
+      {"name": "description", "type": "str | None", "required": false, "description": "Optional form description below the title"},
+      {"name": "fields", "type": "list[Field]", "required": true, "description": "Array of form fields to render in order. Each field has 'name' (identifier), 'label', 'type', and type-specific properties."},
+      {"name": "alerts", "type": "list[Alert] | None", "required": false, "description": "Optional alerts (info/warning/error/success) displayed above the form"}
+    ],
+    "field_types": [
+      {"type": "text", "description": "Single-line text input. Supports validation (pattern, minLength, maxLength), placeholder, variant ('text'|'number')."},
+      {"type": "textarea", "description": "Multi-line text input. Supports rows (default 3), validation, placeholder."},
+      {"type": "select", "description": "Dropdown selection. Requires options array [{label, value}]. Supports filteringType ('auto'|'none')."},
+      {"type": "radiogroup", "description": "Radio button group for single selection. Requires options array [{label, value, description?, disabled?}]."},
+      {"type": "multiselect", "description": "Multi-select dropdown. Requires options array. Supports enableSelectAll, filteringType."},
+      {"type": "checkbox", "description": "Boolean checkbox. Supports defaultChecked, initialValue."},
+      {"type": "infocontainer", "description": "Display-only key-value pairs. Requires category='display', items array [{label, value}]. Supports columns (1-4), variant ('default'|'stacked')."},
+      {"type": "jsonBlock", "description": "JSON input with validation on blur. Supports rows (default 6), placeholder."},
+      {"type": "fileUpload", "description": "File upload (legacy). Supports maxFileSize, allowedFileTypes, multiple."},
+      {"type": "fileUploadV2", "description": "File upload with progress tracking and artifact management. Supports validation (maxFiles, maxFileSize, acceptedFileTypes)."}
+    ],
+    "example": "from elastic_gumby_hitl_component_python_sdk.types import AutoForm\n\nform = AutoForm(\n    title='Server Configuration',\n    fields=[\n        {'name': 'hostname', 'label': 'Hostname', 'type': 'text', 'required': True},\n        {'name': 'region', 'label': 'Region', 'type': 'select', 'options': [\n            {'label': 'US East', 'value': 'us-east-1'},\n            {'label': 'US West', 'value': 'us-west-2'},\n        ]},\n        {'name': 'confirm', 'label': 'I confirm these settings', 'type': 'checkbox'},\n    ],\n)"
+  },
+  {
+    "name": "MarkdownRendererComponent",
+    "kind": "type",
+    "module": "elastic_gumby_hitl_component_python_sdk.types",
+    "description": "A component for rendering Markdown content with GitHub Flavored Markdown support. Use with ux_component_id='MarkdownRendererComponent'. Commonly used for read-only displays and dashboards.",
+    "fields": [
+      {"name": "content", "type": "str", "required": true, "description": "The markdown content to render (GFM supported)"},
+      {"name": "submitButtonText", "type": "str | None", "required": false, "description": "Custom text for the submit button"},
+      {"name": "hideSubmitButton", "type": "bool | None", "required": false, "description": "Whether to hide the submit button (default false)"}
+    ],
+    "example": "from elastic_gumby_hitl_component_python_sdk.types import MarkdownRendererComponent\n\nartifact = MarkdownRendererComponent(\n    content='# Migration Plan\\n\\n| Step | Status |\\n|------|--------|\\n| Backup | Done |',\n    hideSubmitButton=True,\n)"
+  },
+  {
+    "name": "TableComponent",
+    "kind": "type",
+    "module": "elastic_gumby_hitl_component_python_sdk.types",
+    "description": "A table component with column definitions, data items, filtering, pagination, and expandable rows. Supports column types: text (default), status-indicator, link, select (inline editable). Use with ux_component_id='TableComponent'.",
+    "fields": [
+      {"name": "header", "type": "str", "required": true, "description": "The header text for the table"},
+      {"name": "columnDefinitions", "type": "list[ColumnDefinition]", "required": true, "description": "Array of column definitions with 'header', 'field', optional 'type' and 'editConfig'"},
+      {"name": "items", "type": "list[Item]", "required": true, "description": "Array of data items. Each must have 'id'. Optional 'parentId' for expandable rows."},
+      {"name": "submitButton", "type": "str | None", "required": false, "description": "Submit button text (deprecated, use submitButtonControl)"},
+      {"name": "submitButtonControl", "type": "SubmitButtonControl | None", "required": false, "description": "Control submit button visibility and text"}
+    ],
+    "example": "from elastic_gumby_hitl_component_python_sdk.types import TableComponent\n\ntable = TableComponent(\n    header='Server Inventory',\n    columnDefinitions=[\n        {'header': 'Name', 'field': 'name'},\n        {'header': 'Status', 'field': 'status', 'type': 'status-indicator'},\n    ],\n    items=[\n        {'id': '1', 'name': 'web-01', 'status': {'variant': 'success', 'text': 'Running'}},\n        {'id': '2', 'name': 'web-02', 'status': {'variant': 'error', 'text': 'Down'}},\n    ],\n)"
+  },
+  {
+    "name": "GeneralConnector",
+    "kind": "type",
+    "module": "elastic_gumby_hitl_component_python_sdk.types",
+    "description": "Component for selecting existing connectors or creating new ones. Use with ux_component_id='GeneralConnector' (NOT 'DynamicHITLRenderEngine').",
+    "fields": [
+      {"name": "connector", "type": "Connector", "required": true, "description": "Connector config with connectorType ('owner|shortName|version'), maxInstances, optional title/description/fields"}
+    ],
+    "nested_types": {
+      "Connector": {
+        "fields": [
+          {"name": "connectorType", "type": "str", "required": true, "description": "Format: 'owner|shortName|version' (e.g. 'platform|s3|1')"},
+          {"name": "maxInstances", "type": "int", "required": true, "description": "Maximum number of connectors of this type"},
+          {"name": "title", "type": "str | None", "required": false, "description": "Display title (defaults to connectorType)"},
+          {"name": "description", "type": "str | None", "required": false, "description": "Detailed explanation of connector purpose"},
+          {"name": "fields", "type": "list[FieldModel] | None", "required": false, "description": "Input fields to collect per connector instance"}
+        ]
+      },
+      "FieldModel": {
+        "fields": [
+          {"name": "fieldName", "type": "str", "description": "Internal identifier for data binding"},
+          {"name": "fieldTitle", "type": "str", "description": "Display name shown to user"},
+          {"name": "fieldDescription", "type": "str | None", "description": "Help text"},
+          {"name": "fieldRequired", "type": "bool | None", "description": "Whether field is required"},
+          {"name": "fieldInputType", "type": "str | None", "description": "Input type (e.g. 'text', 'number', 'select')"},
+          {"name": "fieldValidation", "type": "str | None", "description": "Regex pattern for validation"},
+          {"name": "defaultValue", "type": "str | None", "description": "Default value for new connectors"}
+        ]
+      }
+    },
+    "example": "from elastic_gumby_hitl_component_python_sdk.types import GeneralConnector\n\nconnector = GeneralConnector(\n    connector={\n        'connectorType': 'platform|s3|1',\n        'maxInstances': 1,\n        'fields': [\n            {'fieldName': 's3BucketArn', 'fieldTitle': 'S3 Bucket ARN', 'fieldRequired': True},\n        ],\n    }\n)"
+  },
+  {
+    "name": "FileUploadComponent",
+    "kind": "type",
+    "module": "elastic_gumby_hitl_component_python_sdk.types",
+    "description": "File upload component with validation and error handling. Saves data as {uploadedFiles: FileData[]} with base64 encoded content. Use with ux_component_id='FileUploadComponent'.",
+    "fields": [
+      {"name": "label", "type": "str", "required": true, "description": "Label text for the upload component"},
+      {"name": "description", "type": "str | None", "required": false, "description": "Description below the label"},
+      {"name": "constraintText", "type": "str | None", "required": false, "description": "Constraint text below upload area"},
+      {"name": "uploadButtonText", "type": "str | None", "required": false, "default": "Choose file", "description": "Custom upload button text"},
+      {"name": "maxFileSize", "type": "float | None", "required": false, "default": 52428800, "description": "Max file size in bytes (default 50MB)"},
+      {"name": "allowedFileTypes", "type": "list[str] | None", "required": false, "default": "[]", "description": "Allowed extensions without dots (e.g. ['pdf', 'doc']). Empty array allows all."},
+      {"name": "multiple", "type": "bool | None", "required": false, "description": "Allow multiple file uploads"},
+      {"name": "introContent", "type": "str | None", "required": false, "description": "Markdown rendered above the uploader"},
+      {"name": "suffixContent", "type": "str | None", "required": false, "description": "Markdown rendered below the uploader"},
+      {"name": "errorMessage", "type": "str | None", "required": false, "description": "Server-side error message at top"},
+      {"name": "detailedErrorMessages", "type": "list[str] | None", "required": false, "description": "Expandable detailed error messages"}
+    ]
+  },
+  {
+    "name": "SelectDropdownComponent",
+    "kind": "type",
+    "module": "elastic_gumby_hitl_component_python_sdk.types",
+    "description": "Dropdown selection component with single or multiple selection. Use with ux_component_id='SelectDropdownComponent'.",
+    "fields": [
+      {"name": "header", "type": "str", "required": true, "description": "Header text above dropdown"},
+      {"name": "items", "type": "list[Item]", "required": true, "description": "Selectable options [{label, value}]"},
+      {"name": "values", "type": "list", "required": true, "description": "Array of preselected values"},
+      {"name": "placeholderLabel", "type": "str", "required": true, "description": "Placeholder when no selection"},
+      {"name": "submitButtonLabel", "type": "str", "required": true, "description": "Submit button label"},
+      {"name": "multiple", "type": "bool | None", "required": false, "default": false, "description": "Allow multiple selections"},
+      {"name": "fieldLabel", "type": "str | None", "required": false, "description": "Optional form field label"},
+      {"name": "description", "type": "str | None", "required": false, "description": "Optional description text"},
+      {"name": "introContent", "type": "str | None", "required": false, "description": "Markdown before dropdown"},
+      {"name": "suffixContent", "type": "str | None", "required": false, "description": "Markdown after dropdown"},
+      {"name": "errorMessage", "type": "str | None", "required": false, "description": "Error alert text"},
+      {"name": "successMessage", "type": "str | None", "required": false, "description": "Success alert text"},
+      {"name": "region", "type": "str | None", "required": false, "description": "AWS region for Console links (e.g. 'us-east-1')"}
+    ]
+  },
+  {
+    "name": "FeedbackInput",
+    "kind": "type",
+    "module": "elastic_gumby_hitl_component_python_sdk.types",
+    "description": "A feedback input component. Use with ux_component_id='FeedbackInput'.",
+    "fields": [
+      {"name": "label", "type": "str", "required": true, "description": "Label text for the feedback field"},
+      {"name": "description", "type": "str | None", "required": false, "description": "Description text for the feedback field"}
+    ]
+  },
+  {
+    "name": "InformationalMessageComponent",
+    "kind": "type",
+    "module": "elastic_gumby_hitl_component_python_sdk.types",
+    "description": "Component for displaying informational messages. Use with ux_component_id='InformationalMessageComponent'."
+  },
+  {
+    "name": "Available UX Component Types",
+    "kind": "reference",
+    "description": "All available ux_component_id values for create_and_start_task. Generic components are defined as Pydantic models in elastic_gumby_hitl_component_python_sdk.types. Domain-specific components are also available.",
+    "generic_components": [
+      "AutoForm", "TextInput", "MarkdownRendererComponent", "TableComponent",
+      "GeneralConnector", "FileUploadComponent", "FileUploadV2",
+      "SelectDropdownComponent", "FeedbackInput", "InformationalMessageComponent",
+      "FileDownload", "InviteCollaboratorsContent", "KMSKeySelection"
+    ],
+    "special_components": [
+      {"name": "DynamicHITLRenderEngine", "description": "Renders arbitrary domTreeJson UI definitions. Use get_hitl_generation_prompt() MCP tool for generation rules."}
+    ],
+    "domain_specific_count": 80,
+    "domain_specific_prefixes": ["Mainframe*", "Dotnet*", "EBA*", "DBMod*", "Review*", "Confirm*", "Share*", "Launch*", "Perform*", "Setup*"]
+  }
+]
