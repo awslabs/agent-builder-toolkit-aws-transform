@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "AWS Transform Team" }]
 license = "Apache-2.0"
-license-files = ["LICEN[CS]E*"]
+license-files = ["LICEN[CS]E*", "NOTICE*", "THIRD-PARTY-NOTICES.txt"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
