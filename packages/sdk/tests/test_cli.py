@@ -20,8 +20,8 @@ from agent_builder_sdk.cli import (
     run_api_server_sync,
     run_console,
     run_main,
-    setup_agent,
     setup_ab_mcp_client,
+    setup_agent,
     setup_tracing,
 )
 from agent_builder_sdk.orchestrator_strands.base_orchestrator import BaseOrchestrator

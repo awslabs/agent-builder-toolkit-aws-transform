@@ -10,8 +10,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
-from agent_builder_types.type_defs import ArtifactTypeDef
-
 from agent_builder_sdk.agent_state.agent_state import IAgentState
 from agent_builder_sdk.agentic_framework.api_model import CategoryType
 from agent_builder_sdk.agentic_framework.artifact_store import ArtifactStore
@@ -19,6 +17,7 @@ from agent_builder_sdk.agentic_framework.client_factory import get_agentic_api_c
 from agent_builder_sdk.agentic_framework.common import calculate_digest
 from agent_builder_sdk.env_var import get_agent_context_from_env
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
+from agent_builder_types.type_defs import ArtifactTypeDef
 
 logger = logging.getLogger(__name__)
 

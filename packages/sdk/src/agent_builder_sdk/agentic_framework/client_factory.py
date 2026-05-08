@@ -10,10 +10,10 @@ from typing import Optional
 import boto3
 from botocore.client import BaseClient
 from botocore.config import Config as BotocoreConfig
-from agent_builder_types import TransformAgenticServiceClient
 
 from agent_builder_sdk.env_var import is_external_agentic_api_enabled
 from agent_builder_sdk.utils import TransformEndpointConfig
+from agent_builder_types import TransformAgenticServiceClient
 
 logger = logging.getLogger(__name__)
 

@@ -5,10 +5,10 @@ from unittest import mock
 import pytest
 import requests
 from botocore.exceptions import ClientError
-from agent_builder_types import type_defs as abt
 
 from agent_builder_sdk.agentic_framework import common
 from agent_builder_sdk.errors import InternalBaseAgentError, UserBaseAgentError
+from agent_builder_types import type_defs as abt
 
 
 @pytest.fixture

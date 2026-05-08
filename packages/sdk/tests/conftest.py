@@ -1,7 +1,6 @@
 from unittest.mock import create_autospec
 
 import pytest
-from agent_builder_types import type_defs as abt
 from strands.agent import AgentResult
 from strands.models import BedrockModel
 from strands.telemetry import EventLoopMetrics
@@ -14,6 +13,7 @@ from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     ConversationRepository,
 )
 from agent_builder_sdk.utils import A2A_SOURCE_INFORMATION_EXT
+from agent_builder_types import type_defs as abt
 
 
 @pytest.fixture

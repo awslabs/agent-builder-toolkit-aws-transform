@@ -5,7 +5,6 @@ import logging
 from abc import ABC, abstractmethod
 
 import agent_builder_types.type_defs as abt
-
 from agent_builder_sdk.agentic_framework.client_factory import get_agentic_api_client
 from agent_builder_sdk.custom_types.notification_types import JobDeletionDetail, Notification
 from agent_builder_sdk.env_var import get_agent_context_from_env

@@ -7,7 +7,6 @@ from abc import ABC
 from typing import Any
 
 import agent_builder_types.type_defs as abt
-
 from agent_builder_sdk.env_var import retrieve_auth_token
 
 logger = logging.getLogger(__name__)
