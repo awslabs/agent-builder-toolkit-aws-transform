@@ -39,6 +39,7 @@ jobs:
 
       - name: Install package with test extras
         run: |
+          pip install pytest
           pip install -e "${{ inputs.package-path }}[test]" \
             || pip install -e "${{ inputs.package-path }}"
 

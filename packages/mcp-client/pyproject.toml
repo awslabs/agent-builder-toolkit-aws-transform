@@ -24,5 +24,8 @@ dependencies = [
     "trio>=0.20",
 ]
 
+[project.optional-dependencies]
+test = ["pytest"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
