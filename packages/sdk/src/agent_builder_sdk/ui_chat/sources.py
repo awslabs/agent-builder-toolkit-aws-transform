@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """Source citations for ATX chat UI.
 
 Builds ``atx-sources`` fenced code blocks that the chat frontend renders as a

@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """Send message tools for Strands agents.
 
 This module provides tools to send messages to other agents via the ATX platform.

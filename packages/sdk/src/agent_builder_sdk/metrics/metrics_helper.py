@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """Enhanced metrics helper with trace correlation using aws-embedded-metrics."""
 
 import asyncio
