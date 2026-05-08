@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  types:
+    uses: ./.github/workflows/_test-package.yml
+    with:
+      package-path: packages/types
+
+  mcp-client:
+    uses: ./.github/workflows/_test-package.yml
+    with:
+      package-path: packages/mcp-client
+
+  mcp-server:
+    uses: ./.github/workflows/_test-package.yml
+    with:
+      package-path: packages/mcp-server
+
+  sdk:
+    uses: ./.github/workflows/_test-package.yml
+    with:
+      package-path: packages/sdk
+      extra-deps: packages/types
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: [types, mcp-client, mcp-server, sdk]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install all packages
+        run: |
+          pip install -e packages/types
+          pip install -e packages/mcp-client
+          pip install -e packages/mcp-server
+          pip install -e packages/sdk
+
+      - name: Verify cross-package imports
+        run: |
+          python -c "import agent_builder_types; print('types OK')"
+          python -c "import agent_builder_mcp_client; print('mcp-client OK')"
+          python -c "import agent_builder_mcp; print('mcp-server OK')"
+          python -c "import agent_builder_sdk; print('sdk OK')"
+
+      - name: Verify CLI entrypoints
+        run: |
+          agent-builder-mcp --help
+          agent-builder-sdk --help

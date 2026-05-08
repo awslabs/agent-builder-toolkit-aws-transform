@@ -1,0 +1,57 @@
+name: Test Package
+
+on:
+  workflow_call:
+    inputs:
+      package-path:
+        description: "Path to the package directory (e.g., packages/sdk)"
+        required: true
+        type: string
+      extra-deps:
+        description: "Extra local packages to install before this one (space-separated paths)"
+        required: false
+        type: string
+        default: ""
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install extra local dependencies
+        if: inputs.extra-deps != ''
+        env:
+          EXTRA_DEPS: ${{ inputs.extra-deps }}
+        run: |
+          for dep in $EXTRA_DEPS; do
+            pip install -e "$dep"
+          done
+
+      - name: Install package with test extras
+        run: |
+          pip install -e "${{ inputs.package-path }}[test]" \
+            || pip install -e "${{ inputs.package-path }}"
+
+      - name: Lint with ruff
+        run: |
+          pip install ruff
+          ruff check ${{ inputs.package-path }}
+
+      - name: Run tests
+        run: |
+          if [ -d "${{ inputs.package-path }}/tests" ]; then
+            cd ${{ inputs.package-path }}
+            python -m pytest tests/ -v --tb=short
+          else
+            echo "No tests directory found, skipping."
+          fi

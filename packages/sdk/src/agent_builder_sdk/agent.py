@@ -11,9 +11,9 @@ import traceback
 from typing import Any, Dict, List, Optional
 
 import boto3
-from agent_builder_mcp_client import AsyncMCPClient
 from typing_extensions import deprecated
 
+from agent_builder_mcp_client import AsyncMCPClient
 from agent_builder_sdk import tool_use_prompts
 from agent_builder_sdk._boto_client import create_bedrock_client
 from agent_builder_sdk.tool import Tool

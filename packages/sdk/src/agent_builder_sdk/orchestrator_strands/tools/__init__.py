@@ -1,1 +1,2 @@
-from .approval import ApprovableTools, requires_approval
+from .approval import ApprovableTools as ApprovableTools
+from .approval import requires_approval as requires_approval
