@@ -30,7 +30,7 @@ jobs:
     uses: ./.github/workflows/_test-package.yml
     with:
       package-path: packages/sdk
-      extra-deps: packages/types
+      extra-deps: packages/types packages/mcp-client
 
   integration:
     runs-on: ubuntu-latest
