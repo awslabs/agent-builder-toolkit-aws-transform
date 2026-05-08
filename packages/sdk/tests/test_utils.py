@@ -15,7 +15,7 @@ from agent_builder_sdk.utils import (
     A2A_CHAT_SUGGESTIONS_EXT,
     A2A_MESSAGE_TYPE_EXT,
     A2A_SOURCE_INFORMATION_EXT,
-    ElasticGumbyEndpointConfig,
+    TransformEndpointConfig,
     build_agentic_api_endpoint_from_env,
     build_mcp_args_from_parsed_args,
     combine_tools,
@@ -66,8 +66,8 @@ def test_extract_text_from_strands_agent_response(content: list[ContentBlock], e
     assert actual == expected
 
 
-class TestElasticGumbyEndpointConfig:
-    """Tests for the ElasticGumbyEndpointConfig class."""
+class TestTransformEndpointConfig:
+    """Tests for the TransformEndpointConfig class."""
 
     @pytest.mark.parametrize(
         "region,expected_code",
@@ -80,7 +80,7 @@ class TestElasticGumbyEndpointConfig:
     )
     def test_get_airport_code_for_region_valid(self, region, expected_code):
         """Test that get_airport_code_for_region returns correct airport codes for valid regions."""
-        result = ElasticGumbyEndpointConfig.get_airport_code_for_region(region)
+        result = TransformEndpointConfig.get_airport_code_for_region(region)
         assert result == expected_code
 
     @pytest.mark.parametrize(
@@ -96,7 +96,7 @@ class TestElasticGumbyEndpointConfig:
     def test_get_airport_code_for_region_invalid(self, region):
         """Test that get_airport_code_for_region raises ValueError for invalid regions."""
         with pytest.raises(ValueError, match=region):
-            ElasticGumbyEndpointConfig.get_airport_code_for_region(region)
+            TransformEndpointConfig.get_airport_code_for_region(region)
 
     @pytest.mark.parametrize(
         "stage,region,component,expected_url",
@@ -117,13 +117,13 @@ class TestElasticGumbyEndpointConfig:
     )
     def test_create_endpoint_url(self, stage, region, component, expected_url):
         """Test that create_endpoint_url constructs URLs correctly."""
-        result = ElasticGumbyEndpointConfig.create_endpoint_url(stage, region, component)
+        result = TransformEndpointConfig.create_endpoint_url(stage, region, component)
         assert result == expected_url
 
     def test_create_endpoint_url_invalid_region(self):
         """Test that create_endpoint_url raises ValueError for invalid regions."""
         with pytest.raises(ValueError, match="invalid-region"):
-            ElasticGumbyEndpointConfig.create_endpoint_url("prod", "invalid-region", "agenticapi")
+            TransformEndpointConfig.create_endpoint_url("prod", "invalid-region", "agenticapi")
 
     @pytest.mark.parametrize(
         "stage,region,expected_url",
@@ -134,7 +134,7 @@ class TestElasticGumbyEndpointConfig:
     )
     def test_create_external_agenticapi_endpoint_url(self, stage, region, expected_url):
         """Test that create_external_agenticapi_endpoint_url constructs URLs correctly."""
-        result = ElasticGumbyEndpointConfig.create_external_agenticapi_endpoint_url(stage, region)
+        result = TransformEndpointConfig.create_external_agenticapi_endpoint_url(stage, region)
         assert result == expected_url
 
 

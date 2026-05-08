@@ -1,4 +1,4 @@
-"""Tests for ElasticGumbyPlatformPartnerBaseAgent module."""
+"""Tests for AWS Transform Agent Builder SDK module."""
 
 
 def test_agent_builder_sdk_importable():

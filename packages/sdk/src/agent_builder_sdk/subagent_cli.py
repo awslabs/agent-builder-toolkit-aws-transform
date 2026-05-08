@@ -19,7 +19,7 @@ from typing_extensions import deprecated
 from agent_builder_sdk._auth_token_refresher import get_auth_token_refresher
 from agent_builder_sdk.agentic_framework.agent_lifecycle import initialize_agent_instance
 from agent_builder_sdk.base_subagent.base_subagent import BaseSubagent
-from agent_builder_sdk.cli import setup_eg_mcp_client
+from agent_builder_sdk.cli import setup_ab_mcp_client
 from agent_builder_sdk.custom_types.orchestrator_agent_types import (
     ConversationContext,
     ProcessMessageRequest,
@@ -116,7 +116,7 @@ def setup_agent(args, mcp_args: Dict[str, str]):
         logging.info("Skipping setting mcp client for subagent")
         mcp_client = None
     else:
-        mcp_client = setup_eg_mcp_client(mcp_args)
+        mcp_client = setup_ab_mcp_client(mcp_args)
 
     # Create subagent with explicit hooks
     subagent = BaseSubagent(

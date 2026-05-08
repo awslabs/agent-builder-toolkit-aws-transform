@@ -48,8 +48,7 @@ class AgentInstanceStatus(Enum):
 
 @dataclass
 class NotificationDetail(ABC):
-    """Base class for all notification details.
-    https://tiny.amazon.com/ux5fa17/ElasticGumbyAgentNotificationSchemaModel/mainline/main.smithy"""
+    """Base class for all notification details."""
 
     pass
 
@@ -101,7 +100,7 @@ class JobDeletionDetail(NotificationDetail):
 
 @dataclass
 class Notification:
-    """Base notification structure. https://tiny.amazon.com/rkt22k12/ElasticGumbyInvocationServiceModel/mainline/common.smithy#L134"""
+    """Base notification structure."""
 
     notification_type: NotificationType
     detail: NotificationDetail

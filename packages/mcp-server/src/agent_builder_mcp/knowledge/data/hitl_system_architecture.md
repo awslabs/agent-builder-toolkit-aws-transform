@@ -217,11 +217,11 @@ The system enforces purely declarative JSON. The rendering engine:
 
 | Component | Package Path |
 |-----------|-------------|
-| Rendering Engine | `ElasticGumbyUIComponents/src/DynamicHITLRenderEngine/DynamicHITLRenderEngine.tsx` |
-| HITL Context | `ElasticGumbyUIComponents/src/DynamicHITLRenderEngine/HITLCallbackContext.tsx` |
-| Wrapped Components (Atoms) | `ElasticGumbyUIComponents/src/DynamicHITLRenderEngine/Atoms/` |
-| Component Registry | `ElasticGumbyUIComponents/src/componentRegistry.ts` |
-| Schema Registry | `ElasticGumbyUIComponents/schemaRegistry/` |
+| Rendering Engine | `TransformUIComponents/src/DynamicHITLRenderEngine/DynamicHITLRenderEngine.tsx` |
+| HITL Context | `TransformUIComponents/src/DynamicHITLRenderEngine/HITLCallbackContext.tsx` |
+| Wrapped Components (Atoms) | `TransformUIComponents/src/DynamicHITLRenderEngine/Atoms/` |
+| Component Registry | `TransformUIComponents/src/componentRegistry.ts` |
+| Schema Registry | `TransformUIComponents/schemaRegistry/` |
 | Storybook Playground | `https://assets.transform-alpha-intg.us-west-2.on.aws/storybook/index.html?path=/story/components-hitlenginerenderer--playground` |
 
 ## CRITICAL Severity Approval Workflow

@@ -149,7 +149,7 @@ class TestStatelessAgentRuntimeServer:
                             ) as mock_endpoint:
                                 mock_endpoint.return_value = "https://test-endpoint.com"
                                 with mock.patch(
-                                    "agent_builder_sdk.server.stateless_agent_runtime_server.MCPClientFactory.setup_eg_mcp_client"
+                                    "agent_builder_sdk.server.stateless_agent_runtime_server.MCPClientFactory.setup_ab_mcp_client"
                                 ) as mock_mcp:
                                     with mock.patch(
                                         "agent_builder_sdk.server.stateless_agent_runtime_server.get_agentic_api_client"
@@ -466,7 +466,7 @@ class TestStatelessAgentRuntimeServer:
                             ) as mock_endpoint:
                                 mock_endpoint.return_value = "https://test-endpoint.com"
                                 with mock.patch(
-                                    "agent_builder_sdk.server.stateless_agent_runtime_server.MCPClientFactory.setup_eg_mcp_client"
+                                    "agent_builder_sdk.server.stateless_agent_runtime_server.MCPClientFactory.setup_ab_mcp_client"
                                 ) as mock_mcp:
                                     with mock.patch(
                                         "agent_builder_sdk.server.stateless_agent_runtime_server.get_agentic_api_client"
@@ -570,7 +570,7 @@ class TestStatelessAgentRuntimeServer:
                 mock_endpoint.return_value = "https://test-endpoint.com"
 
                 with mock.patch(
-                    "agent_builder_sdk.server.stateless_agent_runtime_server.MCPClientFactory.setup_eg_mcp_client"
+                    "agent_builder_sdk.server.stateless_agent_runtime_server.MCPClientFactory.setup_ab_mcp_client"
                 ) as mock_mcp:
                     with mock.patch(
                         "agent_builder_sdk.server.stateless_agent_runtime_server.set_agent_running"
@@ -689,7 +689,7 @@ class TestStatelessAgentRuntimeServer:
         ) as mock_endpoint:
             mock_endpoint.return_value = "https://test-endpoint.com"
             with mock.patch(
-                "agent_builder_sdk.server.stateless_agent_runtime_server.MCPClientFactory.setup_eg_mcp_client"
+                "agent_builder_sdk.server.stateless_agent_runtime_server.MCPClientFactory.setup_ab_mcp_client"
             ) as mock_mcp:
                 with mock.patch(
                     "agent_builder_sdk.server.stateless_agent_runtime_server.set_agent_running"
@@ -730,7 +730,7 @@ class TestStatelessAgentRuntimeServer:
         ) as mock_endpoint:
             mock_endpoint.return_value = "https://test-endpoint.com"
             with mock.patch(
-                "agent_builder_sdk.server.stateless_agent_runtime_server.MCPClientFactory.setup_eg_mcp_client"
+                "agent_builder_sdk.server.stateless_agent_runtime_server.MCPClientFactory.setup_ab_mcp_client"
             ) as mock_mcp:
                 with mock.patch(
                     "agent_builder_sdk.server.stateless_agent_runtime_server.set_agent_running"

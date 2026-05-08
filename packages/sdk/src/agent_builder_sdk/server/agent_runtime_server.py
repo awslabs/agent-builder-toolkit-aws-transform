@@ -340,7 +340,7 @@ class AgentRuntimeServer(BaseServer):
                 "agenticApiEndpoint": agentic_api_endpoint,
                 "authTokenFile": get_default_auth_token_file_path(),
             }
-            mcp_client = MCPClientFactory.setup_eg_mcp_client(required_mcp_args)
+            mcp_client = MCPClientFactory.setup_ab_mcp_client(required_mcp_args)
 
         # Status-dependent platform integration
         if agent_status in ["INVOKED", "RUNNING"]:

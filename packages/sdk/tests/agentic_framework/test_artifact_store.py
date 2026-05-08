@@ -5,8 +5,8 @@ from unittest import mock
 
 import pytest
 from botocore.exceptions import ClientError
-from mypy_boto3_elasticgumbyagenticservice import type_defs as eg
-from mypy_boto3_elasticgumbyagenticservice.client import ElasticgumbyagenticserviceClient
+from agent_builder_types import type_defs as abt
+from agent_builder_types.client import TransformAgenticServiceClient
 
 from agent_builder_sdk.agentic_framework.api_model import CategoryType, Visibility
 from agent_builder_sdk.agentic_framework.artifact_store import ArtifactStore
@@ -27,22 +27,22 @@ def artifact_store(monkeypatch):
         workspace_id="test-workspace",
         job_id="test-job",
         agent_instance_id="test-agent",
-        client=mock.create_autospec(ElasticgumbyagenticserviceClient, spec_set=True, instance=True),
+        client=mock.create_autospec(TransformAgenticServiceClient, spec_set=True, instance=True),
     )
 
 
 @pytest.fixture
 def get_artifact_metadata_response(response_metadata):
-    return eg.GetArtifactMetadataResponseTypeDef(
-        artifact=eg.ArtifactTypeDef(
+    return abt.GetArtifactMetadataResponseTypeDef(
+        artifact=abt.ArtifactTypeDef(
             artifactId="123",
             artifactType="",
             artifactCreatedTimestamp=datetime.now(),
             artifactExpiryTimestamp=datetime.now(),
             storedInAtxBucket=True,
         ),
-        isS3ObjectPresent=eg.IsS3ObjectPresentTypeDef(publicBucket=True),
-        metadata=eg.MetadataContextTypeDef(),
+        isS3ObjectPresent=abt.IsS3ObjectPresentTypeDef(publicBucket=True),
+        metadata=abt.MetadataContextTypeDef(),
         ResponseMetadata=response_metadata,
     )
 
@@ -213,15 +213,15 @@ class TestUploadArtifact:
             "artifactId": "test-artifact-id",
             "s3preSignedUrl": "https://test-upload-url.com",
         }
-        metadata_without_field = eg.GetArtifactMetadataResponseTypeDef(
-            artifact=eg.ArtifactTypeDef(
+        metadata_without_field = abt.GetArtifactMetadataResponseTypeDef(
+            artifact=abt.ArtifactTypeDef(
                 artifactId="123",
                 artifactType="",
                 artifactCreatedTimestamp=datetime.now(),
                 artifactExpiryTimestamp=datetime.now(),
             ),
-            isS3ObjectPresent=eg.IsS3ObjectPresentTypeDef(publicBucket=True),
-            metadata=eg.MetadataContextTypeDef(),
+            isS3ObjectPresent=abt.IsS3ObjectPresentTypeDef(publicBucket=True),
+            metadata=abt.MetadataContextTypeDef(),
             ResponseMetadata=response_metadata,
         )
         artifact_store.client.create_artifact_upload_url.return_value = expected_response

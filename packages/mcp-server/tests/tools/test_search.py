@@ -26,4 +26,4 @@ class TestSearchBySource:
         parsed = json.loads(result)
         assert len(parsed) >= 1
         for item in parsed:
-            assert item["source"] == "ElasticGumbyAgenticApiModel"
+            assert item["source"] == "TransformAgenticApiModel"

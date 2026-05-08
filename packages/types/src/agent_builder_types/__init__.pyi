@@ -36,7 +36,6 @@ from .paginator import (
 
 Client = TransformAgenticServiceClient
 
-
 __all__ = (
     "Client",
     "TransformAgenticServiceClient",

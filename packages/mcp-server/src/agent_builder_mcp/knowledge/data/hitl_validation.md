@@ -102,7 +102,7 @@ Three prompt variants exist for generating HITL UI JSON with external LLMs:
 
 **Source files:**
 ```
-ElasticGumbyUIComponents/src/DynamicHITLRenderEngine/
+TransformUIComponents/src/DynamicHITLRenderEngine/
 ├── DynamicHITLRenderEngine.llm-instructions.md           # Base
 ├── DynamicHITLRenderEngine.llm-instructions.optimized.md # Optimized
 └── DynamicHITLRenderEngine.llm-instructions.opus4.md     # Opus4

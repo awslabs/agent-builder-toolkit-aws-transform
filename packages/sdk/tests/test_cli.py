@@ -21,7 +21,7 @@ from agent_builder_sdk.cli import (
     run_console,
     run_main,
     setup_agent,
-    setup_eg_mcp_client,
+    setup_ab_mcp_client,
     setup_tracing,
 )
 from agent_builder_sdk.orchestrator_strands.base_orchestrator import BaseOrchestrator
@@ -297,7 +297,7 @@ def test_create_parser_custom_args():
         ) as mock_request_handler, patch(
             "agent_builder_sdk.cli.create_orchestrator"
         ) as mock_create_orchestrator, patch(
-            "agent_builder_sdk.cli.setup_eg_mcp_client"
+            "agent_builder_sdk.cli.setup_ab_mcp_client"
         ) as mock_setup_mcp:
 
             # Create mock args
@@ -311,7 +311,7 @@ def test_create_parser_custom_args():
             # Call the function
             agent, queue_service, request_handler = setup_agent(args, mcp_args)
 
-            # Verify setup_eg_mcp_client was called
+            # Verify setup_ab_mcp_client was called
             mock_setup_mcp.assert_called_once_with(mcp_args)
 
             # Verify queue service was created
@@ -834,7 +834,7 @@ class TestCLIIntegration:
                 mock_asyncio_run.assert_called_once()
 
 
-def test_setup_eg_mcp_client_success():
+def test_setup_ab_mcp_client_success():
     """Test successful MCP client setup."""
     with patch("agent_builder_sdk.cli.MCPClient") as mock_mcp_client:
         mcp_args = {
@@ -846,13 +846,13 @@ def test_setup_eg_mcp_client_success():
         mock_client_instance = Mock(spec=MCPClient)
         mock_mcp_client.return_value = mock_client_instance
 
-        result = setup_eg_mcp_client(mcp_args)
+        result = setup_ab_mcp_client(mcp_args)
 
         mock_mcp_client.assert_called_once()
         assert result == mock_client_instance
 
 
-def test_setup_eg_mcp_client_no_args():
+def test_setup_ab_mcp_client_no_args():
     """Test MCP client setup with no additional args."""
     with patch("agent_builder_sdk.cli.MCPClient") as mock_mcp_client:
         mcp_args = {"binaryLocation": "/path/to/binary"}
@@ -860,19 +860,19 @@ def test_setup_eg_mcp_client_no_args():
         mock_client_instance = Mock(spec=MCPClient)
         mock_mcp_client.return_value = mock_client_instance
 
-        result = setup_eg_mcp_client(mcp_args)
+        result = setup_ab_mcp_client(mcp_args)
 
         mock_mcp_client.assert_called_once()
         assert result == mock_client_instance
 
 
-def test_setup_eg_mcp_client_failure():
+def test_setup_ab_mcp_client_failure():
     """Test MCP client setup failure."""
     with patch("agent_builder_sdk.cli.MCPClient", side_effect=Exception("Connection failed")):
         mcp_args = {"binaryLocation": "/path/to/binary"}
 
         with pytest.raises(Exception, match="Connection failed"):
-            setup_eg_mcp_client(mcp_args)
+            setup_ab_mcp_client(mcp_args)
 
 
 def test_create_orchestrator():
@@ -913,7 +913,7 @@ def test_setup_agent():
     """Test complete agent setup with MCP enabled (default behavior)."""
     # Mock environment without MCP disabled (default state)
     with patch.dict("os.environ", {}, clear=True), patch(
-        "agent_builder_sdk.cli.setup_eg_mcp_client"
+        "agent_builder_sdk.cli.setup_ab_mcp_client"
     ) as mock_setup_mcp, patch(
         "agent_builder_sdk.cli.QueueService"
     ) as mock_queue_service, patch(
@@ -966,7 +966,7 @@ def test_setup_agent_without_mcp():
     """Test complete agent setup without MCP when MCP usage is disabled."""
     # Mock environment with MCP disabled
     with patch.dict("os.environ", {"DISABLE_MCP_USAGE": "true"}), patch(
-        "agent_builder_sdk.cli.setup_eg_mcp_client"
+        "agent_builder_sdk.cli.setup_ab_mcp_client"
     ) as mock_setup_mcp, patch(
         "agent_builder_sdk.cli.QueueService"
     ) as mock_queue_service, patch(

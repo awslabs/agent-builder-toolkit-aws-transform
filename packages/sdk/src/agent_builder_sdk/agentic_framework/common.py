@@ -13,7 +13,7 @@ from xml.etree import ElementTree
 import requests
 from botocore.exceptions import ClientError
 from defusedxml import ElementTree as DefusedElementTree
-from mypy_boto3_elasticgumbyagenticservice.type_defs import (
+from agent_builder_types.type_defs import (
     CreateArtifactDownloadUrlResponseTypeDef,
     CreateArtifactUploadUrlResponseTypeDef,
 )

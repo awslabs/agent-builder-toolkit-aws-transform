@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agent-builder-types"
 version = "1.0.0"
-description = "Type stubs for boto3 ElasticGumbyAgenticService client"
+description = "Type stubs for boto3 TransformAgenticService client"
 readme = "README.md"
 requires-python = ">=3.10"
 authors = [{ name = "AWS Transform Team" }]

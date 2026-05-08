@@ -25,7 +25,7 @@ from agent_builder_sdk.cli import (
     cleanup_process_safely,
     run_api_server_sync,
     run_queue_mode_async,
-    setup_eg_mcp_client,
+    setup_ab_mcp_client,
     setup_tracing,
 )
 from agent_builder_sdk.env_var import (
@@ -86,7 +86,6 @@ class BaseAgentServer:
 
     TODO: Decoupling Agent from AgentServer will come soon once
     we consolidate BaseOrchestrator and BaseSubAgent initialization.
-    Ref: https://code.amazon.com/reviews/CR-216619724
 
     This class provides an easy way to instantiate a new ATX strands-based agent (see BaseOrchestrator),
     fronted by a webserver through which requests to this agent are processed asynchronously.
@@ -276,7 +275,7 @@ class BaseAgentServer:
             "authTokenFile": get_default_auth_token_file_path(),
         }
         logger.info(f"Setting up Platform MCP client with args: {mcp_args}")
-        return setup_eg_mcp_client(mcp_args=mcp_args)
+        return setup_ab_mcp_client(mcp_args=mcp_args)
 
     def _setup_base_agent(self) -> BaseOrchestrator:
         """

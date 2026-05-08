@@ -14,7 +14,7 @@ class MCPClientFactory:
     """Factory for creating and configuring MCP clients."""
 
     @staticmethod
-    def setup_eg_mcp_client(mcp_args: Dict[str, str]) -> MCPClient:
+    def setup_ab_mcp_client(mcp_args: Dict[str, str]) -> MCPClient:
         """Create and configure an EG MCP client using Strands framework."""
         try:
             command_args = [

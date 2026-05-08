@@ -8,7 +8,7 @@ from strands.tools.mcp import MCPClient
 from agent_builder_sdk.mcp_client_factory import MCPClientFactory
 
 
-def test_setup_eg_mcp_client_success():
+def test_setup_ab_mcp_client_success():
     """Test successful MCP client setup."""
     with patch("agent_builder_sdk.mcp_client_factory.MCPClient") as mock_mcp_client:
         mcp_args = {
@@ -20,13 +20,13 @@ def test_setup_eg_mcp_client_success():
         mock_client_instance = Mock(spec=MCPClient)
         mock_mcp_client.return_value = mock_client_instance
 
-        result = MCPClientFactory.setup_eg_mcp_client(mcp_args)
+        result = MCPClientFactory.setup_ab_mcp_client(mcp_args)
 
         mock_mcp_client.assert_called_once()
         assert result == mock_client_instance
 
 
-def test_setup_eg_mcp_client_no_args():
+def test_setup_ab_mcp_client_no_args():
     """Test MCP client setup with no additional args."""
     with patch("agent_builder_sdk.mcp_client_factory.MCPClient") as mock_mcp_client:
         mcp_args = {"binaryLocation": "/path/to/binary"}
@@ -34,13 +34,13 @@ def test_setup_eg_mcp_client_no_args():
         mock_client_instance = Mock(spec=MCPClient)
         mock_mcp_client.return_value = mock_client_instance
 
-        result = MCPClientFactory.setup_eg_mcp_client(mcp_args)
+        result = MCPClientFactory.setup_ab_mcp_client(mcp_args)
 
         mock_mcp_client.assert_called_once()
         assert result == mock_client_instance
 
 
-def test_setup_eg_mcp_client_failure():
+def test_setup_ab_mcp_client_failure():
     """Test MCP client setup failure."""
     with patch(
         "agent_builder_sdk.mcp_client_factory.MCPClient",
@@ -49,4 +49,4 @@ def test_setup_eg_mcp_client_failure():
         mcp_args = {"binaryLocation": "/path/to/binary"}
 
         with pytest.raises(Exception, match="Connection failed"):
-            MCPClientFactory.setup_eg_mcp_client(mcp_args)
+            MCPClientFactory.setup_ab_mcp_client(mcp_args)

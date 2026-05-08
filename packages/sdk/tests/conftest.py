@@ -1,7 +1,7 @@
 from unittest.mock import create_autospec
 
 import pytest
-from mypy_boto3_elasticgumbyagenticservice import type_defs as eg
+from agent_builder_types import type_defs as abt
 from strands.agent import AgentResult
 from strands.models import BedrockModel
 from strands.telemetry import EventLoopMetrics
@@ -70,7 +70,7 @@ def mock_queue_service():
 
 
 @pytest.fixture
-def response_metadata() -> eg.ResponseMetadataTypeDef:
-    return eg.ResponseMetadataTypeDef(
+def response_metadata() -> abt.ResponseMetadataTypeDef:
+    return abt.ResponseMetadataTypeDef(
         RequestId="1", HostId="2", HTTPStatusCode=200, HTTPHeaders={}, RetryAttempts=0
     )

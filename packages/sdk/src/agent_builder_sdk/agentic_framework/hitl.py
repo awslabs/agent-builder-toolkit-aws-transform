@@ -1,17 +1,17 @@
 import uuid
 from datetime import datetime
 
-import mypy_boto3_elasticgumbyagenticservice.literals as lit
-import mypy_boto3_elasticgumbyagenticservice.type_defs as eg
-from mypy_boto3_elasticgumbyagenticservice import ElasticgumbyagenticserviceClient
+import agent_builder_types.literals as lit
+import agent_builder_types.type_defs as abt
+from agent_builder_types import TransformAgenticServiceClient
 
 from agent_builder_sdk.agentic_framework.agentic_api_helper import AgenticApiHelper
 
 
 class HitlClient(AgenticApiHelper):
-    """A wrapper around Elastic Gumby's HITL (human-in-the-loop) APIs."""
+    """A wrapper around AWS Transform's HITL (human-in-the-loop) APIs."""
 
-    client: ElasticgumbyagenticserviceClient
+    client: TransformAgenticServiceClient
 
     async def create_hitl_task(
         self,
@@ -22,11 +22,11 @@ class HitlClient(AgenticApiHelper):
         hitl_task_type: lit.HitlTaskTypeType = "NORMAL",
         step_id: str | None = None,
         blocking_type: lit.BlockingTypeType | None = None,
-        hitl_request_artifact: eg.HitlTaskArtifactTypeDef | None = None,
+        hitl_request_artifact: abt.HitlTaskArtifactTypeDef | None = None,
         expired_at: datetime | str | None = None,
         tag: str | None = None,
-    ) -> eg.CreateHitlTaskResponseTypeDef:
-        request: eg.CreateHitlTaskRequestRequestTypeDef = {
+    ) -> abt.CreateHitlTaskResponseTypeDef:
+        request: abt.CreateHitlTaskRequestRequestTypeDef = {
             "uxComponentId": ux_component_id,
             "description": description,
             "title": title,
@@ -53,8 +53,8 @@ class HitlClient(AgenticApiHelper):
 
         return self.client.create_hitl_task(**request)
 
-    async def get_hitl_task(self, hitl_task_id: str) -> eg.GetHitlTaskResponseTypeDef:
-        request: eg.GetHitlTaskRequestRequestTypeDef = {
+    async def get_hitl_task(self, hitl_task_id: str) -> abt.GetHitlTaskResponseTypeDef:
+        request: abt.GetHitlTaskRequestRequestTypeDef = {
             "hitlTaskId": hitl_task_id,
             "requestContext": self._create_request_context(),
         }
@@ -63,8 +63,8 @@ class HitlClient(AgenticApiHelper):
 
     async def start_hitl_task(
         self, hitl_task_id: str, first_in_chain: bool | None = None
-    ) -> eg.StartHitlTaskResponseTypeDef:
-        request: eg.StartHitlTaskRequestRequestTypeDef = {
+    ) -> abt.StartHitlTaskResponseTypeDef:
+        request: abt.StartHitlTaskRequestRequestTypeDef = {
             "hitlTaskId": hitl_task_id,
             "idempotencyToken": str(uuid.uuid4()),
             "requestContext": self._create_request_context(),
@@ -77,8 +77,8 @@ class HitlClient(AgenticApiHelper):
 
     async def close_hitl_task(
         self, hitl_task_id: str, closure_type: lit.ClosureTypeType | None = None
-    ) -> eg.CloseHitlTaskResponseTypeDef:
-        request: eg.CloseHitlTaskRequestRequestTypeDef = {
+    ) -> abt.CloseHitlTaskResponseTypeDef:
+        request: abt.CloseHitlTaskRequestRequestTypeDef = {
             "hitlTaskId": hitl_task_id,
             "idempotencyToken": str(uuid.uuid4()),
             "requestContext": self._create_request_context(),
@@ -92,11 +92,11 @@ class HitlClient(AgenticApiHelper):
     async def list_hitl_tasks(
         self,
         task_type: lit.HitlTaskTypeType,
-        task_filter: eg.HitlTaskFilterTypeDef,
+        task_filter: abt.HitlTaskFilterTypeDef,
         next_token: str,
         max_results: int,
-    ) -> eg.ListHitlTasksResponseTypeDef:
-        request: eg.ListHitlTasksRequestRequestTypeDef = {
+    ) -> abt.ListHitlTasksResponseTypeDef:
+        request: abt.ListHitlTasksRequestRequestTypeDef = {
             "taskType": task_type,
             "taskFilter": task_filter,
             "nextToken": next_token,

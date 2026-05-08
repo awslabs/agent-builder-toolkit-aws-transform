@@ -218,12 +218,12 @@ class TestGetDefaultExecutionRoleArn:
     def test_returns_arn_when_sts_succeeds(self):
         """Test successful role detection returns ARN."""
         mock_sts = MagicMock()
-        mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
+        mock_sts.get_caller_identity.return_value = {"Account": "XXXXXXXXXXXX"}
 
         with patch(f"{MODULE_PIPELINE}.boto3.client", return_value=mock_sts):
             result = _get_default_execution_role_arn()
 
-        assert result == "arn:aws:iam::123456789012:role/AgentCoreExecutionRole"
+        assert result == "arn:aws:iam::XXXXXXXXXXXX:role/AgentCoreExecutionRole"
 
     def test_returns_none_when_sts_fails(self):
         """Test returns None when STS call fails."""
@@ -443,11 +443,11 @@ class TestDeployAgentFullPipeline:
                 )
 
                 with patch(f"{MODULE_PIPELINE}._get_default_execution_role_arn") as mock_role:
-                    mock_role.return_value = "arn:aws:iam::123456789012:role/AgentCoreExecutionRole"
+                    mock_role.return_value = "arn:aws:iam::XXXXXXXXXXXX:role/AgentCoreExecutionRole"
 
                     with patch(f"{MODULE_PIPELINE}.boto3") as mock_boto3:
                         mock_sts = MagicMock()
-                        mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
+                        mock_sts.get_caller_identity.return_value = {"Account": "XXXXXXXXXXXX"}
                         mock_iam = MagicMock()
                         mock_boto3.client.side_effect = lambda svc, **kw: (
                             mock_sts if svc == "sts" else mock_iam
@@ -662,7 +662,7 @@ class TestRegisterWithAtx:
         with patch(f"{MODULE_PIPELINE}.registry_client", return_value=mock_client):
             with patch(f"{MODULE_PIPELINE}.boto3") as mock_boto3:
                 mock_sts = MagicMock()
-                mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
+                mock_sts.get_caller_identity.return_value = {"Account": "XXXXXXXXXXXX"}
                 mock_boto3.client.return_value = mock_sts
 
                 result = _register_with_atx(
@@ -689,7 +689,7 @@ class TestRegisterWithAtx:
         with patch(f"{MODULE_PIPELINE}.registry_client", return_value=mock_client):
             with patch(f"{MODULE_PIPELINE}.boto3") as mock_boto3:
                 mock_sts = MagicMock()
-                mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
+                mock_sts.get_caller_identity.return_value = {"Account": "XXXXXXXXXXXX"}
                 mock_boto3.client.return_value = mock_sts
 
                 result = _register_with_atx(
@@ -714,7 +714,7 @@ class TestRegisterWithAtx:
         with patch(f"{MODULE_PIPELINE}.registry_client", return_value=mock_client):
             with patch(f"{MODULE_PIPELINE}.boto3") as mock_boto3:
                 mock_sts = MagicMock()
-                mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
+                mock_sts.get_caller_identity.return_value = {"Account": "XXXXXXXXXXXX"}
                 mock_boto3.client.return_value = mock_sts
 
                 result = _register_with_atx(
@@ -736,7 +736,7 @@ class TestRegisterWithAtx:
         with patch(f"{MODULE_PIPELINE}.registry_client", return_value=mock_client):
             with patch(f"{MODULE_PIPELINE}.boto3") as mock_boto3:
                 mock_sts = MagicMock()
-                mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
+                mock_sts.get_caller_identity.return_value = {"Account": "XXXXXXXXXXXX"}
                 mock_boto3.client.return_value = mock_sts
 
                 _register_with_atx(
@@ -764,7 +764,7 @@ class TestRegisterWithAtx:
         with patch(f"{MODULE_PIPELINE}.registry_client", return_value=mock_client):
             with patch(f"{MODULE_PIPELINE}.boto3") as mock_boto3:
                 mock_sts = MagicMock()
-                mock_sts.get_caller_identity.return_value = {"Account": "111122223333"}
+                mock_sts.get_caller_identity.return_value = {"Account": "XXXXXXXXXXXX"}
                 mock_boto3.client.return_value = mock_sts
 
                 _register_with_atx(
@@ -786,7 +786,7 @@ class TestRegisterWithAtx:
         # accountId populated from STS
         provider = card["capabilities"]["extensions"][0]
         assert provider["name"] == "Agent Provider"
-        assert provider["params"]["accountId"] == "111122223333"
+        assert provider["params"]["accountId"] == "XXXXXXXXXXXX"
 
         # All three required extensions present
         ext_names = [e["name"] for e in card["capabilities"]["extensions"]]
@@ -802,7 +802,7 @@ class TestRegisterWithAtx:
         with patch(f"{MODULE_PIPELINE}.registry_client", return_value=mock_client):
             with patch(f"{MODULE_PIPELINE}.boto3") as mock_boto3:
                 mock_sts = MagicMock()
-                mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
+                mock_sts.get_caller_identity.return_value = {"Account": "XXXXXXXXXXXX"}
                 mock_boto3.client.return_value = mock_sts
 
                 result = _register_with_atx(
@@ -830,7 +830,7 @@ class TestRegisterWithAtx:
         with patch(f"{MODULE_PIPELINE}.registry_client", return_value=mock_client):
             with patch(f"{MODULE_PIPELINE}.boto3") as mock_boto3:
                 mock_sts = MagicMock()
-                mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
+                mock_sts.get_caller_identity.return_value = {"Account": "XXXXXXXXXXXX"}
                 mock_boto3.client.return_value = mock_sts
 
                 result = _register_with_atx(
@@ -852,7 +852,7 @@ class TestRegisterWithAtx:
         with patch(f"{MODULE_PIPELINE}.registry_client", return_value=mock_client):
             with patch(f"{MODULE_PIPELINE}.boto3") as mock_boto3:
                 mock_sts = MagicMock()
-                mock_sts.get_caller_identity.return_value = {"Account": "123456789012"}
+                mock_sts.get_caller_identity.return_value = {"Account": "XXXXXXXXXXXX"}
                 mock_boto3.client.return_value = mock_sts
 
                 _register_with_atx(

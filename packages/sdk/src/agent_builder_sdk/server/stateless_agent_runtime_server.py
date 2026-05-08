@@ -172,7 +172,7 @@ class StatelessAgentRuntimeServer(BaseServer):
 
         try:
             # Set up MCP client
-            mcp_client = MCPClientFactory.setup_eg_mcp_client(required_mcp_args)
+            mcp_client = MCPClientFactory.setup_ab_mcp_client(required_mcp_args)
             if not mcp_client:
                 logger.error("Failed to create MCP client")
                 raise ValueError("MCP client initialization failed")

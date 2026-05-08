@@ -6,9 +6,9 @@ import logging
 from typing import cast
 
 from botocore.exceptions import ClientError
-from mypy_boto3_elasticgumbyagenticservice import ElasticgumbyagenticserviceClient
-from mypy_boto3_elasticgumbyagenticservice import type_defs as eg
-from mypy_boto3_elasticgumbyagenticservice.literals import CategoryTypeType, FileTypeType
+from agent_builder_types import TransformAgenticServiceClient
+from agent_builder_types import type_defs as abt
+from agent_builder_types.literals import CategoryTypeType, FileTypeType
 
 from agent_builder_sdk.agentic_framework.agentic_api_helper import AgenticApiHelper
 from agent_builder_sdk.agentic_framework.api_model import CategoryType
@@ -24,13 +24,13 @@ logger = logging.getLogger(__name__)
 class ArtifactStore(AgenticApiHelper):
     """Manages artifact storage operations."""
 
-    client: ElasticgumbyagenticserviceClient
+    client: TransformAgenticServiceClient
 
     def list_artifacts(
         self, agent_instance_id: str, category: CategoryType | None = None
-    ) -> eg.ListArtifactsResponseTypeDef:
+    ) -> abt.ListArtifactsResponseTypeDef:
         """List artifacts by agent instance ID and category type."""
-        agent_filter = eg.ArtifactAgentFilterTypeDef(agentInstanceId=agent_instance_id)
+        agent_filter = abt.ArtifactAgentFilterTypeDef(agentInstanceId=agent_instance_id)
         if category is not None:
             agent_filter["category"] = cast(CategoryTypeType, category.value)
 
@@ -57,7 +57,7 @@ class ArtifactStore(AgenticApiHelper):
         label: str | None = None,
     ) -> str:
         """Upload artifact with specified category and return its ID."""
-        artifact_reference: eg.ArtifactReferenceTypeDef
+        artifact_reference: abt.ArtifactReferenceTypeDef
         if artifact_id is not None:
             if category_type is not None or file_type is not None:
                 raise ValueError("Cannot provide both artifact_id and category_type or file_type")
@@ -76,7 +76,7 @@ class ArtifactStore(AgenticApiHelper):
                 }
             }
 
-        request = eg.CreateArtifactUploadUrlRequestRequestTypeDef(
+        request = abt.CreateArtifactUploadUrlRequestRequestTypeDef(
             artifactReference=artifact_reference,
             contentDigest={"sha256": digest},
             visibility="INTERNAL",
@@ -101,7 +101,7 @@ class ArtifactStore(AgenticApiHelper):
                 response, content, metadata["artifact"].get("storedInAtxBucket", True)
             )
 
-            complete_request = eg.CompleteArtifactUploadRequestRequestTypeDef(
+            complete_request = abt.CompleteArtifactUploadRequestRequestTypeDef(
                 artifactId=artifact_id, requestContext=self._create_request_context()
             )
             self.client.complete_artifact_upload(**complete_request)

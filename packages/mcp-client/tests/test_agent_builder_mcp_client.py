@@ -1,4 +1,4 @@
-"""Tests for ElasticGumbyMCPPythonClient module."""
+"""Tests for TransformAgentBuilderMCPPythonClient module."""
 
 
 def test_agent_builder_mcp_client_importable():

@@ -17,8 +17,6 @@ Dynamic Deeplinks (aws-transform://~/):
     or provided context object. They're useful for relative navigation within the
     current workspace or job.
 
-Documentation: https://quip-amazon.com/NNz1ALRfopmI/ATX-Deeplink-Schema-Guide
-Implementation: https://code.amazon.com/packages/ElasticGumbyUIComponents/blobs/heads/mainline/--/src/sharedComponents/Deeplink/routes.ts
 """
 
 from enum import Enum

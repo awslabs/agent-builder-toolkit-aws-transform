@@ -7,12 +7,11 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Generic, TypeVar
 
-import mypy_boto3_elasticgumbyagenticservice.type_defs as eg
+import agent_builder_types.type_defs as abt
 
 T = TypeVar("T", bound=Mapping)
 
 
-# https://code.amazon.com/packages/ElasticGumbyArtifactStoreServiceModel/blobs/b4476a2b50362976768f877e77d7994675d7ed97/--/model/dataTypes/common.smithy#L67
 class CategoryType(str, Enum):
     """Artifact category types."""
 
@@ -52,9 +51,9 @@ class ApiShapeMixin(Generic[T]):
 
 
 @dataclass(frozen=True)
-class AgenticApiRequestContext(ApiShapeMixin[eg.RequestContextTypeDef]):
+class AgenticApiRequestContext(ApiShapeMixin[abt.RequestContextTypeDef]):
     """
-    Request context for Elastic Gumby Agentic API calls.
+    Request context for AWS Transform Agentic API calls.
     Contains job metadata and agent identification information.
     """
 
@@ -63,7 +62,7 @@ class AgenticApiRequestContext(ApiShapeMixin[eg.RequestContextTypeDef]):
     agent_instance_id: str
     authorization_token: str = field(repr=False)
 
-    def to_dict(self) -> eg.RequestContextTypeDef:
+    def to_dict(self) -> abt.RequestContextTypeDef:
         """
         Convert to dictionary format expected by the API.
         """

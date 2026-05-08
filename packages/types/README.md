@@ -1,3 +1,3 @@
-# mypy-boto3-elasticgumbyagenticservice
+# agent-builder-types
 
-Type stubs for boto3 ElasticGumbyAgenticService client.
+Type stubs for boto3 TransformAgenticService client.

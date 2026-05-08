@@ -141,7 +141,7 @@ class TestSearchBySource:
         result = search_by_source("create session", source="agentic-api", top_k=3)
         parsed = json.loads(result)
         for item in parsed:
-            assert item["source"] == "ElasticGumbyAgenticApiModel"
+            assert item["source"] == "TransformAgenticApiModel"
 
     def test_unknown_source_returns_empty(self) -> None:
         from agent_builder_mcp.tools.search._lite import search_by_source

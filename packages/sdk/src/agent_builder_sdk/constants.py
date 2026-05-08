@@ -1,5 +1,5 @@
 """
-Application-wide constants for the Elastic Gumby Platform Base Agent.
+Application-wide constants for the AWS Transform Platform Base Agent.
 """
 
 # Tool filtering constants

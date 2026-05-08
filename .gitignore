@@ -7,3 +7,12 @@ dist/
 __pycache__/
 *.pyc
 .venv/
+
+# Build/compliance tooling
+bom2notices.py
+OSS_COMPLIANCE_STATUS.md
+DEPENDENCY-LICENSES.txt
+bom.xml
+sbom.json
+BSD-licenses.txt
+MIT-licenses.txt

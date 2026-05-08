@@ -5,7 +5,7 @@ from unittest import mock
 import pytest
 import requests
 from botocore.exceptions import ClientError
-from mypy_boto3_elasticgumbyagenticservice import type_defs as eg
+from agent_builder_types import type_defs as abt
 
 from agent_builder_sdk.agentic_framework import common
 from agent_builder_sdk.errors import InternalBaseAgentError, UserBaseAgentError
@@ -27,8 +27,8 @@ def response():
 
 
 @pytest.fixture
-def upload_response(response_metadata) -> eg.CreateArtifactUploadUrlResponseTypeDef:
-    return eg.CreateArtifactUploadUrlResponseTypeDef(
+def upload_response(response_metadata) -> abt.CreateArtifactUploadUrlResponseTypeDef:
+    return abt.CreateArtifactUploadUrlResponseTypeDef(
         artifactId="123",
         s3preSignedUrl="https://test-url.com",
         s3UrlExpiryTimestamp=datetime.now(),
@@ -38,11 +38,11 @@ def upload_response(response_metadata) -> eg.CreateArtifactUploadUrlResponseType
 
 
 @pytest.fixture
-def download_response(response_metadata) -> eg.CreateArtifactDownloadUrlResponseTypeDef:
-    artifact_type: eg.ArtifactTypeTypeDef = {"categoryType": "STATE", "fileType": "ZIP"}
+def download_response(response_metadata) -> abt.CreateArtifactDownloadUrlResponseTypeDef:
+    artifact_type: abt.ArtifactTypeTypeDef = {"categoryType": "STATE", "fileType": "ZIP"}
 
-    return eg.CreateArtifactDownloadUrlResponseTypeDef(
-        artifact=eg.ArtifactTypeDef(
+    return abt.CreateArtifactDownloadUrlResponseTypeDef(
+        artifact=abt.ArtifactTypeDef(
             artifactId="123",
             artifactType=artifact_type,
             artifactCreatedTimestamp=datetime.now(),

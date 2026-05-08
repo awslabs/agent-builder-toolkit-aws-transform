@@ -320,7 +320,7 @@ class TestAgentRuntimeServer:
                     "agent_builder_sdk.server.agent_runtime_server.build_agentic_api_endpoint_from_env"
                 ) as mock_endpoint:
                     with mock.patch(
-                        "agent_builder_sdk.server.agent_runtime_server.MCPClientFactory.setup_eg_mcp_client"
+                        "agent_builder_sdk.server.agent_runtime_server.MCPClientFactory.setup_ab_mcp_client"
                     ):
                         with mock.patch(
                             "agent_builder_sdk.server.agent_runtime_server.setup_initial_auth_token"
@@ -409,7 +409,7 @@ class TestAgentRuntimeServer:
                                 "agentVersion": "1.0",
                             },
                             "userMetadata": {
-                                "accountId": "123456789012",
+                                "accountId": "XXXXXXXXXXXX",
                                 "invocationUserId": "user-456",
                             },
                             "authorizationToken": "token-2",
@@ -419,7 +419,7 @@ class TestAgentRuntimeServer:
                 },
                 "expected_agent_id": "agent-123",
                 "expected_agent_version": "1.0",
-                "expected_tenant_account_id": "123456789012",
+                "expected_tenant_account_id": "XXXXXXXXXXXX",
             },
             # 3. atx_agent/notify format
             {
@@ -787,12 +787,12 @@ class TestAgentRuntimeServer:
         # Should not raise exception
         await message_handler._handle_delayed_response("req", "ctx", mock.Mock())
 
-    def test_setup_eg_mcp_client_missing_binary(self, agent_runtime_server):
+    def test_setup_ab_mcp_client_missing_binary(self, agent_runtime_server):
         """Test MCP client setup with missing binary location."""
         mcp_args = {"command": "test"}
 
         with pytest.raises(Exception):
-            agent_runtime_server.setup_eg_mcp_client(mcp_args)
+            agent_runtime_server.setup_ab_mcp_client(mcp_args)
 
     @pytest.mark.asyncio
     async def test_handle_jsonrpc_notify_method(self, agent_runtime_server):
@@ -1812,7 +1812,7 @@ class TestAgentRuntimeServer:
                 "agent_builder_sdk.server.agent_runtime_server.build_agentic_api_endpoint_from_env"
             ):
                 with mock.patch(
-                    "agent_builder_sdk.server.agent_runtime_server.MCPClientFactory.setup_eg_mcp_client"
+                    "agent_builder_sdk.server.agent_runtime_server.MCPClientFactory.setup_ab_mcp_client"
                 ):
                     with mock.patch(
                         "agent_builder_sdk.server.agent_runtime_server.get_agentic_api_client"
@@ -1877,7 +1877,7 @@ class TestAgentRuntimeServer:
             "agent_builder_sdk.server.agent_runtime_server.build_agentic_api_endpoint_from_env"
         ):
             with mock.patch(
-                "agent_builder_sdk.server.agent_runtime_server.MCPClientFactory.setup_eg_mcp_client"
+                "agent_builder_sdk.server.agent_runtime_server.MCPClientFactory.setup_ab_mcp_client"
             ) as mock_mcp:
                 with mock.patch(
                     "agent_builder_sdk.server.agent_runtime_server.get_agent_status"
@@ -2019,7 +2019,7 @@ class TestAgentRuntimeServer:
                 "agent_builder_sdk.server.agent_runtime_server.build_agentic_api_endpoint_from_env"
             ):
                 with mock.patch(
-                    "agent_builder_sdk.server.agent_runtime_server.MCPClientFactory.setup_eg_mcp_client"
+                    "agent_builder_sdk.server.agent_runtime_server.MCPClientFactory.setup_ab_mcp_client"
                 ) as mock_factory:
                     with mock.patch(
                         "agent_builder_sdk.server.agent_runtime_server.get_agentic_api_client"
@@ -2057,7 +2057,7 @@ class TestAgentRuntimeServer:
             ) as mock_endpoint:
                 mock_endpoint.return_value = "https://test-endpoint.com"
                 with mock.patch(
-                    "agent_builder_sdk.server.agent_runtime_server.MCPClientFactory.setup_eg_mcp_client"
+                    "agent_builder_sdk.server.agent_runtime_server.MCPClientFactory.setup_ab_mcp_client"
                 ) as mock_factory:
                     mock_factory.return_value = MagicMock()
                     with mock.patch(

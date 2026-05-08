@@ -10,7 +10,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Optional
 
-from mypy_boto3_elasticgumbyagenticservice.type_defs import ArtifactTypeDef
+from agent_builder_types.type_defs import ArtifactTypeDef
 
 from agent_builder_sdk.agent_state.agent_state import IAgentState
 from agent_builder_sdk.agentic_framework.api_model import CategoryType

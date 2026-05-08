@@ -5971,7 +5971,7 @@ Output schema
 
 [WIP][External][Confidential] AWS Transform Agent Developer Guide
 
-BaseAgent readme https://code.amazon.com/packages/ElasticGumbyPlatformPartnerBaseAgent/blobs/mainline/--/README.md#
+Agent Builder Base Agent SDK readme https://github.com/awslabs/agent-builder-toolkit-aws-transform/blob/main/packages/sdk/README.md
 
 ATX platform integration with Genesis
 

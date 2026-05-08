@@ -15,8 +15,8 @@ DATA_DIR = Path(__file__).parent / "data"
 
 # Source names for citations (package names)
 SOURCE_NAMES = {
-    "sdk": "ElasticGumbyPlatformPartnerBaseAgent",
-    "agentic-api": "ElasticGumbyAgenticApiModel",
+    "sdk": "AgentBuilderSDK",
+    "agentic-api": "TransformAgenticApiModel",
     "registry-api": "ATXAgentRegistryExternalServiceModel",
     "dev-guide": "ATX-Developer-Guide",
     "hitl-component-library": "HITL-Component-Library",
@@ -25,8 +25,8 @@ SOURCE_NAMES = {
     "hitl-validation": "HITL-Validation",
     "hitl-generation-rules": "HITL-Generation-Rules",
     "hitl-agent-integration": "HITL-Agent-Integration",
-    "hitl-sdk-python": "ElasticGumbyHITLComponentPythonSDK",
-    "hitl-sdk-java": "ElasticGumbyHITLComponentJavaSDK",
+    "hitl-sdk-python": "TransformHITLComponentPythonSDK",
+    "hitl-sdk-java": "TransformHITLComponentJavaSDK",
     "hitl-architecture": "HITL-System-Architecture",
     "hitl-render-limitations": "HITL-Render-Engine-Limitations",
 }

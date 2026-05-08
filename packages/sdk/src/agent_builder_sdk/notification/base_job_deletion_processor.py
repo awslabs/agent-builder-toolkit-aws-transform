@@ -4,7 +4,7 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 
-import mypy_boto3_elasticgumbyagenticservice.type_defs as eg
+import agent_builder_types.type_defs as abt
 
 from agent_builder_sdk.agentic_framework.client_factory import get_agentic_api_client
 from agent_builder_sdk.custom_types.notification_types import JobDeletionDetail, Notification
@@ -116,7 +116,7 @@ class BaseJobDeletionProcessor(ABC):
         client = get_agentic_api_client()
         context = get_agent_context_from_env()
 
-        request_context: eg.RequestContextTypeDef = {
+        request_context: abt.RequestContextTypeDef = {
             "jobMetadata": {
                 "jobId": detail.job_id,
                 "workspaceId": detail.workspace_id,

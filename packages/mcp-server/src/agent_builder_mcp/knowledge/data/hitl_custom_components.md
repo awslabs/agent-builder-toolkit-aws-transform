@@ -34,7 +34,7 @@ You need a complex, multi-component UI that can't be expressed as JSON (e.g., a 
 
 ### Step 1: Create the Component
 
-Create a file in `ElasticGumbyUIComponents/src/DynamicHITLRenderEngine/Atoms/`:
+Create a file in `TransformUIComponents/src/DynamicHITLRenderEngine/Atoms/`:
 
 ```typescript
 // MyWrappedSelect.tsx
@@ -155,8 +155,8 @@ And optionally add prop validation:
 
 ### Step 6: Create CR and Deploy
 
-1. Commit changes to `ElasticGumbyUIComponents`
-2. Create CR: `cr --summary "[ElasticGumbyUIComponents] Add wrapped Select component"`
+1. Commit changes to `TransformUIComponents`
+2. Create CR: `cr --summary "[TransformUIComponents] Add wrapped Select component"`
 3. After merge, the component is available to all teams using the rendering engine
 
 ---
@@ -169,7 +169,7 @@ Use this when your UI is too complex for JSON (multi-step wizards, custom visual
 
 ### Step 1: Create the Component
 
-Create in `ElasticGumbyUIComponents/src/YourComponent/`:
+Create in `TransformUIComponents/src/YourComponent/`:
 
 ```typescript
 // YourComponent.tsx
@@ -291,11 +291,10 @@ These are already registered in the engine — study them as examples:
 | WrappedMarkdown | `Atoms/Markdown/` | No | GFM, syntax highlighting, deeplinks |
 | ContentLoaderWrapper | `Atoms/ContentLoader.tsx` | No | Skeleton animation |
 
-**Source:** `https://code.amazon.com/packages/ElasticGumbyUIComponents/trees/mainline/--/src/DynamicHITLRenderEngine/Atoms`
+**Source:** `TransformUIComponents/src/DynamicHITLRenderEngine/Atoms`
 
 ---
 
 ## Support
 
 - **Slack:** #atx-foundation-partner-ux
-- **Package:** https://code.amazon.com/packages/ElasticGumbyUIComponents

@@ -237,7 +237,7 @@ class TestBaseAgentServer:
             server.start()
             mock_asyncio_run.assert_called_once()
 
-    @patch("agent_builder_sdk.orchestrator_strands._base_agent_server.setup_eg_mcp_client")
+    @patch("agent_builder_sdk.orchestrator_strands._base_agent_server.setup_ab_mcp_client")
     @patch(
         "agent_builder_sdk.orchestrator_strands._base_agent_server.get_default_auth_token_file_path"
     )

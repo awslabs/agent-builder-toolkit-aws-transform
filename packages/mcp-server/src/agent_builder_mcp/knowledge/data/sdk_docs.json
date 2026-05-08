@@ -220,7 +220,7 @@
     "file": "agent_builder_sdk/mcp_client_factory.py"
   },
   {
-    "name": "setup_eg_mcp_client",
+    "name": "setup_ab_mcp_client",
     "docstring": "Create and configure an EG MCP client using Strands framework.",
     "file": "agent_builder_sdk/mcp_client_factory.py"
   },
@@ -235,7 +235,7 @@
     "file": "agent_builder_sdk/cli.py"
   },
   {
-    "name": "setup_eg_mcp_client",
+    "name": "setup_ab_mcp_client",
     "docstring": "Set up and connect the MCP client using Strands framework.\n\nArgs:\n    mcp_args: Parsed command line arguments\n\nReturns:\n    Connected Strands MCP client",
     "file": "agent_builder_sdk/cli.py"
   },
@@ -305,8 +305,8 @@
     "file": "agent_builder_sdk/utils.py"
   },
   {
-    "name": "ElasticGumbyEndpointConfig",
-    "docstring": "Configuration utility for Elastic Gumby endpoints and region mappings.",
+    "name": "TransformEndpointConfig",
+    "docstring": "Configuration utility for AWS Transform endpoints and region mappings.",
     "file": "agent_builder_sdk/utils.py"
   },
   {
@@ -341,7 +341,7 @@
   },
   {
     "name": "create_endpoint_url",
-    "docstring": "Creates the endpoint URL for Elastic Gumby services.\n\nArgs:\n    stage: Environment stage (e.g., 'prod', 'beta', 'gamma')\n    region: AWS region code\n    component_name: Service component name\n\nReturns:\n    The fully constructed endpoint URL\n\nRaises:\n    ValueError: If the provided region is not supported",
+    "docstring": "Creates the endpoint URL for AWS Transform services.\n\nArgs:\n    stage: Environment stage (e.g., 'prod', 'beta', 'gamma')\n    region: AWS region code\n    component_name: Service component name\n\nReturns:\n    The fully constructed endpoint URL\n\nRaises:\n    ValueError: If the provided region is not supported",
     "file": "agent_builder_sdk/utils.py"
   },
   {
@@ -1996,7 +1996,7 @@
   },
   {
     "name": "HitlClient",
-    "docstring": "A wrapper around Elastic Gumby's HITL (human-in-the-loop) APIs.",
+    "docstring": "A wrapper around AWS Transform's HITL (human-in-the-loop) APIs.",
     "file": "agent_builder_sdk/agentic_framework/hitl.py"
   },
   {
@@ -2216,7 +2216,7 @@
   },
   {
     "name": "AgenticApiRequestContext",
-    "docstring": "Request context for Elastic Gumby Agentic API calls.\nContains job metadata and agent identification information.",
+    "docstring": "Request context for AWS Transform Agentic API calls.\nContains job metadata and agent identification information.",
     "file": "agent_builder_sdk/agentic_framework/api_model.py"
   },
   {

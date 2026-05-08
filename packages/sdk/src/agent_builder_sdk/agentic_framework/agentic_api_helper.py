@@ -6,7 +6,7 @@ import logging
 from abc import ABC
 from typing import Any
 
-import mypy_boto3_elasticgumbyagenticservice.type_defs as eg
+import agent_builder_types.type_defs as abt
 
 from agent_builder_sdk.env_var import retrieve_auth_token
 
@@ -32,7 +32,7 @@ class AgenticApiHelper(ABC):
             raise TypeError(f"Argument '{arg_name}' must be of type {expected_type.__name__}")
         return arg_value
 
-    def _create_request_context(self) -> eg.RequestContextTypeDef:
+    def _create_request_context(self) -> abt.RequestContextTypeDef:
         """Build request context for API calls."""
         return {
             "jobMetadata": {"jobId": self.job_id, "workspaceId": self.workspace_id},

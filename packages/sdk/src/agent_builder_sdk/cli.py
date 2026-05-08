@@ -218,7 +218,7 @@ def setup_tracing(tracing_type: str):
     logger.info(f"{tracing_type} tracing configured for endpoint")
 
 
-def setup_eg_mcp_client(mcp_args: Dict[str, str]) -> MCPClient:
+def setup_ab_mcp_client(mcp_args: Dict[str, str]) -> MCPClient:
     """
     Set up and connect the MCP client using Strands framework.
 
@@ -329,7 +329,7 @@ def setup_agent(
         logging.info("Skipping setting mcp client")
         mcp_client = None
     else:
-        mcp_client = setup_eg_mcp_client(mcp_args)
+        mcp_client = setup_ab_mcp_client(mcp_args)
 
     logger.info("Initializing queue service...")
     queue_service = QueueService(storage_path=args.queueStoragePath)

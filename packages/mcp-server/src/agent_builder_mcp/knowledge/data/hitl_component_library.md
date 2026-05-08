@@ -896,7 +896,7 @@ Note: No submit button needed — the platform handles submission automatically.
 
 ## JSON Schema Reference
 
-The authoritative schema is in `ElasticGumbyUIComponents/schemaRegistry/DynamicHITLRenderEngine.schema.json`.
+The authoritative schema is in `TransformUIComponents/schemaRegistry/DynamicHITLRenderEngine.schema.json`.
 
 **Key schema rules:**
 - Every component must have a `"type"` field from the allowed enum (~53 CloudScape components + Markdown, ContentLoader)
