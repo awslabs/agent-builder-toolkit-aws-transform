@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 # flake8: noqa: N815
 # disabling mixedCaseNaming rule since this schema is trying to match Google's A2A
 

@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """Enhanced orchestrator with multi-source conversation support.
 
 This module provides an enhanced orchestrator that can handle messages from different sources

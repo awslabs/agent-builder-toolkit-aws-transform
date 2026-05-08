@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """Memory tool for Strands agents.
 
 This module provides a simplified memory tool that can store and retrieve

@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """Property-based tests for BM25 chunking and query deduplication bugs.
 
 Task 1: Bug condition exploration tests — MUST FAIL on unfixed code (failure confirms bugs exist).

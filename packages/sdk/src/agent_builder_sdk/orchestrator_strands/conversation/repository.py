@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """Repository interface for multi-source conversation management."""
 
 from abc import ABC, abstractmethod

@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """Subagent registry tools for Strands agents.
 
 This module provides tools to interact with the ATX platform's subagent registry

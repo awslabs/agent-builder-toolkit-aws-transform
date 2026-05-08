@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 from agent_builder_sdk.custom_types.extension_types import ExtensionResponse
 from agent_builder_sdk.extensions.acknowledgments.acknowledgment_handler import (
     AcknowledgmentHandler,

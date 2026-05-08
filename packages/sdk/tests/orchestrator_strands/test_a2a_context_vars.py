@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """Tests for a2a_context_id_var and a2a_user_id_var ContextVar propagation."""
 
 from unittest.mock import AsyncMock, Mock, patch
