@@ -1,0 +1,118 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - 'sdk-v*'
+      - 'mcp-server-v*'
+      - 'mcp-client-v*'
+      - 'types-v*'
+
+permissions:
+  contents: read
+  id-token: write  # Required for trusted publishing (OIDC)
+
+jobs:
+  resolve-package:
+    runs-on: ubuntu-latest
+    outputs:
+      package-path: ${{ steps.resolve.outputs.package-path }}
+      package-name: ${{ steps.resolve.outputs.package-name }}
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve package from tag
+        id: resolve
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "Tag: $TAG"
+
+          # Map tag prefix to package directory
+          if [[ "$TAG" == sdk-v* ]]; then
+            PACKAGE_PATH="packages/sdk"
+          elif [[ "$TAG" == mcp-server-v* ]]; then
+            PACKAGE_PATH="packages/mcp-server"
+          elif [[ "$TAG" == mcp-client-v* ]]; then
+            PACKAGE_PATH="packages/mcp-client"
+          elif [[ "$TAG" == types-v* ]]; then
+            PACKAGE_PATH="packages/types"
+          else
+            echo "::error::Unknown tag prefix: $TAG"
+            exit 1
+          fi
+
+          # Extract version from tag (strip prefix up to and including 'v')
+          TAG_VERSION="${TAG#*-v}"
+
+          # Read version from pyproject.toml
+          PYPROJECT_VERSION=$(python -c "
+          import tomllib
+          with open('$PACKAGE_PATH/pyproject.toml', 'rb') as f:
+              print(tomllib.load(f)['project']['version'])
+          ")
+
+          # Verify tag matches pyproject.toml
+          if [[ "$TAG_VERSION" != "$PYPROJECT_VERSION" ]]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match pyproject.toml version ($PYPROJECT_VERSION) in $PACKAGE_PATH"
+            exit 1
+          fi
+
+          PACKAGE_NAME=$(python -c "
+          import tomllib
+          with open('$PACKAGE_PATH/pyproject.toml', 'rb') as f:
+              print(tomllib.load(f)['project']['name'])
+          ")
+
+          echo "package-path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
+          echo "package-name=$PACKAGE_NAME" >> "$GITHUB_OUTPUT"
+          echo "version=$TAG_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing $PACKAGE_NAME $TAG_VERSION from $PACKAGE_PATH"
+
+  test:
+    needs: resolve-package
+    uses: ./.github/workflows/_test-package.yml
+    with:
+      package-path: ${{ needs.resolve-package.outputs.package-path }}
+      extra-deps: packages/types packages/mcp-client
+
+  build:
+    needs: [resolve-package, test]
+    runs-on: ubuntu-latest
+    outputs:
+      package-path: ${{ needs.resolve-package.outputs.package-path }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build package
+        run: python -m build ${{ needs.resolve-package.outputs.package-path }}
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: ${{ needs.resolve-package.outputs.package-path }}/dist/
+
+  publish:
+    needs: [resolve-package, build]
+    runs-on: ubuntu-latest
+    environment: pypi
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true
