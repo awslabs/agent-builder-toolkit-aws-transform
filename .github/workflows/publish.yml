@@ -9,7 +9,7 @@ on:
       - 'types-v*'
 
 permissions:
-  contents: read
+  contents: write  # Required for creating GitHub Releases
   id-token: write  # Required for trusted publishing (OIDC)
 
 jobs:
@@ -116,3 +116,35 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           attestations: true
+
+  release:
+    needs: [resolve-package, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Find previous tag for this package
+        id: prev-tag
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          PREFIX="${TAG%%-v*}"
+          PREV_TAG=$(git tag --list "${PREFIX}-v*" --sort=-v:refname | grep -v "^${TAG}$" | head -1)
+          echo "prev-tag=${PREV_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ARGS=(
+            "${{ github.ref_name }}"
+            --title "${{ needs.resolve-package.outputs.package-name }} ${{ needs.resolve-package.outputs.version }}"
+            --generate-notes
+          )
+          if [[ -n "${{ steps.prev-tag.outputs.prev-tag }}" ]]; then
+            ARGS+=(--notes-start-tag "${{ steps.prev-tag.outputs.prev-tag }}")
+          fi
+          gh release create "${ARGS[@]}"
