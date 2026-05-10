@@ -15,7 +15,7 @@ def print_info() -> None:
         "Type annotations for boto3.TransformAgenticService 1.42.95\n"
         "Version:         1.42.95\n"
         "Builder version: 4.22.1\n"
-        "Docs:            https://pypi.org/project/agent-builder-types/\n"
+        "Docs:            https://pypi.org/project/agent-builder-types-aws-transform/\n"
         "Other services:  https://pypi.org/project/boto3-stubs/\n"
         "Changelog:       https://github.com/vemel/mypy_boto3_builder/releases"
     )

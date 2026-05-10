@@ -7,7 +7,7 @@ Install this alongside `boto3` and your type checker (mypy, pyright, Pylance) an
 ## Installation
 
 ```bash
-pip install agent-builder-types
+pip install agent-builder-types-aws-transform
 ```
 
 ## Usage
