@@ -9,7 +9,6 @@ from mcp.server.fastmcp import FastMCP
 from agent_builder_mcp.tools.agent import register_agent_tools
 from agent_builder_mcp.tools.cloudwatch import register_cloudwatch_tools
 from agent_builder_mcp.tools.deployment import register_deployment_tools
-from agent_builder_mcp.tools.diagnosis import register_diagnosis_tools
 from agent_builder_mcp.tools.search import register_search_tools
 from agent_builder_mcp.tools.skill_operations import register_skill_operations_tools
 from agent_builder_mcp.tools.validation import register_validation_tools
@@ -54,7 +53,6 @@ async def run_server() -> None:
     register_deployment_tools(mcp)
     register_agent_tools(mcp)
     register_skill_operations_tools(mcp)
-    register_diagnosis_tools(mcp)
     register_validation_tools(mcp)
     register_cloudwatch_tools(mcp)
 
