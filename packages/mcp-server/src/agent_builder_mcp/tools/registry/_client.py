@@ -7,7 +7,7 @@ from typing import Any
 
 import boto3
 
-SERVICE_NAME = "atxagentregistryexternal"
+SERVICE_NAME = "awstransformagentregistryexternal"
 
 REGION_TO_AIRPORT_CODE = {
     "us-east-1": "iad",
