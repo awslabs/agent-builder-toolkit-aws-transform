@@ -26,6 +26,11 @@ jobs:
     with:
       package-path: packages/mcp-server
 
+  agentic-mcp-server:
+    uses: ./.github/workflows/_test-package.yml
+    with:
+      package-path: packages/agentic-mcp-server
+
   sdk:
     uses: ./.github/workflows/_test-package.yml
     with:
@@ -71,7 +76,7 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
-    needs: [types, mcp-client, mcp-server, sdk]
+    needs: [types, mcp-client, mcp-server, agentic-mcp-server, sdk]
     steps:
       - uses: actions/checkout@v4
 
@@ -85,6 +90,7 @@ jobs:
           pip install -e packages/types
           pip install -e packages/mcp-client
           pip install -e packages/mcp-server
+          pip install -e packages/agentic-mcp-server
           pip install -e packages/sdk
 
       - name: Verify cross-package imports
@@ -92,9 +98,11 @@ jobs:
           python -c "import agent_builder_types; print('types OK')"
           python -c "import agent_builder_mcp_client; print('mcp-client OK')"
           python -c "import agent_builder_mcp; print('mcp-server OK')"
+          python -c "import agent_builder_agentic_mcp; print('agentic-mcp OK')"
           python -c "import agent_builder_sdk; print('sdk OK')"
 
       - name: Verify CLI entrypoints
         run: |
           agent-builder-mcp --help
+          agent-builder-agentic-mcp --help
           agent-builder-sdk --help
