@@ -23,7 +23,8 @@ Add the server to Kiro's MCP configuration:
 {
   "mcpServers": {
     "agent-builder": {
-      "command": "agent-builder-mcp"
+      "command": "uvx",
+      "args": ["agent-builder-mcp-aws-transform"]
     }
   }
 }
