@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-builder-mcp-aws-transform"
+version = "0.0.1"
+description = "Placeholder package. The real release is coming soon."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "AWS Transform Team" }]
+license = "Apache-2.0"
+license-files = ["LICEN[CS]E*", "NOTICE*"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
