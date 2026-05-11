@@ -70,8 +70,18 @@ def setup_kb() -> VectorStoreIndex:
         sdk_data = json.load(f)
     logger.debug(f"Loaded {len(sdk_data)} SDK documentation entries")
     for item in sdk_data:
-        doc_text = f"# {item['name']}\n\n{item['docstring']}"
-        documents.append(Document(text=doc_text, metadata={"source": "sdk", "name": item["name"]}))
+        parts = [f"# {item['name']}"]
+        if item.get("signature"):
+            parts.append(f"Signature: {item['signature']}")
+        if item.get("docstring"):
+            parts.append(item["docstring"])
+        if item.get("description"):
+            parts.append(item["description"])
+        doc_text = "\n\n".join(parts)
+        metadata = {"source": "sdk", "name": item["name"]}
+        if item.get("file"):
+            metadata["file"] = item["file"]
+        documents.append(Document(text=doc_text, metadata=metadata))
 
     logger.debug(f"Loading Agentic API specs from {AGENTIC_API_SPEC_PATH}")
     documents.extend(load_api_specs(str(AGENTIC_API_SPEC_PATH)))

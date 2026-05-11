@@ -32,6 +32,34 @@ jobs:
       package-path: packages/sdk
       extra-deps: packages/types packages/mcp-client
 
+  docs-freshness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Lint scripts and tests
+        run: |
+          pip install ruff pytest
+          ruff check scripts/ tests/
+
+      - name: Run generator tests
+        run: python -m pytest tests/ -v --tb=short
+
+      - name: Regenerate sdk_docs.json
+        run: python scripts/generate_sdk_docs.py
+
+      - name: Check for drift
+        run: |
+          if ! git diff --exit-code packages/mcp-server/src/agent_builder_mcp/knowledge/data/sdk_docs.json; then
+            echo "::error::sdk_docs.json is stale. Run 'python scripts/generate_sdk_docs.py' and commit the result."
+            exit 1
+          fi
+
   integration:
     runs-on: ubuntu-latest
     needs: [types, mcp-client, mcp-server, sdk]
