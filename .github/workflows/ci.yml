@@ -67,12 +67,12 @@ jobs:
 
       - name: Check botocore model sync
         run: |
-          diff packages/sdk/botocore-models/awstransformagenticservice/2018-05-10/service-2.json \
+          diff packages/sdk/src/agent_builder_sdk/botocore_models/transformagenticservice/2018-05-10/service-2.json \
                packages/mcp-server/src/agent_builder_mcp/knowledge/data/agentic_api.json \
-            || { echo "::error::agentic_api.json is out of sync. Run: cp packages/sdk/botocore-models/awstransformagenticservice/2018-05-10/service-2.json packages/mcp-server/src/agent_builder_mcp/knowledge/data/agentic_api.json"; exit 1; }
-          diff packages/sdk/botocore-models/awstransformagentregistryexternal/2022-07-26/service-2.json \
+            || { echo "::error::agentic_api.json is out of sync. Run: cp packages/sdk/src/agent_builder_sdk/botocore_models/transformagenticservice/2018-05-10/service-2.json packages/mcp-server/src/agent_builder_mcp/knowledge/data/agentic_api.json"; exit 1; }
+          diff packages/sdk/src/agent_builder_sdk/botocore_models/atxagentregistryexternal/2022-07-26/service-2.json \
                packages/mcp-server/src/agent_builder_mcp/knowledge/data/registry_api.json \
-            || { echo "::error::registry_api.json is out of sync. Run: cp packages/sdk/botocore-models/awstransformagentregistryexternal/2022-07-26/service-2.json packages/mcp-server/src/agent_builder_mcp/knowledge/data/registry_api.json"; exit 1; }
+            || { echo "::error::registry_api.json is out of sync. Run: cp packages/sdk/src/agent_builder_sdk/botocore_models/atxagentregistryexternal/2022-07-26/service-2.json packages/mcp-server/src/agent_builder_mcp/knowledge/data/registry_api.json"; exit 1; }
 
   integration:
     runs-on: ubuntu-latest

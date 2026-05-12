@@ -3,16 +3,16 @@
   "metadata":{
     "apiVersion":"2018-05-10",
     "auth":["aws.auth#sigv4"],
-    "endpointPrefix":"elasticgumbyagenticservice",
+    "endpointPrefix":"transformagenticservice",
     "jsonVersion":"1.0",
     "protocol":"json",
     "protocols":["json"],
-    "serviceFullName":"ElasticGumbyAgenticService",
-    "serviceId":"ElasticGumbyAgentic",
+    "serviceFullName":"TransformAgenticService",
+    "serviceId":"TransformAgents",
     "signatureVersion":"v4",
-    "signingName":"eg-agenticapi",
-    "targetPrefix":"ElasticGumbyAgenticService",
-    "uid":"elasticgumbyagentic-2018-05-10"
+    "signingName":"transform-agents",
+    "targetPrefix":"TransformAgenticService",
+    "uid":"transformagents-2018-05-10"
   },
   "operations":{
     "AcknowledgeDeletion":{
@@ -508,6 +508,30 @@
       ],
       "documentation":"<p>API used by agents to get temporary credentials for a given IAM role</p>"
     },
+    "GetUMR":{
+      "name":"GetUMR",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"GetUMRRequest"},
+      "output":{"shape":"GetUMRResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ConflictException"},
+        {"shape":"FileAlreadyExistsException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"DependencyInternalServerException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"TerminalResourceException"},
+        {"shape":"CustomerConfigurationException"}
+      ],
+      "documentation":"<p>Retrieves the full UMR record for an engagement.</p>",
+      "readonly":true
+    },
     "GetUsage":{
       "name":"GetUsage",
       "http":{
@@ -719,29 +743,6 @@
       "documentation":"<p>API to allow retrieval of worklogs for a specific job.</p>",
       "idempotent":true
     },
-    "PreProdTestOperation":{
-      "name":"PreProdTestOperation",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"PreProdTestOperationRequest"},
-      "output":{"shape":"PreProdTestOperationResponse"},
-      "errors":[
-        {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
-        {"shape":"FileAlreadyExistsException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"DependencyInternalServerException"},
-        {"shape":"ServiceQuotaExceededException"},
-        {"shape":"InternalServerException"},
-        {"shape":"ValidationException"},
-        {"shape":"TerminalResourceException"},
-        {"shape":"CustomerConfigurationException"}
-      ],
-      "documentation":"<p>Internal API meant for testing.</p>"
-    },
     "PublishMeteringEvent":{
       "name":"PublishMeteringEvent",
       "http":{
@@ -763,6 +764,54 @@
         {"shape":"TerminalResourceException"},
         {"shape":"CustomerConfigurationException"}
       ]
+    },
+    "PutAgreement":{
+      "name":"PutAgreement",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"PutAgreementRequest"},
+      "output":{"shape":"PutAgreementResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ConflictException"},
+        {"shape":"FileAlreadyExistsException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"DependencyInternalServerException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"TerminalResourceException"},
+        {"shape":"CustomerConfigurationException"}
+      ],
+      "documentation":"<p>Creates or updates agreement details for a UMR engagement.</p>",
+      "idempotent":true
+    },
+    "PutEligibility":{
+      "name":"PutEligibility",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"PutEligibilityRequest"},
+      "output":{"shape":"PutEligibilityResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ConflictException"},
+        {"shape":"FileAlreadyExistsException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"DependencyInternalServerException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"TerminalResourceException"},
+        {"shape":"CustomerConfigurationException"}
+      ],
+      "documentation":"<p>Creates or updates eligibility assessment for a UMR engagement.</p>",
+      "idempotent":true
     },
     "PutJobPlan":{
       "name":"PutJobPlan",
@@ -786,6 +835,54 @@
         {"shape":"CustomerConfigurationException"}
       ],
       "documentation":"<p>API used by agents to put a job plan</p>",
+      "idempotent":true
+    },
+    "PutMigrationPlan":{
+      "name":"PutMigrationPlan",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"PutMigrationPlanRequest"},
+      "output":{"shape":"PutMigrationPlanResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ConflictException"},
+        {"shape":"FileAlreadyExistsException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"DependencyInternalServerException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"TerminalResourceException"},
+        {"shape":"CustomerConfigurationException"}
+      ],
+      "documentation":"<p>Creates or updates a migration plan for a UMR engagement.</p>",
+      "idempotent":true
+    },
+    "PutPartnerDetails":{
+      "name":"PutPartnerDetails",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"PutPartnerDetailsRequest"},
+      "output":{"shape":"PutPartnerDetailsResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ConflictException"},
+        {"shape":"FileAlreadyExistsException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"DependencyInternalServerException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"TerminalResourceException"},
+        {"shape":"CustomerConfigurationException"}
+      ],
+      "documentation":"<p>Creates or updates partner details for a UMR engagement.</p>",
       "idempotent":true
     },
     "RefreshAuthToken":{
@@ -833,6 +930,29 @@
         {"shape":"CustomerConfigurationException"}
       ],
       "documentation":"<p>API used by agents to register a document to knowledge base</p>"
+    },
+    "RestoreAgent":{
+      "name":"RestoreAgent",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"RestoreAgentRequest"},
+      "output":{"shape":"RestoreAgentResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ConflictException"},
+        {"shape":"FileAlreadyExistsException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"DependencyInternalServerException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"TerminalResourceException"},
+        {"shape":"CustomerConfigurationException"}
+      ],
+      "documentation":"<p>API used to restore an agent instance, supporting session chaining when an agent is approaching the max session lifetime</p>"
     },
     "RetrieveFromKnowledgeBase":{
       "name":"RetrieveFromKnowledgeBase",
@@ -925,29 +1045,6 @@
       ],
       "idempotent":true
     },
-    "StartJob":{
-      "name":"StartJob",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"StartJobRequest"},
-      "output":{"shape":"StartJobResponse"},
-      "errors":[
-        {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
-        {"shape":"FileAlreadyExistsException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"DependencyInternalServerException"},
-        {"shape":"ServiceQuotaExceededException"},
-        {"shape":"InternalServerException"},
-        {"shape":"ValidationException"},
-        {"shape":"TerminalResourceException"},
-        {"shape":"CustomerConfigurationException"}
-      ],
-      "documentation":"<p>API used by orchestrator agents to start a job</p>"
-    },
     "StartKnowledgeBaseIngestion":{
       "name":"StartKnowledgeBaseIngestion",
       "http":{
@@ -992,29 +1089,6 @@
         {"shape":"TerminalResourceException"},
         {"shape":"CustomerConfigurationException"}
       ]
-    },
-    "TestOperation":{
-      "name":"TestOperation",
-      "http":{
-        "method":"POST",
-        "requestUri":"/"
-      },
-      "input":{"shape":"TestOperationRequest"},
-      "output":{"shape":"TestOperationResponse"},
-      "errors":[
-        {"shape":"ThrottlingException"},
-        {"shape":"ConflictException"},
-        {"shape":"FileAlreadyExistsException"},
-        {"shape":"AccessDeniedException"},
-        {"shape":"ResourceNotFoundException"},
-        {"shape":"DependencyInternalServerException"},
-        {"shape":"ServiceQuotaExceededException"},
-        {"shape":"InternalServerException"},
-        {"shape":"ValidationException"},
-        {"shape":"TerminalResourceException"},
-        {"shape":"CustomerConfigurationException"}
-      ],
-      "documentation":"<p>Internal API meant for testing.</p>"
     },
     "UpdateAgentInstance":{
       "name":"UpdateAgentInstance",
@@ -1085,6 +1159,30 @@
         {"shape":"CustomerConfigurationException"}
       ],
       "documentation":"<p>API used by agents to update the status of a job they are operating on.</p>",
+      "idempotent":true
+    },
+    "UpdateUMRStatus":{
+      "name":"UpdateUMRStatus",
+      "http":{
+        "method":"POST",
+        "requestUri":"/"
+      },
+      "input":{"shape":"UpdateUMRStatusRequest"},
+      "output":{"shape":"UpdateUMRStatusResponse"},
+      "errors":[
+        {"shape":"ThrottlingException"},
+        {"shape":"ConflictException"},
+        {"shape":"FileAlreadyExistsException"},
+        {"shape":"AccessDeniedException"},
+        {"shape":"ResourceNotFoundException"},
+        {"shape":"DependencyInternalServerException"},
+        {"shape":"ServiceQuotaExceededException"},
+        {"shape":"InternalServerException"},
+        {"shape":"ValidationException"},
+        {"shape":"TerminalResourceException"},
+        {"shape":"CustomerConfigurationException"}
+      ],
+      "documentation":"<p>Updates the status of a UMR engagement.</p>",
       "idempotent":true
     }
   },
@@ -1173,7 +1271,8 @@
         "agentCard":{
           "shape":"Document",
           "documentation":"<p>JSON containing A2A-style Card Data</p>"
-        }
+        },
+        "monitoringType":{"shape":"MonitoringType"}
       }
     },
     "AgentConfigurationAvailability":{
@@ -1714,7 +1813,6 @@
         "label":{"shape":"Label"},
         "planStepId":{"shape":"StepId"},
         "visibility":{"shape":"Visibility"},
-        "metadata":{"shape":"MetadataContext"},
         "fileMetadata":{"shape":"FileMetadata"}
       }
     },
@@ -2121,8 +2219,7 @@
       ],
       "members":{
         "artifact":{"shape":"Artifact"},
-        "isS3ObjectPresent":{"shape":"IsS3ObjectPresent"},
-        "metadata":{"shape":"MetadataContext"}
+        "isS3ObjectPresent":{"shape":"IsS3ObjectPresent"}
       }
     },
     "GetConnectorRequest":{
@@ -2271,6 +2368,32 @@
       "members":{
         "temporaryCredentials":{"shape":"TemporaryCredentials"},
         "roleArn":{"shape":"NonBlankString"}
+      }
+    },
+    "GetUMRRequest":{
+      "type":"structure",
+      "required":["requestContext"],
+      "members":{
+        "requestContext":{"shape":"RequestContext"}
+      }
+    },
+    "GetUMRResponse":{
+      "type":"structure",
+      "required":[
+        "customerAccountId",
+        "projectName",
+        "status",
+        "version"
+      ],
+      "members":{
+        "customerAccountId":{"shape":"String"},
+        "projectName":{"shape":"String"},
+        "status":{"shape":"UmrStatus"},
+        "version":{"shape":"Integer"},
+        "plan":{"shape":"UmrMigrationPlan"},
+        "eligibility":{"shape":"UmrEligibility"},
+        "agreements":{"shape":"UmrAgreements"},
+        "partners":{"shape":"UmrPartnerDetailsList"}
       }
     },
     "GetUsageRequest":{
@@ -2837,13 +2960,6 @@
       "type":"long",
       "box":true
     },
-    "MetadataContext":{
-      "type":"structure",
-      "members":{
-        "schemaVersion":{"shape":"String"},
-        "content":{"shape":"Document"}
-      }
-    },
     "MetadataKey":{
       "type":"string",
       "max":200,
@@ -2903,6 +3019,13 @@
       "max":20,
       "min":0
     },
+    "MonitoringType":{
+      "type":"string",
+      "enum":[
+        "HEARTBEAT",
+        "HEALTHCHECK"
+      ]
+    },
     "NonBlankString":{
       "type":"string",
       "max":2048,
@@ -2961,17 +3084,6 @@
         "description":{"shape":"StepDescription"}
       }
     },
-    "PreProdTestOperationRequest":{
-      "type":"structure",
-      "required":["requestContext"],
-      "members":{
-        "requestContext":{"shape":"RequestContext"}
-      }
-    },
-    "PreProdTestOperationResponse":{
-      "type":"structure",
-      "members":{}
-    },
     "PublishMeteringEventRequest":{
       "type":"structure",
       "required":[
@@ -3001,6 +3113,63 @@
     "PublishMeteringEventResponse":{
       "type":"structure",
       "members":{}
+    },
+    "PutAgreementRequest":{
+      "type":"structure",
+      "required":[
+        "requestContext",
+        "agreementId",
+        "agreementStatus"
+      ],
+      "members":{
+        "requestContext":{"shape":"RequestContext"},
+        "agreementId":{"shape":"String"},
+        "agreementStatus":{"shape":"UmrAgreementStatus"},
+        "agreementType":{"shape":"UmrIncentiveType"},
+        "executedTimestamp":{"shape":"Timestamp"},
+        "amendmentVersion":{"shape":"Integer"},
+        "agreementUrl":{"shape":"String"},
+        "signedBy":{"shape":"String"},
+        "awsSignatory":{"shape":"String"},
+        "idempotencyToken":{
+          "shape":"Uuid",
+          "idempotencyToken":true
+        }
+      }
+    },
+    "PutAgreementResponse":{
+      "type":"structure",
+      "required":["version"],
+      "members":{
+        "version":{"shape":"Integer"}
+      }
+    },
+    "PutEligibilityRequest":{
+      "type":"structure",
+      "required":[
+        "requestContext",
+        "outcome",
+        "assessmentDate"
+      ],
+      "members":{
+        "requestContext":{"shape":"RequestContext"},
+        "outcome":{"shape":"UmrEligibilityOutcome"},
+        "assessmentDate":{"shape":"Timestamp"},
+        "assessmentScore":{"shape":"Integer"},
+        "riskLevel":{"shape":"UmrRiskLevel"},
+        "qualificationCriteria":{"shape":"UmrQualificationCriteriaMap"},
+        "idempotencyToken":{
+          "shape":"Uuid",
+          "idempotencyToken":true
+        }
+      }
+    },
+    "PutEligibilityResponse":{
+      "type":"structure",
+      "required":["version"],
+      "members":{
+        "version":{"shape":"Integer"}
+      }
     },
     "PutJobPlanMode":{
       "type":"structure",
@@ -3044,6 +3213,68 @@
         "COMPLETED",
         "IN_PROGRESS"
       ]
+    },
+    "PutMigrationPlanRequest":{
+      "type":"structure",
+      "required":[
+        "requestContext",
+        "incentiveType",
+        "startDate",
+        "endDate",
+        "creditCap"
+      ],
+      "members":{
+        "requestContext":{"shape":"RequestContext"},
+        "incentiveType":{"shape":"UmrIncentiveType"},
+        "startDate":{"shape":"Timestamp"},
+        "endDate":{"shape":"Timestamp"},
+        "creditCap":{"shape":"Double"},
+        "creditPercentage":{"shape":"Double"},
+        "linkedAccountDisbursement":{"shape":"Boolean"},
+        "baselineSpend":{"shape":"UmrBaselineSpendMap"},
+        "programFlags":{"shape":"UmrProgramFlagsMap"},
+        "partnerSpmsId":{"shape":"String"},
+        "idempotencyToken":{
+          "shape":"Uuid",
+          "idempotencyToken":true
+        }
+      }
+    },
+    "PutMigrationPlanResponse":{
+      "type":"structure",
+      "required":["version"],
+      "members":{
+        "version":{"shape":"Integer"}
+      }
+    },
+    "PutPartnerDetailsRequest":{
+      "type":"structure",
+      "required":[
+        "requestContext",
+        "partnerAccountId",
+        "partnerName"
+      ],
+      "members":{
+        "requestContext":{"shape":"RequestContext"},
+        "partnerAccountId":{"shape":"String"},
+        "partnerName":{"shape":"String"},
+        "partnerType":{"shape":"UmrPartnerType"},
+        "migrationPhase":{"shape":"UmrMigrationPhase"},
+        "prmId":{"shape":"String"},
+        "workspaceId":{"shape":"String"},
+        "resources":{"shape":"UmrResources"},
+        "idempotencyToken":{
+          "shape":"Uuid",
+          "idempotencyToken":true
+        }
+      }
+    },
+    "PutPartnerDetailsResponse":{
+      "type":"structure",
+      "required":["version"],
+      "members":{
+        "version":{"shape":"Integer"}
+      }
     },
     "RefreshAuthTokenRequest":{
       "type":"structure",
@@ -3178,6 +3409,33 @@
       "member":{"shape":"ResourceType"},
       "max":20,
       "min":1
+    },
+    "RestoreAgentRequest":{
+      "type":"structure",
+      "required":[
+        "requestContext",
+        "agentId",
+        "agentInstanceId",
+        "agentType"
+      ],
+      "members":{
+        "requestContext":{"shape":"RequestContext"},
+        "agentId":{"shape":"AgentId"},
+        "agentInstanceId":{"shape":"Uuid"},
+        "agentType":{"shape":"AgentType"},
+        "agentVersion":{
+          "shape":"AgentVersion",
+          "documentation":"<p>The version of the agent to restore. If not provided, the version associated with the running job will be used.</p>"
+        },
+        "idempotencyToken":{
+          "shape":"Uuid",
+          "idempotencyToken":true
+        }
+      }
+    },
+    "RestoreAgentResponse":{
+      "type":"structure",
+      "members":{}
     },
     "RetrievalConfiguration":{
       "type":"structure",
@@ -3481,23 +3739,6 @@
         "hitlTaskStatus":{"shape":"HitlTaskStatus"}
       }
     },
-    "StartJobRequest":{
-      "type":"structure",
-      "required":["requestContext"],
-      "members":{
-        "requestContext":{"shape":"RequestContext"},
-        "idempotencyToken":{
-          "shape":"Uuid",
-          "idempotencyToken":true
-        }
-      }
-    },
-    "StartJobResponse":{
-      "type":"structure",
-      "members":{
-        "status":{"shape":"JobStatus"}
-      }
-    },
     "StartKnowledgeBaseIngestionRequest":{
       "type":"structure",
       "required":[
@@ -3612,17 +3853,6 @@
       },
       "exception":true
     },
-    "TestOperationRequest":{
-      "type":"structure",
-      "required":["requestContext"],
-      "members":{
-        "requestContext":{"shape":"RequestContext"}
-      }
-    },
-    "TestOperationResponse":{
-      "type":"structure",
-      "members":{}
-    },
     "ThrottlingException":{
       "type":"structure",
       "required":["message"],
@@ -3643,6 +3873,207 @@
       }
     },
     "Timestamp":{"type":"timestamp"},
+    "UmrAgreement":{
+      "type":"structure",
+      "required":[
+        "agreementId",
+        "agreementStatus"
+      ],
+      "members":{
+        "agreementId":{"shape":"String"},
+        "agreementStatus":{"shape":"UmrAgreementStatus"},
+        "agreementType":{"shape":"UmrIncentiveType"},
+        "executedTimestamp":{"shape":"Timestamp"},
+        "amendmentVersion":{"shape":"Integer"},
+        "agreementUrl":{"shape":"String"},
+        "signedBy":{"shape":"String"},
+        "awsSignatory":{"shape":"String"},
+        "createdAt":{"shape":"Timestamp"},
+        "updatedAt":{"shape":"Timestamp"}
+      }
+    },
+    "UmrAgreementStatus":{
+      "type":"string",
+      "enum":[
+        "PENDING",
+        "EXECUTED",
+        "AMENDED",
+        "TERMINATED"
+      ]
+    },
+    "UmrAgreements":{
+      "type":"list",
+      "member":{"shape":"UmrAgreement"}
+    },
+    "UmrBaselineSpendMap":{
+      "type":"map",
+      "key":{"shape":"String"},
+      "value":{"shape":"Double"}
+    },
+    "UmrEligibility":{
+      "type":"structure",
+      "required":[
+        "outcome",
+        "assessmentDate"
+      ],
+      "members":{
+        "outcome":{"shape":"UmrEligibilityOutcome"},
+        "assessmentDate":{"shape":"Timestamp"},
+        "assessmentScore":{"shape":"Integer"},
+        "riskLevel":{"shape":"UmrRiskLevel"},
+        "qualificationCriteria":{"shape":"UmrQualificationCriteriaMap"},
+        "createdAt":{"shape":"Timestamp"},
+        "updatedAt":{"shape":"Timestamp"}
+      }
+    },
+    "UmrEligibilityOutcome":{
+      "type":"string",
+      "enum":[
+        "APPROVED",
+        "DENIED",
+        "PENDING"
+      ]
+    },
+    "UmrIncentiveType":{
+      "type":"string",
+      "enum":[
+        "CREDIT",
+        "CASH",
+        "CASH_AND_CREDIT"
+      ]
+    },
+    "UmrMigrationPhase":{
+      "type":"string",
+      "enum":[
+        "ASSESS",
+        "MOBILIZE",
+        "MIGRATE",
+        "MODERNIZE"
+      ]
+    },
+    "UmrMigrationPlan":{
+      "type":"structure",
+      "required":[
+        "incentiveType",
+        "startDate",
+        "endDate",
+        "creditCap"
+      ],
+      "members":{
+        "incentiveType":{"shape":"UmrIncentiveType"},
+        "startDate":{"shape":"Timestamp"},
+        "endDate":{"shape":"Timestamp"},
+        "creditCap":{"shape":"Double"},
+        "creditPercentage":{"shape":"Double"},
+        "linkedAccountDisbursement":{"shape":"Boolean"},
+        "baselineSpend":{"shape":"UmrBaselineSpendMap"},
+        "programFlags":{"shape":"UmrProgramFlagsMap"},
+        "partnerSpmsId":{"shape":"String"},
+        "createdAt":{"shape":"Timestamp"},
+        "updatedAt":{"shape":"Timestamp"}
+      }
+    },
+    "UmrPartnerDetails":{
+      "type":"structure",
+      "required":[
+        "partnerAccountId",
+        "partnerName"
+      ],
+      "members":{
+        "partnerAccountId":{"shape":"String"},
+        "partnerName":{"shape":"String"},
+        "partnerType":{"shape":"UmrPartnerType"},
+        "migrationPhase":{"shape":"UmrMigrationPhase"},
+        "prmId":{"shape":"String"},
+        "workspaceId":{"shape":"String"},
+        "resources":{"shape":"UmrResources"},
+        "createdAt":{"shape":"Timestamp"},
+        "updatedAt":{"shape":"Timestamp"}
+      }
+    },
+    "UmrPartnerDetailsList":{
+      "type":"list",
+      "member":{"shape":"UmrPartnerDetails"}
+    },
+    "UmrPartnerType":{
+      "type":"string",
+      "enum":[
+        "SOLUTION_PROVIDER",
+        "DISTRIBUTOR",
+        "SYSTEM_INTEGRATOR",
+        "CONSULTING_PARTNER",
+        "MANAGED_SERVICE_PROVIDER"
+      ]
+    },
+    "UmrProgramFlagsMap":{
+      "type":"map",
+      "key":{"shape":"String"},
+      "value":{"shape":"Boolean"}
+    },
+    "UmrQualificationCriteriaMap":{
+      "type":"map",
+      "key":{"shape":"String"},
+      "value":{"shape":"Boolean"}
+    },
+    "UmrResource":{
+      "type":"structure",
+      "required":[
+        "resourceType",
+        "resourceId",
+        "status"
+      ],
+      "members":{
+        "resourceType":{"shape":"UmrResourceType"},
+        "resourceId":{"shape":"String"},
+        "status":{"shape":"UmrResourceStatus"},
+        "metadata":{"shape":"UmrResourceMetadataMap"},
+        "createdAt":{"shape":"Timestamp"}
+      }
+    },
+    "UmrResourceMetadataMap":{
+      "type":"map",
+      "key":{"shape":"String"},
+      "value":{"shape":"String"}
+    },
+    "UmrResourceStatus":{
+      "type":"string",
+      "enum":[
+        "SUBMITTED",
+        "APPROVED",
+        "DENIED",
+        "PENDING"
+      ]
+    },
+    "UmrResourceType":{
+      "type":"string",
+      "enum":[
+        "BENEFIT_APPLICATION",
+        "OPPORTUNITY",
+        "BENEFIT_ALLOCATION",
+        "MIGRATION_ENGAGEMENT_RECORD",
+        "OTHER"
+      ]
+    },
+    "UmrResources":{
+      "type":"list",
+      "member":{"shape":"UmrResource"}
+    },
+    "UmrRiskLevel":{
+      "type":"string",
+      "enum":[
+        "LOW",
+        "MEDIUM",
+        "HIGH"
+      ]
+    },
+    "UmrStatus":{
+      "type":"string",
+      "enum":[
+        "ACTIVE",
+        "COMPLETED",
+        "CANCELLED"
+      ]
+    },
     "UpdateAgentInstanceRequest":{
       "type":"structure",
       "required":[
@@ -3708,6 +4139,28 @@
     "UpdateJobStatusResponse":{
       "type":"structure",
       "members":{}
+    },
+    "UpdateUMRStatusRequest":{
+      "type":"structure",
+      "required":[
+        "requestContext",
+        "status"
+      ],
+      "members":{
+        "requestContext":{"shape":"RequestContext"},
+        "status":{"shape":"UmrStatus"},
+        "idempotencyToken":{
+          "shape":"Uuid",
+          "idempotencyToken":true
+        }
+      }
+    },
+    "UpdateUMRStatusResponse":{
+      "type":"structure",
+      "required":["version"],
+      "members":{
+        "version":{"shape":"Integer"}
+      }
     },
     "Uuid":{
       "type":"string",
