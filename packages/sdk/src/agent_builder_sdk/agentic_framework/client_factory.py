@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 
 # Service constants
-ATX_AGENTIC_API_SERVICE_NAME = "awstransformagenticservice"
+ATX_AGENTIC_API_SERVICE_NAME = "transformagenticservice"
 ATX_AGENTIC_API_COMPONENT_NAME = "agenticapi"
 ATX_EXTERNAL_AGENTIC_API_SERVICE_NAME = "transformagenticservice"
 

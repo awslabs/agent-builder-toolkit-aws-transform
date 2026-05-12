@@ -25,7 +25,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-ATX_AGENTIC_API_SERVICE_NAME = "awstransformagenticservice"
+ATX_AGENTIC_API_SERVICE_NAME = "transformagenticservice"
 ATX_EXTERNAL_AGENTIC_API_SERVICE_NAME = "transformagenticservice"
 
 

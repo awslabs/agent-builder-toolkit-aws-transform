@@ -21,7 +21,7 @@ def test_create_agentic_api_client_with_endpoint_url(mock_boto_client):
     assert result == mock_client
     mock_boto_client.assert_called_once()
     call_args = mock_boto_client.call_args
-    assert call_args[1]["service_name"] == "awstransformagenticservice"
+    assert call_args[1]["service_name"] == "transformagenticservice"
     assert call_args[1]["endpoint_url"] == "https://test-endpoint.com"
     assert call_args[1]["region_name"] == "us-west-2"
 
