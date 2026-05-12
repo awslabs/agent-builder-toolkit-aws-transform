@@ -46,3 +46,9 @@ def sdk_docs_json_path():
     if not path.exists():
         pytest.skip("Committed sdk_docs.json not found")
     return path
+
+
+@pytest.fixture(scope="session")
+def repo_root():
+    """Path to the repository root."""
+    return REPO_ROOT
