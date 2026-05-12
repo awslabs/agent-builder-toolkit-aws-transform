@@ -1002,10 +1002,10 @@ Minimal IAM user/role policy:
             "Resource": "*"
         },
         {
-            "Sid": "atxPolicy",
+            "Sid": "TransformAgentsApiPolicy",
             "Effect": "Allow",
             "Action": [
-                "eg-agenticapi:*"
+                "transform-agents:*"
             ],
             "Resource": "*"
         }
@@ -1017,7 +1017,7 @@ Default Bedrock Model: us.anthropic.claude-sonnet-4-5-20250929-v1:0
 
 IMPORTANT: Always use cross-region inference profile IDs (prefixed with "us.") instead of raw model IDs when calling Bedrock. Raw model IDs like "anthropic.claude-sonnet-4-5-20250929-v1:0" will fail with "Invocation with on-demand throughput isn't supported". Use "us.anthropic.claude-sonnet-4-5-20250929-v1:0" instead.
 
-NOTE: When adding permissions for eg-agenticapi using the IAM console would show an Error indicating Invalid Service in Action (sample image below). This is because the service is not a public AWS Service. This is not a blocker, and clicking the Next should create the IAM policy.
+NOTE: When adding permissions for transform-agents using the IAM console, it may show an Error indicating Invalid Service in Action (sample image below). This is because the service is not yet a public AWS Service. This is not a blocker, and clicking the Next should create the IAM policy.
 
 IAM Console Error
 
@@ -1187,18 +1187,14 @@ Resources:
                   - "arn:aws:bedrock:*::foundation-model/*"
                   - "arn:aws:bedrock:us-east-1:XXXXXXXXXXXX:*"
 
-              - Sid: AWSTransformPlatformInvocation
+              - Sid: TransformAgentsApiPolicy
                 Effect: Allow
                 Action:
-                  - "eg-agenticapi:*"
+                  - "transform-agents:*"
                 Resource:
                   - "*"
 
-NOTE: When adding permissions for eg-agenticapi using the IAM console, it would show an Error indicating Invalid Service in Action (sample image below). This is because the service is not a public AWS Service. 
-
-This is not a blocker, and clicking the Next should create the IAM policy.
-
-Figure. IAM Console Error (you may see an Invalid Servie in Action error when adding roles with eg-agenticapi related actions, this error can be safely ignored; AWS Transform will provide public facing APIs for partner development testing to remove this error mesage)
+NOTE: When adding permissions for transform-agents using the IAM console, it may show an Error indicating Invalid Service in Action. This is because the service is not yet a public AWS Service. This is not a blocker, and clicking Next should create the IAM policy.
 
 ### Create Bedrock AgentCore Runtime
 
@@ -1597,33 +1593,13 @@ Then add below inline policy named as `AWSTransformAgent-AgentCoreExecutionRoleP
 
         {
 
-            "Sid": "ExternalAgenticApiPolicy",
+            "Sid": "TransformAgentsApiPolicy",
 
             "Effect": "Allow",
 
             "Action": [
 
                 "transform-agents:*"
-
-            ],
-
-            "Resource": [
-
-                "*"
-
-            ]
-
-        },
-
-        {
-
-            "Sid": "InternalAgenticApiPolicy",
-
-            "Effect": "Allow",
-
-            "Action": [
-
-                "eg-agenticapi:*"
 
             ],
 
