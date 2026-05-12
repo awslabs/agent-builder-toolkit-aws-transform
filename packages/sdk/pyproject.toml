@@ -19,6 +19,8 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+    "agent-builder-types-aws-transform>=1.0",
+    "agent-builder-mcp-client-aws-transform>=1.0",
     "boto3>=1.28",
     "botocore>=1.28",
     "fastapi>=0.100",
