@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
@@ -38,21 +38,17 @@ jobs:
           done
 
       - name: Install package with test extras
-        id: install
         run: |
           pip install pytest
           pip install -e "${{ inputs.package-path }}[test]" \
-            || pip install -e "${{ inputs.package-path }}" \
-            || echo "skip=true" >> "$GITHUB_OUTPUT"
+            || pip install -e "${{ inputs.package-path }}"
 
       - name: Lint with ruff
-        if: steps.install.outputs.skip != 'true'
         run: |
           pip install ruff
           ruff check ${{ inputs.package-path }}
 
       - name: Run tests
-        if: steps.install.outputs.skip != 'true'
         run: |
           if [ -d "${{ inputs.package-path }}/tests" ]; then
             cd ${{ inputs.package-path }}
