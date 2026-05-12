@@ -7,7 +7,7 @@ When your agent needs human input — reviewing plans, confirming configurations
 ## Prerequisites
 
 - Python 3.11+
-- boto3 client for `elasticgumbyagenticservice`
+- boto3 client for `awstransformagenticservice`
 - AWS credentials with Bedrock access
 
 ## HITL Task Lifecycle
@@ -104,7 +104,7 @@ import os
 import boto3
 from elastic_gumby_hitl_component_python_sdk import HitlClient, RequestContext
 
-agentic_client = boto3.client("elasticgumbyagenticservice")
+agentic_client = boto3.client("awstransformagenticservice")
 
 request_context = RequestContext(
     job_id=os.environ["JOB_ID"],
@@ -116,7 +116,7 @@ client = HitlClient(agentic_client, request_context)
 ```
 
 **Key Points:**
-- `agentic_client` is your boto3 `elasticgumbyagenticservice` client
+- `agentic_client` is your boto3 `awstransformagenticservice` client
 - `RequestContext` converts snake_case to camelCase automatically via `.to_dict()`
 - Default poll interval: 15s, timeout: 2h. Override in constructor: `HitlClient(agentic_client, request_context, poll_interval_seconds=5, poll_timeout_minutes=60)`
 
@@ -328,7 +328,7 @@ from elastic_gumby_hitl_component_python_sdk.types import TextInput
 from elastic_gumby_hitl_component_python_sdk.util import ArtifactHelper, deserialize
 
 # Setup
-agentic_client = boto3.client("elasticgumbyagenticservice")
+agentic_client = boto3.client("awstransformagenticservice")
 request_context = RequestContext(
     job_id=os.environ["JOB_ID"],
     workspace_id=os.environ["WORKSPACE_ID"],
@@ -390,7 +390,7 @@ from elastic_gumby_hitl_component_python_sdk.types import TextInput
 from elastic_gumby_hitl_component_python_sdk.util.json_utils import to_hitl_json
 
 # Setup
-agentic_client = boto3.client("elasticgumbyagenticservice")
+agentic_client = boto3.client("awstransformagenticservice")
 request_context = RequestContext(
     job_id=os.environ["JOB_ID"],
     workspace_id=os.environ["WORKSPACE_ID"],

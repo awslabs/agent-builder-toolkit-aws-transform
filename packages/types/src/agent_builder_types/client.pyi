@@ -9,7 +9,7 @@ Usage::
     import boto3
     from agent_builder_types import TransformAgenticServiceClient
 
-    client: TransformAgenticServiceClient = boto3.client("elasticgumbyagenticservice")
+    client: TransformAgenticServiceClient = boto3.client("awstransformagenticservice")
     ```
 """
 
@@ -130,7 +130,7 @@ class Exceptions:
 
 class TransformAgenticServiceClient(BaseClient):
     """
-    [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client)
+    [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client)
     [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html)
     """
 
@@ -151,7 +151,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.acknowledge_deletion( requestContext={ 'jobMetadata': { 'jobId':
         'string', 'work...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.acknowledge_deletion)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.acknowledge_deletion)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#acknowledge_deletion)
         """
 
@@ -159,7 +159,7 @@ class TransformAgenticServiceClient(BaseClient):
         """
         Check if an operation can be paginated.
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.can_paginate)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.can_paginate)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#can_paginate)
         """
 
@@ -167,7 +167,7 @@ class TransformAgenticServiceClient(BaseClient):
         """
         Closes underlying endpoint connections.
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.close)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.close)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#close)
         """
 
@@ -185,7 +185,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.close_hitl_task( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': '...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.close_hitl_task)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.close_hitl_task)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#close_hitl_task)
         """
 
@@ -198,7 +198,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.complete_artifact_upload( requestContext={ 'jobMetadata': { 'jobId':
         'string', ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.complete_artifact_upload)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.complete_artifact_upload)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#complete_artifact_upload)
         """
 
@@ -215,7 +215,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.copy_artifact( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 'str...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.copy_artifact)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.copy_artifact)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#copy_artifact)
         """
 
@@ -232,7 +232,7 @@ class TransformAgenticServiceClient(BaseClient):
         response = client.create_artifact_download_url( requestContext={ 'jobMetadata':
         { 'jobId': 'string', ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.create_artifact_download_url)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.create_artifact_download_url)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#create_artifact_download_url)
         """
 
@@ -254,7 +254,7 @@ class TransformAgenticServiceClient(BaseClient):
         = client.create_artifact_upload_url( requestContext={ 'jobMetadata': { 'jobId':
         'string', ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.create_artifact_upload_url)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.create_artifact_upload_url)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#create_artifact_upload_url)
         """
 
@@ -281,7 +281,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.create_hitl_task( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId':...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.create_hitl_task)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.create_hitl_task)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#create_hitl_task)
         """
 
@@ -299,7 +299,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.create_skill_download_url( requestContext={ 'jobMetadata': { 'jobId':
         'string', ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.create_skill_download_url)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.create_skill_download_url)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#create_skill_download_url)
         """
 
@@ -316,7 +316,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.create_worklog( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 's...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.create_worklog)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.create_worklog)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#create_worklog)
         """
 
@@ -329,7 +329,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.delete_job_plan_step( requestContext={ 'jobMetadata': { 'jobId':
         'string', 'worksp...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.delete_job_plan_step)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.delete_job_plan_step)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#delete_job_plan_step)
         """
 
@@ -346,7 +346,7 @@ class TransformAgenticServiceClient(BaseClient):
         response = client.deregister_knowledge_base_document( requestContext={
         'jobMetadata': { 'jobId': 'st...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.deregister_knowledge_base_document)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.deregister_knowledge_base_document)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#deregister_knowledge_base_document)
         """
 
@@ -360,7 +360,7 @@ class TransformAgenticServiceClient(BaseClient):
         """
         Generate a presigned url given a client, its method, and arguments.
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.generate_presigned_url)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.generate_presigned_url)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#generate_presigned_url)
         """
 
@@ -373,7 +373,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.get_agent_instance( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspace...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.get_agent_instance)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.get_agent_instance)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#get_agent_instance)
         """
 
@@ -386,7 +386,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.get_agent_version( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.get_agent_version)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.get_agent_version)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#get_agent_version)
         """
 
@@ -399,7 +399,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.get_artifact_metadata( requestContext={ 'jobMetadata': { 'jobId':
         'string', 'wor...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.get_artifact_metadata)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.get_artifact_metadata)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#get_artifact_metadata)
         """
 
@@ -412,7 +412,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.get_connector( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 'str...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.get_connector)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.get_connector)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#get_connector)
         """
 
@@ -425,7 +425,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.get_hitl_task( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 'stri...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.get_hitl_task)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.get_hitl_task)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#get_hitl_task)
         """
 
@@ -437,7 +437,7 @@ class TransformAgenticServiceClient(BaseClient):
         cgumbyagentic-2018-05-10/GetJob>`_ **Request Syntax** response = client.get_job(
         requestContext={ 'jobMetadata': { 'jobId': 'string', 'workspaceId': 'string' ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.get_job)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.get_job)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#get_job)
         """
 
@@ -450,7 +450,7 @@ class TransformAgenticServiceClient(BaseClient):
         response = client.get_knowledge_base_ingestion( requestContext={ 'jobMetadata':
         { 'jobId': 'string', ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.get_knowledge_base_ingestion)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.get_knowledge_base_ingestion)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#get_knowledge_base_ingestion)
         """
 
@@ -467,7 +467,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.get_task( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 'string' ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.get_task)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.get_task)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#get_task)
         """
 
@@ -480,7 +480,7 @@ class TransformAgenticServiceClient(BaseClient):
         Syntax** response = client.get_temporary_credentials_for_connector(
         requestContext={ 'jobMetadata': { 'jo...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.get_temporary_credentials_for_connector)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.get_temporary_credentials_for_connector)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#get_temporary_credentials_for_connector)
         """
 
@@ -493,7 +493,7 @@ class TransformAgenticServiceClient(BaseClient):
         response = client.get_temporary_credentials_for_role( requestContext={
         'jobMetadata': { 'jobId': 'str...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.get_temporary_credentials_for_role)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.get_temporary_credentials_for_role)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#get_temporary_credentials_for_role)
         """
 
@@ -506,7 +506,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.get_usage( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 'string' ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.get_usage)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.get_usage)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#get_usage)
         """
 
@@ -527,7 +527,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.invoke_agent( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 'strin...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.invoke_agent)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.invoke_agent)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#invoke_agent)
         """
 
@@ -545,7 +545,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.list_agent_instances( requestContext={ 'jobMetadata': { 'jobId':
         'string', 'works...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.list_agent_instances)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.list_agent_instances)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#list_agent_instances)
         """
 
@@ -563,7 +563,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.list_agents( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 'string'...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.list_agents)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.list_agents)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#list_agents)
         """
 
@@ -582,7 +582,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.list_artifacts( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 's...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.list_artifacts)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.list_artifacts)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#list_artifacts)
         """
 
@@ -599,7 +599,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.list_connectors( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.list_connectors)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.list_connectors)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#list_connectors)
         """
 
@@ -618,7 +618,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.list_hitl_tasks( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': '...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.list_hitl_tasks)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.list_hitl_tasks)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#list_hitl_tasks)
         """
 
@@ -636,7 +636,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.list_job_plan_steps( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspac...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.list_job_plan_steps)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.list_job_plan_steps)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#list_job_plan_steps)
         """
 
@@ -653,7 +653,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.list_worklogs( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 'str...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.list_worklogs)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.list_worklogs)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#list_worklogs)
         """
 
@@ -664,7 +664,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.pre_prod_test_operation( requestContext={ 'jobMetadata': { 'jobId':
         'string', '...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.pre_prod_test_operation)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.pre_prod_test_operation)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#pre_prod_test_operation)
         """
 
@@ -686,7 +686,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.publish_metering_event( requestContext={ 'jobMetadata': { 'jobId':
         'string', 'w...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.publish_metering_event)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.publish_metering_event)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#publish_metering_event)
         """
 
@@ -704,7 +704,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.put_job_plan( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 'string...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.put_job_plan)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.put_job_plan)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#put_job_plan)
         """
 
@@ -717,7 +717,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.refresh_auth_token( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspace...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.refresh_auth_token)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.refresh_auth_token)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#refresh_auth_token)
         """
 
@@ -735,7 +735,7 @@ class TransformAgenticServiceClient(BaseClient):
         response = client.register_knowledge_base_document( requestContext={
         'jobMetadata': { 'jobId': 'string...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.register_knowledge_base_document)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.register_knowledge_base_document)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#register_knowledge_base_document)
         """
 
@@ -754,7 +754,7 @@ class TransformAgenticServiceClient(BaseClient):
         response = client.retrieve_from_knowledge_base( requestContext={ 'jobMetadata':
         { 'jobId': 'string', ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.retrieve_from_knowledge_base)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.retrieve_from_knowledge_base)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#retrieve_from_knowledge_base)
         """
 
@@ -773,7 +773,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.rollback_metering_event( requestContext={ 'jobMetadata': { 'jobId':
         'string', ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.rollback_metering_event)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.rollback_metering_event)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#rollback_metering_event)
         """
 
@@ -790,7 +790,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.send_message( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 'strin...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.send_message)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.send_message)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#send_message)
         """
 
@@ -808,7 +808,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.start_hitl_task( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': '...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.start_hitl_task)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.start_hitl_task)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#start_hitl_task)
         """
 
@@ -821,7 +821,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.start_job( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 'string' ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.start_job)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.start_job)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#start_job)
         """
 
@@ -839,7 +839,7 @@ class TransformAgenticServiceClient(BaseClient):
         response = client.start_knowledge_base_ingestion( requestContext={
         'jobMetadata': { 'jobId': 'string', ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.start_knowledge_base_ingestion)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.start_knowledge_base_ingestion)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#start_knowledge_base_ingestion)
         """
 
@@ -856,7 +856,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.stop_agent( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 'string' ...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.stop_agent)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.stop_agent)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#stop_agent)
         """
 
@@ -867,7 +867,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.test_operation( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId': 's...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.test_operation)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.test_operation)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#test_operation)
         """
 
@@ -886,7 +886,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.update_agent_instance( requestContext={ 'jobMetadata': { 'jobId':
         'string', 'wor...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.update_agent_instance)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.update_agent_instance)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#update_agent_instance)
         """
 
@@ -903,7 +903,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.update_job_plan_step( requestContext={ 'jobMetadata': { 'jobId':
         'string', 'worksp...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.update_job_plan_step)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.update_job_plan_step)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#update_job_plan_step)
         """
 
@@ -922,7 +922,7 @@ class TransformAgenticServiceClient(BaseClient):
         client.update_job_status( requestContext={ 'jobMetadata': { 'jobId': 'string',
         'workspaceId...
 
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Client.update_job_status)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Client.update_job_status)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/client.html#update_job_status)
         """
 
@@ -931,21 +931,21 @@ class TransformAgenticServiceClient(BaseClient):
         self, operation_name: Literal["list_agent_instances"]
     ) -> ListAgentInstancesPaginator:
         """
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Paginator.ListAgentInstances)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Paginator.ListAgentInstances)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/paginators.html#listagentinstancespaginator)
         """
 
     @overload
     def get_paginator(self, operation_name: Literal["list_artifacts"]) -> ListArtifactsPaginator:
         """
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Paginator.ListArtifacts)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Paginator.ListArtifacts)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/paginators.html#listartifactspaginator)
         """
 
     @overload
     def get_paginator(self, operation_name: Literal["list_hitl_tasks"]) -> ListHitlTasksPaginator:
         """
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Paginator.ListHitlTasks)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Paginator.ListHitlTasks)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/paginators.html#listhitltaskspaginator)
         """
 
@@ -954,6 +954,6 @@ class TransformAgenticServiceClient(BaseClient):
         self, operation_name: Literal["list_job_plan_steps"]
     ) -> ListJobPlanStepsPaginator:
         """
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/elasticgumbyagenticservice.html#Elasticgumbyagenticservice.Paginator.ListJobPlanSteps)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Paginator.ListJobPlanSteps)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/paginators.html#listjobplanstepspaginator)
         """

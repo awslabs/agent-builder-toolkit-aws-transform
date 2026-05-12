@@ -18,7 +18,7 @@ No import or code change required. Once installed, your type checker picks up th
 import boto3
 
 # Your IDE now knows the full shape of this client.
-client = boto3.client("elasticgumbyagenticservice")
+client = boto3.client("awstransformagenticservice")
 
 # Autocomplete works on method names and arguments.
 response = client.list_agents(...)
@@ -30,7 +30,7 @@ For explicit annotations, you can import type defs directly:
 from agent_builder_types import TransformAgenticServiceClient
 from agent_builder_types.type_defs import GetAgentInstanceResponseTypeDef
 
-client: TransformAgenticServiceClient = boto3.client("elasticgumbyagenticservice")
+client: TransformAgenticServiceClient = boto3.client("awstransformagenticservice")
 response: GetAgentInstanceResponseTypeDef = client.get_agent_instance(...)
 ```
 

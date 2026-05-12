@@ -11,7 +11,7 @@ Every HITL interaction involves three participants:
 
 Agents do NOT call the HITL Service directly. They call the Agentic API, which routes to the HITL Service.
 
-### Agent-Facing (via Agentic API — boto3 `elasticgumbyagenticservice`)
+### Agent-Facing (via Agentic API — boto3 `awstransformagenticservice`)
 | Operation | What it does |
 |-----------|-------------|
 | CreateHitlTask | Creates task in CREATED status. Agent artifact stays in private bucket. |

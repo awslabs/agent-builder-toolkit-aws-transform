@@ -18,8 +18,8 @@ Usage::
 
     session = boto3.Session()
 
-    client: TransformAgenticServiceClient = boto3.client("elasticgumbyagenticservice")
-    session_client: TransformAgenticServiceClient = session.client("elasticgumbyagenticservice")
+    client: TransformAgenticServiceClient = boto3.client("awstransformagenticservice")
+    session_client: TransformAgenticServiceClient = session.client("awstransformagenticservice")
 
     list_agent_instances_paginator: ListAgentInstancesPaginator = client.get_paginator("list_agent_instances")
     list_artifacts_paginator: ListArtifactsPaginator = client.get_paginator("list_artifacts")

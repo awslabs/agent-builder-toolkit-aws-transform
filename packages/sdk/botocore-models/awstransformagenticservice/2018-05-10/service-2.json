@@ -3,7 +3,7 @@
   "metadata":{
     "apiVersion":"2018-05-10",
     "auth":["aws.auth#sigv4"],
-    "endpointPrefix":"elasticgumbyagenticservice",
+    "endpointPrefix":"awstransformagenticservice",
     "jsonVersion":"1.0",
     "protocol":"json",
     "protocols":["json"],
