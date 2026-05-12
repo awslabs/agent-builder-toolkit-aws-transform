@@ -25,7 +25,7 @@ def create_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--binary-location",
-        default="/home/amazon/ElasticGumbyAgenticMCP/bin/eg_agentic_mcp_server",
+        default="/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp",
         help="Path to the agentic MCP server binary",
     )
 

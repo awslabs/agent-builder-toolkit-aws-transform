@@ -80,7 +80,7 @@ class AgentRuntimeServer(BaseServer):
         host: str = "0.0.0.0",
         port: int = 8080,
         storage_dir: str = "/tmp/agent_runtime",
-        binary_location: str = "/home/amazon/ElasticGumbyAgenticMCP/bin/eg_agentic_mcp_server",
+        binary_location: str = "/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp",
         mcp_client: Optional[MCPClient] = None,
         queue_storage_path: Optional[str] = None,  # Deprecated: use storage_dir instead
         timeout: int = 28,

@@ -25,7 +25,7 @@ class TestSimpleSubagentCLI:
         assert args.region == os.getenv("AWS_REGION", "us-west-2")
         assert args.model_id == "anthropic.claude-sonnet-4-5-20250929-v1:0"
         assert (
-            args.binary_location == "/home/amazon/ElasticGumbyAgenticMCP/bin/eg_agentic_mcp_server"
+            args.binary_location == "/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp"
         )
 
     def test_create_parser_custom_values(self):

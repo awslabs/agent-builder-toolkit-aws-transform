@@ -745,7 +745,7 @@ def create_parser() -> argparse.ArgumentParser:
 
         "--binary-location",
 
-        default="/home/amazon/ElasticGumbyAgenticMCP/bin/eg_agentic_mcp_server",
+        default="/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp",
 
         help="Path to the agentic MCP server binary",
 
@@ -2913,7 +2913,7 @@ def main():
 
         port=8080,
 
-        binary_location="./eg_agentic_mcp_server",
+        binary_location="agent-builder-agentic-mcp",
 
         storage_dir="/tmp/my_agent",
 
@@ -3011,7 +3011,7 @@ def create_orchestrator(args, mcp_client: Optional[MCPClient]) -> MyCustomOrches
 
 #### Local Testing
 
-Set up environment variables according to Configuration and add eg_agentic_mcp_server to –binaryLocation.
+Set up environment variables according to Configuration and add agent-builder-agentic-mcp to –binaryLocation.
 
 The --localTesting mode allows you to directly talk to the agent and get responses. Without --localTesting, you will be starting the local server, so you can follow the below API Reference below to test endpoints with curl.
 
@@ -3029,7 +3029,7 @@ python src/my_custom_agent/my_orchestrator_cli.py \
 
  --storage-dir . \
 
- --binaryLocation ./eg_agentic_mcp_server
+ --binaryLocation agent-builder-agentic-mcp
 
 # Server mode: Start local server and queue service to test API endpoints with curl in another terminal
 
@@ -3039,7 +3039,7 @@ python src/my_custom_agent/my_orchestrator_cli.py \
 
   --storage-dir . \
 
-  --binaryLocation ./eg_agentic_mcp_server \
+  --binaryLocation agent-builder-agentic-mcp \
 
   --queueStoragePath .
 
@@ -3129,7 +3129,7 @@ def main():
 
         port=8080,
 
-        binary_location="./eg_agentic_mcp_server"
+        binary_location="agent-builder-agentic-mcp"
 
     )
 
@@ -3141,13 +3141,13 @@ if __name__ == "__main__":
 
 #### Local Testing
 
-Set up environment variables according to Configuration and add eg_agentic_mcp_server to --binaryLocation. Start the localk server and follow the API Reference below to test endpoints with curl.
+Set up environment variables according to Configuration and add agent-builder-agentic-mcp to --binaryLocation. Start the localk server and follow the API Reference below to test endpoints with curl.
 
 # Start local stateless server to test API endpoints with curl in another terminal
 
 python src/my_custom_subagent/my_subagent_cli.py \
 
-  --binaryLocation ./eg_agentic_mcp_server
+  --binaryLocation agent-builder-agentic-mcp
 
 ### API Reference
 
@@ -3207,7 +3207,7 @@ server = AgentRuntimeServer(
 
         port=8080,
 
-        binary_location="./eg_agentic_mcp_server",
+        binary_location="agent-builder-agentic-mcp",
 
         storage_dir="/tmp/my_agent",
 
@@ -3227,7 +3227,7 @@ server = AgentRuntimeServer(
 
         port=8080,
 
-        binary_location="./eg_agentic_mcp_server",
+        binary_location="agent-builder-agentic-mcp",
 
         storage_dir="/tmp/my_agent",
 
@@ -3249,7 +3249,7 @@ server = AgentRuntimeServer(
 
         port=8080,
 
-        binary_location="./eg_agentic_mcp_server",
+        binary_location="agent-builder-agentic-mcp",
 
         storage_dir="/tmp/my_agent"
 

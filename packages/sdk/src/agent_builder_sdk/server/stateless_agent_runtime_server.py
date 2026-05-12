@@ -51,7 +51,7 @@ class StatelessAgentRuntimeServer(BaseServer):
         agent_factory: Callable[..., AnyBaseAgent[str, AgentResult]],
         host: str = "0.0.0.0",
         port: int = 8080,
-        binary_location: str = "/home/amazon/ElasticGumbyAgenticMCP/bin/eg_agentic_mcp_server",
+        binary_location: str = "/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp",
         storage_dir: str = "/tmp/orchestrator_agent",
         auto_transition_job_to_executing: bool = True,
         tracing: Optional[str] = None,

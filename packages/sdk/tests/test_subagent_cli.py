@@ -40,7 +40,7 @@ def test_create_parser_defaults(parser):
     args = parser.parse_args([])
 
     # Check default values
-    assert args.binary_location == "/home/amazon/ElasticGumbyAgenticMCP/bin/eg_agentic_mcp_server"
+    assert args.binary_location == "/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp"
     assert args.model_id == "anthropic.claude-sonnet-4-5-20250929-v1:0"
     assert args.region == "us-west-2"
     assert args.local_testing is False

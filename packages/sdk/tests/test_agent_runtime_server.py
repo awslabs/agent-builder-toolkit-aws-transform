@@ -1977,7 +1977,7 @@ class TestAgentRuntimeServer:
                 assert server.mcp_client == mock_mcp_client
                 assert (
                     server.binary_location
-                    == "/home/amazon/ElasticGumbyAgenticMCP/bin/eg_agentic_mcp_server"
+                    == "/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp"
                 )
 
     def test_initialization_without_mcp_client(self, mock_agent_factory):

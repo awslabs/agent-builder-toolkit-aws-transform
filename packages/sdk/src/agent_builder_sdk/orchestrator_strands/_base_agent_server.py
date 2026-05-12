@@ -226,7 +226,7 @@ class BaseAgentServer:
                 ENV_KEY_QT_AGENTIC_API_ENDPOINT
             ),
             AgentConfiguration.AUTH_TOKEN_REFRESH_DURATION.value: 43200,
-            AgentConfiguration.PLATFORM_MCP_BINARY_LOCATION.value: "/opt/amazon/eg_agentic_mcp_server",
+            AgentConfiguration.PLATFORM_MCP_BINARY_LOCATION.value: "/opt/amazon/agent-builder-agentic-mcp",
             AgentConfiguration.AUTO_ATX_AGENT_LIFECYCLE_UPDATES.value: False,
             AgentConfiguration.AUTO_PLATFORM_MCP_SUPPORT.value: False,
         }
