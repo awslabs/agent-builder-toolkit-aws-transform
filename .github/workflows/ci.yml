@@ -53,12 +53,21 @@ jobs:
       - name: Regenerate sdk_docs.json
         run: python scripts/generate_sdk_docs.py
 
-      - name: Check for drift
+      - name: Check for sdk_docs drift
         run: |
           if ! git diff --exit-code packages/mcp-server/src/agent_builder_mcp/knowledge/data/sdk_docs.json; then
             echo "::error::sdk_docs.json is stale. Run 'python scripts/generate_sdk_docs.py' and commit the result."
             exit 1
           fi
+
+      - name: Check botocore model sync
+        run: |
+          diff packages/sdk/botocore-models/awstransformagenticservice/2018-05-10/service-2.json \
+               packages/mcp-server/src/agent_builder_mcp/knowledge/data/agentic_api.json \
+            || { echo "::error::agentic_api.json is out of sync. Run: cp packages/sdk/botocore-models/awstransformagenticservice/2018-05-10/service-2.json packages/mcp-server/src/agent_builder_mcp/knowledge/data/agentic_api.json"; exit 1; }
+          diff packages/sdk/botocore-models/awstransformagentregistryexternal/2022-07-26/service-2.json \
+               packages/mcp-server/src/agent_builder_mcp/knowledge/data/registry_api.json \
+            || { echo "::error::registry_api.json is out of sync. Run: cp packages/sdk/botocore-models/awstransformagentregistryexternal/2022-07-26/service-2.json packages/mcp-server/src/agent_builder_mcp/knowledge/data/registry_api.json"; exit 1; }
 
   integration:
     runs-on: ubuntu-latest
