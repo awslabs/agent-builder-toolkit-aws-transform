@@ -5271,7 +5271,6 @@ Partner Engagement for Q Transform Platform
 
 
 | Roles | Used by | Purpose |
-| AWSTransformOnboardingScriptAccessRole | Script | Used by partner to access ECR and agent core, register the agent core with AWS Transform |
 | AgentCoreExecutionRole | Agent core runtime | Used by agent instance to assume and access AWS Transform primitives and other AWS resources |
 | AWSTransformAgentInvokeRole | AWS Transform | Used by AWS Transform service to assume to invoke the agent in agent core |
 

@@ -56,10 +56,10 @@ def _get_ecr_uri(agent_name: str, region: str = "us-east-1") -> str:
         region: AWS region
 
     Returns:
-        ECR repository URI (e.g., 123456.dkr.ecr.us-east-1.amazonaws.com/atx-workshop/agent-name)
+        ECR repository URI (e.g., 123456.dkr.ecr.us-east-1.amazonaws.com/aws-transform-agents/agent-name)
     """
     ecr = boto3.client("ecr", region_name=region)
-    repo_name = f"atx-workshop/{agent_name}"
+    repo_name = f"aws-transform-agents/{agent_name}"
 
     try:
         response = ecr.describe_repositories(repositoryNames=[repo_name])
@@ -157,7 +157,7 @@ def _build_local(
             "image_uri": image_tag,
             "build_method": runtime,
             "image_tag": "latest",
-            "ecr_repository": f"atx-workshop/{agent_name}",
+            "ecr_repository": f"aws-transform-agents/{agent_name}",
         }
 
     except subprocess.CalledProcessError as e:
@@ -196,7 +196,7 @@ def _build_codebuild(agent_path: Path, agent_name: str, region: str = "us-east-1
             environmentVariablesOverride=[
                 {"name": "AGENT_PATH", "value": str(agent_path.absolute())},
                 {"name": "AGENT_NAME", "value": agent_name},
-                {"name": "ECR_REPO", "value": f"atx-workshop/{agent_name}"},
+                {"name": "ECR_REPO", "value": f"aws-transform-agents/{agent_name}"},
                 {"name": "IMAGE_TAG", "value": "latest"},
             ],
         )
@@ -225,7 +225,7 @@ def _build_codebuild(agent_path: Path, agent_name: str, region: str = "us-east-1
                     "image_uri": f"{ecr_uri}:latest",
                     "build_method": "codebuild",
                     "image_tag": "latest",
-                    "ecr_repository": f"atx-workshop/{agent_name}",
+                    "ecr_repository": f"aws-transform-agents/{agent_name}",
                     "build_id": build_id,
                     "build_duration_seconds": elapsed,
                 }
@@ -277,10 +277,10 @@ def build_agent_image(
         JSON string with build result:
         {
             "success": true,
-            "image_uri": "123456789.dkr.ecr.us-east-1.amazonaws.com/atx-workshop/agent-name:latest",
+            "image_uri": "123456789.dkr.ecr.us-east-1.amazonaws.com/aws-transform-agents/agent-name:latest",
             "build_method": "finch" | "docker" | "codebuild",
             "image_tag": "latest",
-            "ecr_repository": "atx-workshop/agent-name"
+            "ecr_repository": "aws-transform-agents/agent-name"
         }
 
     Errors:
