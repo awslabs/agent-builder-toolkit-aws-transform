@@ -20,8 +20,6 @@ ENV_KEY_QT_JOB_ID = "QT_JOB_ID"
 ENV_KEY_QT_AGENT_INSTANCE_ID = "QT_AGENT_INSTANCE_ID"
 ENV_KEY_QT_AGENTIC_API_ENDPOINT = "QT_AGENTIC_API_ENDPOINT"
 ENV_KEY_QT_AUTH_TOKEN_FILE = "QT_AUTH_TOKEN_FILE"
-ENV_KEY_ISENGARD_ACCOUNT = "ISENGARD_ACCOUNT"
-ENV_KEY_ISENGARD_ROLE = "ISENGARD_ROLE"
 ENV_KEY_USE_EXTERNAL_AGENTIC_API = "USE_EXTERNAL_AGENTIC_API"
 
 ENV_VAR_FASTMCP_PORT = "FASTMCP_PORT"
@@ -53,11 +51,6 @@ def export_agent_instance_metadata(args: argparse.Namespace) -> None:
     os.environ[ENV_KEY_QT_JOB_ID] = args.jobId
     os.environ[ENV_KEY_QT_AGENT_INSTANCE_ID] = args.agentInstanceId
     os.environ[ENV_KEY_QT_AGENTIC_API_ENDPOINT] = args.agenticApiEndpoint
-
-    if args.isengardCredentials:
-        account_id, role_name = args.isengardCredentials
-        os.environ[ENV_KEY_ISENGARD_ACCOUNT] = account_id
-        os.environ[ENV_KEY_ISENGARD_ROLE] = role_name
 
     if hasattr(args, "region") and args.region:
         logger.info(

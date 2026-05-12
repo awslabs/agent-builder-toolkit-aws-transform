@@ -42,7 +42,6 @@ def test_export_agent_instance_metadata():
         agentInstanceId="test-agent",
         agenticApiEndpoint="https://test-endpoint.aws.dev",
         region="us-east-1",
-        isengardCredentials=None,
     )
 
     with mock.patch.dict(os.environ, {}, clear=True):
@@ -73,17 +72,15 @@ def test_export_agent_instance_metadata():
 
 
 def test_export_agent_instance_metadata_when_region_not_specified_should_use_env_var():
-    """Test export_agent_instance_metadata function."""
+    """Test export_agent_instance_metadata uses AWS_REGION env var when region arg is absent."""
     args = argparse.Namespace(
         workspaceId="test-workspace",
         jobId="test-job",
         agentInstanceId="test-agent",
         agenticApiEndpoint="https://test-endpoint.aws.dev",
-        isengardCredentials=("isengard-account", "isengard-role"),
     )
 
     with mock.patch.dict(os.environ, {"AWS_REGION": "us-west-2"}, clear=True):
-        # First test that basic environment variables are set correctly
         with mock.patch("pathlib.Path.exists", return_value=True):
             env_var.export_agent_instance_metadata(args)
 
@@ -96,5 +93,3 @@ def test_export_agent_instance_metadata_when_region_not_specified_should_use_env
                 == "https://test-endpoint.aws.dev"
             )
             assert env_var.ENV_KEY_QT_AUTH_TOKEN_FILE in os.environ
-            assert os.environ[env_var.ENV_KEY_ISENGARD_ACCOUNT] == "isengard-account"
-            assert os.environ[env_var.ENV_KEY_ISENGARD_ROLE] == "isengard-role"
