@@ -6,11 +6,11 @@ import pytest
 
 SYNC_PAIRS = [
     (
-        "packages/sdk/botocore-models/awstransformagenticservice/2018-05-10/service-2.json",
+        "packages/sdk/src/agent_builder_sdk/botocore_models/transformagenticservice/2018-05-10/service-2.json",
         "packages/mcp-server/src/agent_builder_mcp/knowledge/data/agentic_api.json",
     ),
     (
-        "packages/sdk/botocore-models/awstransformagentregistryexternal/2022-07-26/service-2.json",
+        "packages/sdk/src/agent_builder_sdk/botocore_models/atxagentregistryexternal/2022-07-26/service-2.json",
         "packages/mcp-server/src/agent_builder_mcp/knowledge/data/registry_api.json",
     ),
 ]

@@ -2796,7 +2796,7 @@ MCP Binary:
 
 Agentic Model:
 
-aws configure add-model --service-model file://$(pwd)/service-2.json --service-name awstransformagenticservice
+aws configure add-model --service-model file://$(pwd)/service-2.json --service-name transformagenticservice
 
 Python version: Configure your version set with recommended Python 3.11. Python 3.10 still works but is not officially supported.
 
