@@ -8,7 +8,7 @@ Table of Contents
 
 2	System Architecture and Workflow	8
 
-2.1	ATX Architecture	8
+2.1	AWS Transform Architecture	8
 
 2.2	Partner Agent Onboarding Architecture	10
 
@@ -28,7 +28,7 @@ Table of Contents
 
 4.1	Low Code	16
 
-4.1.1	Using ATX Base Agent with AgentCore (Recommended)	16
+4.1.1	Using AWS Transform Base Agent with Bedrock AgentCore (Recommended)	16
 
 4.1.2	Custom Agent Implementation	17
 
@@ -48,109 +48,83 @@ Table of Contents
 
 5.1.2	Local Testing Environment Variables	21
 
-5.2	AgentCore Deployed Agent Testing	21
+5.2	Bedrock AgentCore Deployed Agent Testing	21
 
 5.2.1	Build and Publish Agent Docker Image	22
 
-5.2.2	Create AgentCore Execution Role	22
+5.2.2	Create Bedrock AgentCore Execution Role	22
 
-5.2.3	Create AgentCore Runtime	24
+5.2.3	Create Bedrock AgentCore Runtime	24
 
-5.2.4	Invoke AgentCore Runtime	25
+5.2.4	Invoke Bedrock AgentCore Runtime	25
 
-5.2.4.1	AgentCore Sandbox	25
+5.2.4.1	Bedrock AgentCore Sandbox	25
 
 5.2.4.2	AWS CLI	25
 
-5.2.5	Testing AgentCore Runtime with Additional Operations	26
+5.2.5	Testing Bedrock AgentCore Runtime with Additional Operations	26
 
-5.2.5.1	AgentCore Protocol Understanding	26
+5.2.5.1	Bedrock AgentCore Protocol Understanding	26
 
 5.2.5.2	Test message/send	26
 
-6	Onboarding and Gamma Webapp Testing (deprecated)	27
+6	Onboarding and Production Webapp Testing	38
 
-6.1	Register Agent Core Agent with ATX	28
+6.1	Update local agent container into ECR	38
 
-6.1.1	Prerequisites and Setup	28
+6.2	Deploy your ECR container with Bedrock AgentCore	39
 
-6.1.1.1	Configure necessary IAM Permissions	28
+6.2.1	Create AgentCoreExecutionRole	39
 
-6.1.1.2	Configure ATX Agent Registry CLI	29
+6.2.2	Create Bedrock AgentCore Runtime	42
 
-6.1.2	Register Agent with ATX	30
+6.3	Register Agent with AWS Transform	43
 
-6.1.3	Publish An Agent Version	31
+6.3.1	Publish An Agent Version	45
 
-6.1.4	Configure Access Control	32
+6.3.2	Configure Access Control	47
 
-6.1.5	Agent Management and Monitoring	33
+6.3.3	Agent Management and Monitoring	48
 
-6.1.5.1	List Your Published Agents	33
+6.3.3.1	List Your Published Agents	48
 
-6.1.5.2	Get Agent Details	33
+6.3.3.2	Get Agent Details	48
 
-6.2	Coordinate ATX Webapp UAT Testing via SA	33
+6.4	AWS Transform Prod WebApp testing	50
 
-6.3	Automate Test new job without WebApp (only applicable to agents registered in gamma environment)	34
+6.5	External Agentic API support [To Be released]	55
 
-7	Onboarding and Production Webapp Testing	38
+6.6	Publish Agent to be consumed in customer account [WIP]	55
 
-7.1	Update local agent container into ECR	38
+7	FAQ	56
 
-7.2	Deploy your ECR container with Bedrock AgentCore	39
+7.1	AWS Transform Concepts FAQs	56
 
-7.2.1	Create AgentCoreExecutionRole	39
+7.1.1	What is job plan of an AWS Transform job?	56
 
-7.2.2	Create Bedrock AgentCore Runtime	42
+7.1.2	How is a job plan typically created?	56
 
-7.3	Register Agent with ATX	43
+7.2	AWS Transform Agent FAQs	57
 
-7.3.1	Publish An Agent Version	45
+7.2.1	What is the minimum requirement for an agent to be an AWS Transform agent?	57
 
-7.3.2	Configure Access Control	47
+7.2.2	Do I have to use AWS Transform provided base agent to build my agent?	57
 
-7.3.3	Agent Management and Monitoring	48
+7.2.3	May I use langgraph to build my agent instead of strands agent?	57
 
-7.3.3.1	List Your Published Agents	48
+7.2.4	How the orchestrator agent select subagents?	57
 
-7.3.3.2	Get Agent Details	48
+7.2.5	How does Bedrock AgentCore integration work with AWS Transform?	57
 
-7.4	ATX Prod WebApp testing	50
+7.2.6	What’s the difference between BaseAgent AgentRuntimeServer and the traditional CLI approach?	57
 
-7.5	External Agentic API support [To Be released]	55
+7.3	HITL (Human-in-the-Loop) Task FAQs	58
 
-7.6	Publish Agent to be consumed in customer account [WIP]	55
+7.3.1	What are HITL (Human-in-the-Loop) Tasks?	58
 
-8	FAQ	56
+7.3.2	HITL (Human-in-the-Loop) blocking vs non-blocking	58
 
-8.1	ATX Concepts FAQs	56
-
-8.1.1	What is job plan of an ATX job?	56
-
-8.1.2	How is a job plan typically created?	56
-
-8.2	ATX Agent FAQs	57
-
-8.2.1	What is the minimum requirement for an agent to be an ATX agent?	57
-
-8.2.2	Do I have to use ATX provided base agent to build my agent?	57
-
-8.2.3	May I use langgraph to build my agent instead of strands agent?	57
-
-8.2.4	How the orchestrator agent select subagents?	57
-
-8.2.5	How does AgentCore integration work with ATX?	57
-
-8.2.6	What’s the difference between BaseAgent AgentRuntimeServer and the traditional CLI approach?	57
-
-8.3	HITL (Human-in-the-Loop) Task FAQs	58
-
-8.3.1	What are HITL (Human-in-the-Loop) Tasks?	58
-
-8.3.2	HITL (Human-in-the-Loop) blocking vs non-blocking	58
-
-8.3.3	Standard vs critical HITL (Human-in-the-Loop) task	58
+7.3.3	Standard vs critical HITL (Human-in-the-Loop) task	58
 
 8.3.4	What are the available HITL (Human-in-the-Loop) UI for Agent?	58
 
@@ -168,15 +142,15 @@ Table of Contents
 
 9.1.5	Solution 3: Temporarily Disable SSL Verification (Local Testing Only)	63
 
-9.2	Troubleshooting AgentCore Testing – 422 Unprocessable Entity Error	64
+9.2	Troubleshooting Bedrock AgentCore Testing – 422 Unprocessable Entity Error	64
 
 9.2.1	Symptom	64
 
-9.2.2	Step 1: Examine the AgentCore logs in CloudWatch	64
+9.2.2	Step 1: Examine the Bedrock AgentCore logs in CloudWatch	64
 
 9.2.3	Step 2: Validate general payload structure	64
 
-9.2.4	Step 3: Validate ATX specific payload structure	65
+9.2.4	Step 3: Validate AWS Transform specific payload structure	65
 
 9.3	Troubleshooting “Either endpoint_url or both stage and region must be provided” in Bedrock AgentCore	65
 
@@ -208,7 +182,7 @@ Table of Contents
 
 10.1.5.2	Create Custom Tools (Optional)	69
 
-10.1.5.3	Create Your Entry Point - AgentCore (Recommended for AgentCore)	70
+10.1.5.3	Create Your Entry Point - Bedrock AgentCore (Recommended)	70
 
 10.1.5.4	Create Your Entry Point – Old CLI Approach	71
 
@@ -242,7 +216,7 @@ Table of Contents
 
 10.1.8.4	Available Tools & Integrations	75
 
-10.2	ATX Agentic API Specification	76
+10.2	AWS Transform Agentic API Specification	76
 
 10.2.1	Common Error Responses	76
 
@@ -320,7 +294,7 @@ Table of Contents
 
 10.2.33	PreProdTestOperation	84
 
-10.3	ATX Agent Registry External API Specification	84
+10.3	AWS Transform Agent Registry External API Specification	84
 
 10.3.1	Common Error Responses	85
 
@@ -396,13 +370,13 @@ Table of Contents
 
 # Introduction 
 
-This document is designed to provide you with a high level and step-by-step roadmap for building, testing, and successfully onboarding your agent with AWS Transform (ATX). Whether you are an internal partner or an external partner, this guide will walk you through the entire agent lifecycle, from the initial concept to a fully deployed live agent.
+This document is designed to provide you with a high level and step-by-step roadmap for building, testing, and successfully onboarding your agent with AWS Transform. Whether you are an internal partner or an external partner, this guide will walk you through the entire agent lifecycle, from the initial concept to a fully deployed live agent.
 
 ## Change Log
 
 v0.3 (2025-11-13) 
 
-Major update enabling registering/publishing/developing agents using production ATX APIs and webapp under beta preview
+Major update enabling registering/publishing/developing agents using production AWS Transform APIs and webapp under beta preview
 
 Please follow section 7 – Onboarding and Production Webapp Testing
 
@@ -436,11 +410,11 @@ Added section 9.1.7.3 of using check-pointing feature provided from base agent
 
 v0.1.7 (2025-09-26)
 
-Added a sub section 6.1.1 describing the IAM permissions needed for interacting with ATX Agent Registry.
+Added a sub section 6.1.1 describing the IAM permissions needed for interacting with AWS Transform Agent Registry.
 
 v0.1.6 (2025-09-21):
 
-Added new section 8.2 Troubleshooting AgentCore Testing – 422 Unprocessable Entity Error
+Added new section 8.2 Troubleshooting Bedrock AgentCore Testing – 422 Unprocessable Entity Error
 
 v0.1.5 (2025-09-18):
 
@@ -448,7 +422,7 @@ Added new section 6.2 Test new job without WebApp
 
 v0.1.4 (2025-09-16):
 
-Added new section 6.1.4 Allow ATX Test account to use the agent (Orchestrator Agent Only)
+Added new section 6.1.4 Allow AWS Transform Test account to use the agent (Orchestrator Agent Only)
 
 Improved the script and fixed bugs in section 6.1
 
@@ -458,31 +432,31 @@ Added new section 9.4 HITL Component Input, Output, and Picture Example
 
 v0.1.3 (2025-09-14):
 
-Added new Section 5.2: AgentCore Deployed Agent Testing
+Added new Section 5.2: Bedrock AgentCore Deployed Agent Testing
 
 Added detailed instructions for building and publishing agent Docker images
 
-Added guide for creating AgentCore execution role
+Added guide for creating Bedrock AgentCore execution role
 
-Added steps for creating and invoking AgentCore runtime
+Added steps for creating and invoking Bedrock AgentCore runtime
 
 Added testing procedures for additional operations including message/send
 
-Added new Section 6.1: Register Agent Core Agent with ATX
+Added new Section 6.1: Register Agent Core Agent with AWS Transform
 
-Added configuration steps for ATX Agent Registry CLI
+Added configuration steps for AWS Transform Agent Registry CLI
 
-Added detailed steps for registering agents with ATX
+Added detailed steps for registering agents with AWS Transform
 
 Added instructions for publishing agent versions
 
-Added preparation guidelines for ATX Webapp testing
+Added preparation guidelines for AWS Transform Webapp testing
 
-Updated section 4 reflecting latest SDK code ElasticGumbyPlatformWorkshopAgent_20250914.zip updates
+Updated section 4 reflecting latest SDK code updates
 
 v0.1.2 (2025-09-13):
 
-Added new Section 9.3: ATX Agent Registry External API Specification
+Added new Section 9.3: AWS Transform Agent Registry External API Specification
 
 Added comprehensive API documentation including:
 
@@ -512,21 +486,21 @@ Enhanced developer testing documentation with SSL error handling
 
 v0.1.0.1 (2025-09-07):
 
-Enhanced AgentCore Integration Documentation:
+Enhanced Bedrock AgentCore Integration Documentation:
 
-Added new subsection 4.1.1 on using AgentRuntimeServer with AgentCore
+Added new subsection 4.1.1 on using AgentRuntimeServer with Bedrock AgentCore
 
 Added new subsection 4.1.2 for custom agent implementation guidance
 
-Added new subsection 4.2.1 covering AgentCore container requirements and Dockerfile
+Added new subsection 4.2.1 covering Bedrock AgentCore container requirements and Dockerfile
 
-Enhanced AgentCore Registration:
+Enhanced Bedrock AgentCore Registration:
 
 Updated sections 6.2.1-6.2.3 with JSON-RPC protocol explanations
 
-Added detailed AgentCore entry point implementation in section 8.1.5.3
+Added detailed Bedrock AgentCore entry point implementation in section 8.1.5.3
 
-Added New FAQ Entries: Added sections 7.2.5-7.2.6 covering AgentCore-specific questions
+Added New FAQ Entries: Added sections 7.2.5-7.2.6 covering Bedrock AgentCore-specific questions
 
 Improved Documentation: Enhanced code snippet formatting and styling
 
@@ -534,7 +508,7 @@ v0.1.0 (Initial Release):
 
 Initial documentation structure and content
 
-Base ATX architecture overview
+Base AWS Transform architecture overview
 
 System workflow descriptions
 
@@ -548,11 +522,11 @@ Development environment setup instructions
 
 # System Architecture and Workflow 
 
-## ATX Architecture
+## AWS Transform Architecture
 
-ATX provides two types of interfaces: WebApp-facing APIs for WebApp user access and partner agent-facing APIs for partner agents. The WebApp-facing APIs are accessed through the ATX frontend service, and user roles are used to control access and permissions at workspace level. In contrast, partner agents are authorized through tokens that the ATX platform generates and sends when an agent is invoked. This authorization token is generated at certain workspace and job context. Agent-facing APIs are also provided as a MCP server as one of ATX primitives we offered to partners.
+AWS Transform provides two types of interfaces: WebApp-facing APIs for WebApp user access and partner agent-facing APIs for partner agents. The WebApp-facing APIs are accessed through the AWS Transform frontend service, and user roles are used to control access and permissions at workspace level. In contrast, partner agents are authorized through tokens that the AWS Transform generates and sends when an agent is invoked. This authorization token is generated at certain workspace and job context. Agent-facing APIs are also provided as a MCP server as one of AWS Transform primitives we offered to partners.
 
-Agents including ATX chat agent, partner domain orchestrator agent and subagents can communicate with each other through A2A message over ATX messaging API. ATX chat agent usually communicates with subagents through an orchestrator agent.
+Agents including AWS Transform chat agent, partner domain orchestrator agent and subagents can communicate with each other through A2A message over AWS Transform messaging API. AWS Transform chat agent usually communicates with subagents through an orchestrator agent.
 
 ## Partner Agent Onboarding Architecture
 
@@ -566,59 +540,59 @@ Partner knowledge base onboarding process is similar to this.
 
 The overall flow for 3rd party agent invocation works as follow as in the below diagram,
 
-Customer creates a job through ATX Chat, ATX starts processing the job;
+Customer creates a job through AWS Transform Chat, AWS Transform starts processing the job;
 
-ATX invokes Orchestrator Agent in Partner’s account. Orchestrator Agent starts job execution;
+AWS Transform invokes Orchestrator Agent in Partner’s account. Orchestrator Agent starts job execution;
 
-Orchestrator Agent makes ATX API requests (or via MCP) to invoke ATX vended Task Agent;
+Orchestrator Agent makes AWS Transform API requests (or via MCP) to invoke AWS Transform vended Task Agent;
 
-ATX invokes ATX vended Task Agent in AWS, which starts processing;
+AWS Transform invokes AWS Transform vended Task Agent in AWS, which starts processing;
 
-Orchestrator Agent invokes Partner Task Agent via ATX;
+Orchestrator Agent invokes Partner Task Agent via AWS Transform;
 
-ATX indicates the job completion to Customer.
+AWS Transform indicates the job completion to Customer.
 
-This flow demonstrates the high-level composability of agents in Partner AWS account and in ATX service, certain details such as running agents in Bedrock AgentCore will be revealed in subsequent sections, though the overall flow stays as the same.
+This flow demonstrates the high-level composability of agents in Partner AWS account and in AWS Transform service, certain details such as running agents in Bedrock AgentCore will be revealed in subsequent sections, though the overall flow stays as the same.
 
-Figure. 3rd Party Agent Invocation Flow (the example showing partner composing their Task Agent with an existing Task Agent vended by ATX, via an partner developed Orchestrator Agent)
+Figure. 3rd Party Agent Invocation Flow (the example showing partner composing their Task Agent with an existing Task Agent vended by AWS Transform, via an partner developed Orchestrator Agent)
 
 ## Customer Interaction - Chat flow
 
-Previous section described the invocation flow of multiple agents, with same example, below the diagram describes the high-level Chat interaction flow among customer and agents via ATX:
+Previous section described the invocation flow of multiple agents, with same example, below the diagram describes the high-level Chat interaction flow among customer and agents via AWS Transform:
 
-Customer requests ATX Chat for their transformation needs in natural language;
+Customer requests AWS Transform Chat for their transformation needs in natural language;
 
-ATX transfers the customer question to Orchestrator Agent in Partner account;
+AWS Transform transfers the customer question to Orchestrator Agent in Partner account;
 
-Orchestrator Agent requests information from ATX vended Task Agent through ATX;
+Orchestrator Agent requests information from AWS Transform vended Task Agent through AWS Transform;
 
-ATX vended Task Agent responds, then ATX transfers the details to Orchestrator Agent;
+AWS Transform vended Task Agent responds, then AWS Transform transfers the details to Orchestrator Agent;
 
 Orchestrator Agent requests additional information from Task Agent running in Partner account;
 
-Partner Task Agent responds, then ATX transfers the details to Orchestrator Agent;
+Partner Task Agent responds, then AWS Transform transfers the details to Orchestrator Agent;
 
-Orchestrator Agent combines outputs from both Task Agents and returns to ATX;
+Orchestrator Agent combines outputs from both Task Agents and returns to AWS Transform;
 
-ATX returns the requested the result through ATX Chat to Customer.
+AWS Transform returns the requested the result through AWS Transform Chat to Customer.
 
-In this diagram, agents communicate with each other using Agent2Agent Protocol (A2A) powered by ATX service; agents may communicate using additional mechanisms such as ATX provided Artifact Store API etc., which will be revealed in further details in this guide. 
+In this diagram, agents communicate with each other using Agent2Agent Protocol (A2A) powered by AWS Transform service; agents may communicate using additional mechanisms such as AWS Transform provided Artifact Store API etc., which will be revealed in further details in this guide. 
 
-Figure. 3rd Party Agent Customer Interaction Flow (the example showing customer interacting with two Task Agent, one ATX Task Agent and one Partner Task Agent; customer request is routed to Orchestrator Agent and communicated enabled by ATX service provided A2A )
+Figure. 3rd Party Agent Customer Interaction Flow (the example showing customer interacting with two Task Agent, one AWS Transform Task Agent and one Partner Task Agent; customer request is routed to Orchestrator Agent and communicated enabled by AWS Transform service provided A2A )
 
 ## Agent Lifecycle Management
 
-To be deployed into production, an agent goes through a series of stages. First, a partner agent builder performs local development, building, and testing. Once ready, the agent is uploaded to Elastic Container Registry (ECR) and deployed with Bedrock AgentCore. The agent is then registered with the ATX agentic registry, making it ready to be used for jobs created by the ATX platform.
+To be deployed into production, an agent goes through a series of stages. First, a partner agent builder performs local development, building, and testing. Once ready, the agent is uploaded to Elastic Container Registry (ECR) and deployed with Bedrock AgentCore. The agent is then registered with the AWS Transform agentic registry, making it ready to be used for jobs created by the AWS Transform.
 
 The partner agent builder sets up the local agent development environment. 
 
-The agent builder downloads the ATX base agent to use as a starting point. 
+The agent builder downloads the AWS Transform base agent to use as a starting point. 
 
 The agent builder customizes and writes the agent code. 
 
 The agent is built locally into a container. 
 
-The agent is run locally for development testing by providing it with an API key to access the dev testing ATX platform endpoint. 
+The agent is run locally for development testing by providing it with an API key to access the dev testing AWS Transform endpoint. 
 
 Once local development testing is complete, the agent builder can rebuild the agent with the platform as ARM64 for Bedrock AgentCore. 
 
@@ -626,9 +600,9 @@ The agent builder tags the container image and uploads it to the partner account
 
 The agent builder registers their ECR agent container with the agent core using the AWS console, CLI, SDK, or API.
 
-The agent builder then registers the Bedrock AgentCore runtime to the ATX agent registry by providing an agent card, role, and ARN. 
+The agent builder then registers the Bedrock AgentCore runtime to the AWS Transform agent registry by providing an agent card, role, and ARN. 
 
-The ATX platform will trigger the agent when a job is created in the ATX WebApp that can be served by this agent.
+The AWS Transform will trigger the agent when a job is created in the AWS Transform WebApp that can be served by this agent.
 
 The agent will run in the partner Bedrock AgentCore runtime. 
 
@@ -640,9 +614,9 @@ Partners can monitor and debug the agent through CloudWatch logs.
 
 At least one AWS account with credential setup to access the account through AWS CLI or console
 
-Work with ATX foundation team to
+Work with AWS Transform foundation team to
 
-allow-list the account for ATX service
+allow-list the account for AWS Transform service
 
 get an API key, testing workspace and job ID for agent development testing
 
@@ -669,20 +643,15 @@ awscurl
 
 pip install awscurl
 
-AWS Transform base agent package (including Bedrock AgentCore SDK, StrandsAgent SDK and ATX service primitives as MCP server). As of now, ATX Foundation team will provide packages through S3 under NDA.
+AWS Transform base agent package (including Bedrock AgentCore SDK, Strands Agent SDK and AWS Transform service primitives as MCP server). Install from PyPI:
 
-# Download from AWS console of an allowlisted account
-https://us-east-1.console.aws.amazon.com/s3/object/atx-foundation-partner-artifacts-us-east-1?region=us-east-1&bucketType=general&prefix=packages/ElasticGumbyPlatformWorkshopAgent.zip
-
-
-# or use AWS CLI to download
-aws s3 cp s3://atx-foundation-partner-artifacts-us-east-1/packages/ElasticGumbyPlatformWorkshopAgent.zip ./
+pip install agent-builder-sdk-aws-transform agent-builder-mcp-runtime-aws-transform
 
 # Building Your Agent
 
 ## Low Code
 
-You can use sample code package: ElasticGumbyPlatformWorkshopAgent to build your agent. As of now, AWS team will provide packages through S3. Below are the steps:  
+You can use the agent-builder-sdk-aws-transform package to build your agent. Install via pip (see prerequisites above). Below are the steps:  
 
 Create a Python project in your development environment
 
@@ -708,17 +677,17 @@ POST /message/send
 
 Get the input parameters through /invocations message.
 
-### Using ATX Base Agent with AgentCore (Recommended)
+### Using AWS Transform Base Agent with Bedrock AgentCore (Recommended)
 
-For partners deploying to AWS Bedrock AgentCore, the base agent package provides AgentRuntimeServer that handles all AgentCore integration automatically:
+For partners deploying to AWS Bedrock AgentCore, the base agent package provides AgentRuntimeServer that handles all Bedrock AgentCore integration automatically:
 
 Key Benefits: 
 
-JSON-RPC 2.0 Protocol: Automatic handling of AgentCore’s single /invocations endpoint
+JSON-RPC 2.0 Protocol: Automatic handling of Bedrock AgentCore’s single /invocations endpoint
 
-Context Initialization: Automatic extraction of ATX context from any request type
+Context Initialization: Automatic extraction of AWS Transform context from any request type
 
-Session Management: Built-in support for AgentCore’s session isolation
+Session Management: Built-in support for Bedrock AgentCore’s session isolation
 
 A2A Compatibility: Native support for Agent-to-Agent messaging
 
@@ -912,7 +881,7 @@ def create_default_subagent(
 
 #### Default Orchestrator Agent with Task Agent Example
 
-One may also choose to leverage multi-agents architecture to run agentic workflow with ATX, below is an example of an orchestrator agent capable of communicating via task agent using A2A.
+One may also choose to leverage multi-agents architecture to run agentic workflow with AWS Transform, below is an example of an orchestrator agent capable of communicating via task agent using A2A.
 
 Note that, the task agent is made visible to the orchestrator agent via the subagent registry tool, and can be tasked with work via send message tool so that it may receive natural language communication from orchestrator agent via A2A.
 
@@ -1006,15 +975,15 @@ agentcore launch
 
 # Developer Testing
 
-Before onboarding your agents with ATX, it is better to perform some local developer testing to identify the potential bugs and problems. Generally, there’s three stages of testing you may perform:
+Before onboarding your agents with AWS Transform, it is better to perform some local developer testing to identify the potential bugs and problems. Generally, there’s three stages of testing you may perform:
 
 Developer Local Testing
 
-AgentCore Deployed Agent Testing
+Bedrock AgentCore Deployed Agent Testing
 
-Testing with ATX Web
+Testing with AWS Transform Web
 
-This section covers 1 and 2, where 3 requires registering your AgentCore ready agents with ATX first.
+This section covers 1 and 2, where 3 requires registering your Bedrock AgentCore ready agents with AWS Transform first.
 
 ## Developer Local Testing
 
@@ -1064,13 +1033,13 @@ export JOB_ID=<from-secrets-manager>
 export AGENT_INSTANCE_ID=<from-secrets-manager>
 export AUTHORIZATION_TOKEN=<from-secrets-manager>
 export AWS_REGION=us-east-1
-export STAGE=gamma
+export STAGE=prod
 
 Domain agent can be invoked locally as a Docker container
 
 Workspace Id and job Id can be passed into the agent through environment variable or invocations message or send message A2A message.
 
-Agents can use the API key to access the agentic API through the MCP server (ATX primitives)
+Agents can use the API key to access the agentic API through the MCP server (AWS Transform primitives)
 
 Agents can get the job
 
@@ -1088,11 +1057,11 @@ Agents produced trajectories shall be in the formation of open telemetry.
 
 Agents can be checkpointed
 
-## AgentCore Deployed Agent Testing
+## Bedrock AgentCore Deployed Agent Testing
 
-After completing developer local testing, one should consider package the agent code, deploy to Bedrock AgentCore and test invoking the deployed agent in AgentCore once more.
+After completing developer local testing, one should consider package the agent code, deploy to Bedrock AgentCore and test invoking the deployed agent in Bedrock AgentCore once more.
 
-This testing process simulates how ATX service invokes the deployed agent in production, making sure any potential integration issues are uncovered.
+This testing process simulates how AWS Transform service invokes the deployed agent in production, making sure any potential integration issues are uncovered.
 
 ### Build and Publish Agent Docker Image
 
@@ -1122,9 +1091,9 @@ Publish the image to ECR
 
 docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:latest
 
-### Create AgentCore Execution Role
+### Create Bedrock AgentCore Execution Role
 
-Bedrock AgentCore Runtime requires one execution role to assume so that the agent instance could access ATX service and other AWS resources, use the following template to create an IAM role,
+Bedrock AgentCore Runtime requires one execution role to assume so that the agent instance could access AWS Transform service and other AWS resources, use the following template to create an IAM role,
 
 AgentCoreExecutionRole:
 
@@ -1218,7 +1187,7 @@ Resources:
                   - "arn:aws:bedrock:*::foundation-model/*"
                   - "arn:aws:bedrock:us-east-1:XXXXXXXXXXXX:*"
 
-              - Sid: ATXPlatformInvocation
+              - Sid: AWSTransformPlatformInvocation
                 Effect: Allow
                 Action:
                   - "eg-agenticapi:*"
@@ -1229,11 +1198,11 @@ NOTE: When adding permissions for eg-agenticapi using the IAM console, it would 
 
 This is not a blocker, and clicking the Next should create the IAM policy.
 
-Figure. IAM Console Error (you may see an Invalid Servie in Action error when adding roles with eg-agenticapi related actions, this error can be safely ignored; ATX will provide public facing APIs for partner development testing to remove this error mesage)
+Figure. IAM Console Error (you may see an Invalid Servie in Action error when adding roles with eg-agenticapi related actions, this error can be safely ignored; AWS Transform will provide public facing APIs for partner development testing to remove this error mesage)
 
-### Create AgentCore Runtime
+### Create Bedrock AgentCore Runtime
 
-Run the following command to recreate an AgentCore Runtime:
+Run the following command to recreate a Bedrock AgentCore Runtime:
 
 For the RoleArn parameter, please provide the IAM role ARN created in step 5.2.2
 
@@ -1243,7 +1212,7 @@ AGENT_CORE_RUNTIME_DESCRIPTION="Orchestrator agent"
 
 AGENT_CORE_RUNTIME_ROLE_NAME=AgentCoreExecutionRole
 
-ATX_STAGE=gamma
+ATX_STAGE=prod
 
 aws bedrock-agentcore-control create-agent-runtime \
 
@@ -1276,17 +1245,17 @@ You should see an output like the following,
  "status": "CREATING"
 }
 
-### Invoke AgentCore Runtime
+### Invoke Bedrock AgentCore Runtime
 
-#### AgentCore Sandbox
+#### Bedrock AgentCore Sandbox
 
 TBD
 
 #### AWS CLI
 
-After the AgentCore Runtime is successfully deployed, you may simulate the process ATX invoking your agent via running the following commands.
+After the Bedrock AgentCore Runtime is successfully deployed, you may simulate the process AWS Transform invoking your agent via running the following commands.
 
-In order enable your agent communicating with ATX service, same tokens used in 5.1.2 are needed to construct a payload. Note that the payload used to invoke AgentCore Runtime needs to be encoded with Base64:
+In order enable your agent communicating with AWS Transform service, same tokens used in 5.1.2 are needed to construct a payload. Note that the payload used to invoke Bedrock AgentCore Runtime needs to be encoded with Base64:
 
 echo '{"jsonrpc":"2.0", "id":1, "method":"atx_agent/invoke","params":{"invocationContext":{"jobMetadata":{"workspaceId":"'$WORKSPACE_ID'","jobId":"'$JOB_ID'"},"authorizationToken":"'$AUTHORIZATION_TOKEN'"},"agentInstanceId":"'$AGENT_INSTANCE_ID'"}}' | base64
 
@@ -1312,11 +1281,11 @@ The CloudWatch Logs for the invocation would be available in a Log Group created
 
 /aws/bedrock-agentcore/runtimes/myorchagent-cPfBc86tYG -DEFAULT
 
-### Testing AgentCore Runtime with Additional Operations
+### Testing Bedrock AgentCore Runtime with Additional Operations
 
-#### AgentCore Protocol Understanding
+#### Bedrock AgentCore Protocol Understanding
 
-JSON-RPC 2.0 Communication: AgentCore uses JSON-RPC 2.0 for all agent communication. Your agent receives these methods via /invocations:
+JSON-RPC 2.0 Communication: Bedrock AgentCore uses JSON-RPC 2.0 for all agent communication. Your agent receives these methods via /invocations:
 
 atx_agent/invoke - Agent invocation
 
@@ -1332,7 +1301,7 @@ message/send - A2A messaging (follows A2A protocol)
 
 tasks/get - Task retrieval
 
-Session Isolation: AgentCore uses runtimeSessionId for isolation. ATX automatically generates session IDs using:
+Session Isolation: Bedrock AgentCore uses runtimeSessionId for isolation. AWS Transform automatically generates session IDs using:
 
 workspaceId_jobId_agentInstanceId
 
@@ -1340,7 +1309,7 @@ workspaceId_jobId_agentInstanceId
 
 message/send operation is an important operation used for,
 
-Orchestrator Agent <-> ATX Chat
+Orchestrator Agent <-> AWS Transform Chat
 
 Orchestrator Agent <-> Task Agent
 
@@ -1380,686 +1349,9 @@ You may see the response.json somewhat like,
 
 {"jsonrpc":"2.0","result":{"role":"agent","parts":[{"text":"I'm working on your request and will get back to you shortly.","kind":"text"}],"messageId":"D4B5CAC4-B9B8-4E95-82F7-5D7D5748B13B","kind":"message","metadata":null,"extensions":null,"referenceTaskIds":null,"taskId":null,"contextId":null},"error":null,"id":null}
 
-# Onboarding and Gamma Webapp Testing (deprecated)
-
-When you finish your developer testing and everything is working as expected, you should consider onboarding the agent to ATX platform in gamma (pre-prod) environment.
-
-You will go through three stages, 1/Upload your local agent container into ECR, 2/Deploy your ECR agent container with Bedrock AgentCore, and 3/Bring the Bedrock AgentCore runtime ARN with ATX to be invoked.
-
-Prepare a role for partner to assume and access the ECR repository, deployment in agent core. This is mandatory when you use automated onboarding script to onboard agents.
-
-AWSTemplateFormatVersion: "2010-09-09"
-Description: >
-  IAM Role for automated ECR access for the ATX onboarding script.
-
-Resources:
-  ECRRole:
-    Type: "AWS::IAM::Role"
-    Properties:
-      RoleName: "ATXOnboardingScriptAccessRole"
-      Policies:
-        - PolicyName: "ECR-Explicit-Policy"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: "Allow"
-                Action:
-                  - "ecr:GetAuthorizationToken"
-                  - "ecr:BatchCheckLayerAvailability"
-                  - "ecr:GetDownloadUrlForLayer"
-                  - "ecr:BatchGetImage"
-                  - "ecr:PutImage"
-                  - "ecr:InitiateLayerUpload"
-                  - "ecr:UploadLayerPart"
-                  - "ecr:CompleteLayerUpload"
-                  - "ecr:ListImages"
-                  - "ecr:DescribeRepositories"
-                  - "ecr:CreateRepository"
-                Resource: "*"
-
-## Register Agent Core Agent with ATX
-
-In this step, you’ll leverage ATX Agent Registry API to register your agent onto ATX service. 
-
-For the moment, your agents could be registered to ATX gamma or production environments. We highly recommend that you register agents in production environment where you can publish and test agents without the assistance of SA and use ATX WebApp directly. If you decide to stay with gamma environment, please make sure to communicate with your SA to coordinate testing from ATX webapp, once you’re able to register your agents to ATX.
-
-For Production WebApp Testing, please refer to Section 6.4.  For Gamma WebApp Testing, please refer to Section 6.3.
-
-### Prerequisites and Setup
-
-Prerequisites
-
-Account Allowlisting: Contact your SA to allowlist your AWS account with the Dynamic Registry
-
-CLI Model Setup: Download and configure the latest registry model
-
-#### Configure necessary IAM Permissions
-
-Please ensure you use an IAM Principal (user/role) with the following IAM Permissions so that you can communicate with ATX Agent Registry Service.
-
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "ATXAgentRegistryAccessStatement",
-      "Effect": "Allow",
-      "Action": [
-        "transform-registry:RegisterAgent",
-        "transform-registry:PublishAgentVersion",
-        "transform-registry:UpdatePublisherAccessControl",
-
-        "transform-registry:ListAgentByPublisher",
-        "transform-registry:ListAgentAccessControl",
-        "transform-registry:GetAgent",
-        "transform-registry:GetAgentVersion"
-      ],
-      "Resource": [
-        "*"
-      ]
-    }
-  ]
-}
-
-#### Configure ATX Agent Registry CLI
-
-The following command assumes you have received  SDK code via your SA, i.e., atxagentregistryexternal-2022-07-26.normal.json is provided to your under the directory of src/dependencies/atxagentregistryexternal
-
-aws configure add-model --service-name agent-registry --service-model file://atxagentregistryexternal-2022-07-26.normal.json
-
-In Gamma environment, you may verify with 
-
-aws agent-registry help --endpoint https://iad.gamma.agent-registry-external.elastic-gumby.ai.aws.dev | tee
-
-ATX-AGENT-REGISTRY-EXT()                              ATX-AGENT-REGISTRY-EXT()
-
-NAME
-
-       atx-agent-registry-ext -
-
-DESCRIPTION
-
-AVAILABLE COMMANDS
-
-       o get-agent
-
-       o get-agent-version
-
-       o help
-
-       o list-agent-access-control
-
-       o list-agent-by-publisher
-
-       o publish-agent-version
-
-       o register-agent
-
-       o update-publisher-access-control
-
-                                                      ATX-AGENT-REGISTRY-EXT()
-
-In Production environment, you may verify with 
-
-aws agent-registry help --region us-east-1 | tee
-
-AGENT-REGISTRY()                                              AGENT-REGISTRY()
-
-NAME
-
-       agent-registry -
-
-DESCRIPTION
-
-AVAILABLE COMMANDS
-
-       o get-agent
-
-       o get-agent-version
-
-       o help
-
-       o list-agent-access-control
-
-       o list-agents-by-publisher
-
-       o publish-agent-version
-
-       o register-agent
-
-       o update-agent
-
-       o update-publisher-access-control
-
-                                                              AGENT-REGISTRY()
-
-For additional documentation specification of ATX Agent Registry, please see ATX Agent Registry External API Specification.
-
-### Register Agent with ATX
-
-In this step you will register your agent with ATX, you may publish new versions, update access control with sub-sequent APIs. We provide the production endpoint and gamma endpoint for you to choose. Simply replace the <ENDPOINT_URL> with the stage you want to register agents.
-
-Gamma endpoint: https://iad.gamma.agent-registry-external.elastic-gumby.ai.aws.dev
-
-Production endpoint: https://iad.prod.agent-registry-external.elastic-gumby.ai.aws.dev
-
-New required fields:
-
-`ownerType`
-
-`DIRECT_AGENT`: you allow list your agents to be visible to selected customers AWS account IDs
-
-`MARKETPLACE_AGENT`: agents distributed via AWS Agent Market Place
-
-`customerConfigurationRequired`: set to `True` if agent is deployed to your customer account, keep it `False` during development/testing phase
-
-`customerConfiguredAgentDependencies`: Optional, required only for orchestrator agents that depend on customer-configured subagents
-
-{
-
-    "name": "zongrenl-atx-devguide-1025-test",
-
-    "metadata": {
-
-        "type": "SUB_AGENT",
-
-        "description": "Custom agent for enterprise workload transformation",
-
-        "ownerName": "zongrenl@amazon.com",
-
-        "ownerContactInfo": "AWS/QTransform/ExternalPartners",
-
-        "ownerType": "DIRECT_AGENT",
-
-        "customerConfigurationRequired": false
-
-    }
-
-}
-
-Register the agent to either gamma or production environment. 
-
-aws agent-registry register-agent \
-
-    --cli-input-json file://register-agent.json \
-
-    --endpoint-url <ENDPOINT_URL> \
-
---region us-east-1
-
-Expected response:
-
-{
-
-    "name": "zongrenl-atx-devguide-1025-test",
-
-"visibility": "RESTRICTED"
-
-}
-
-### Publish An Agent Version
-
-Before publishing an agent version, make sure to create a role for ATX platform to assume to invoke your Agent Core runtime.
-
-AWSTemplateFormatVersion: "2010-09-09"
-Description: >
-  IAM Role for automated AWS Bedrock Agent access for the ATX platform.
-
-Resources:
-  BedrockAgentRole:
-    Type: "AWS::IAM::Role"
-    Properties:
-      RoleName: "ATXAgentInvokeRole"
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: "Allow"
-            Principal:
-              Service: 
-                - "gamma.us-east-1.compute.elastic-gumby.aws.internal"
-            Action: "sts:AssumeRole"
-      Policies:
-        - PolicyName: "Bedrock-AgentRuntime-Policy"
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: "Allow"
-                Action:
-                  - "bedrock-agentcore:InvokeAgentRuntime"
-                  - "bedrock-agentcore:StopRuntimeSession"
-                Resource: "*"
-
-Now create your agent version configuration:
-
-{
-
-    "name": "zongrenl-atx-devguide-1025-test",
-
-    "version": "1.0.0",
-
-    "configuration": {
-
-        "shortDescription": "Custom enterprise transformation agent",
-
-        "agentCard": {},
-
-        "computeConfiguration": {
-
-            "provisionedComputeConfiguration": {
-
-                "agentCoreConfiguration": {
-
-                    "atxAccessRoleArn": "arn:aws:iam::<YOUR ACCOUNT>:role/ATXAgentInvokeRole ",
-
-                    "runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:<YOUR ACCOUNT>:runtime/showcase_agent_gamma-njGcyn6Ixv",
-
-                    "qualifier": "DEFAULT"
-
-                }
-
-            }
-
-        },
-
-        "agentResiliencyConfiguration": {
-
-            "partnerControllerRetryWindowMinutes": 6,
-
-            "agentRecoveryConfiguration": {
-
-                "recoveryWaitTimeSeconds": 60
-
-            }
-
-        },
-
-        "inputPayloadSchema": {
-
-            "$schema": "http://json-schema.org/draft-07/schema#",
-
-            "type": "object",
-
-            "properties": {}
-
-        },
-
-        "outputPayloadSchema": {
-
-            "$schema": "http://json-schema.org/draft-07/schema#",
-
-            "type": "object",
-
-            "properties": {}
-
-        },
-
-        "monitoringType": "HEALTHCHECK",
-
-        "notificationsEnabled": "ENABLED",
-
-        "objectiveNegotiationPrompt": "Your agent's objective negotiation prompt here"
-
-    }
-
-}
-
-Publish the version:
-
-aws external-registry publish-agent-version \
-
-    --cli-input-json file://publish-version.json \
-
-    --endpoint-url <ENDPOINT_URL> \
-
-    --region us-east-1
-
-Expected response:
-
-{
-
-    "name": "zongrenl-atx-devguide-1025-test",
-
-    "version": "1.0.1",
-
-    "status": "ACTIVE"
-
-}
-
-### Configure Access Control
-
-By default, agents are created with RESTRICTED visibility. update-publisher-access-control API allows to add authorized AWS accounts to use the agents.
-
-To enable webapp testing in gamma, please make sure to allow access for 348823729159 account from ATX (used for later webapp testing). To enable webapp in production, please make sure to allow access for your own AWS account
-
-{
-
-    "agentName": "zongrenl-atx-devguide-1025-test",
-
-    "customerAccountId": "<customerAccountId>", # 348823729159 in gamma, or your own AWS account in prod
-
-    "accessControl": "ENABLED"
-
-}
-
-Update publisher access control:
-
-aws external-registry update-publisher-access-control \
-
-    --cli-input-json file://access-control.json \
-
-    --endpoint-url <ENDPOINT_URL> \
-
-    --region us-east-1
-
-Verify access control:
-
-aws external-registry list-agent-access-control \
-
-    --name zongrenl-atx-devguide-1025-test \
-
-    --endpoint <ENDPOINT_URL> \
-
-    --region us-east-1
-
-Expected responses:
-
-{
-
-    "customerAccountIdList": [
-
-        "<customerAccountId>"
-
-    ],
-
-    "visibility": "RESTRICTED"
-
-}
-
-### Agent Management and Monitoring
-
-#### List Your Published Agents
-
-View all agents you have published to the Dynamic Registry:
-
-aws external-registry list-agents-by-publisher \
-
-    --endpoint-url <ENDPOINT_URL>\
-
-    --region us-east-1
-
-Expected responses:
-
-{
-
-    "items": [
-
-        "zongrenl-atx-devguide-1025-test"
-
-    ]
-
-}
-
-#### Get Agent Details
-
-Retrieve metadata for a specific agent:
-
-{
-
-    "name": "zongrenl-atx-devguide-1025-test",
-
-    "version": "1.0.1"
-
-}
-
-aws external-registry get-agent-version \
-
-    --cli-input-json file://get-agent-details.json \
-
-    --endpoint-url <ENDPOINT_URL>\
-
---region us-east-1
-
-## Coordinate ATX Webapp UAT Testing via SA 
-
-You can skip this step if you register agents in production environments. 
-
-Once completing all above steps, please coordinate with your assigned SA, so that you can testing your agents in ATX gamma webapp.
-
-## Automate Test new job without WebApp (only applicable to agents registered in gamma environment)
-
-You can skip this step if you register agents in production environments. 
-
-Env Variables
-
-BROWSER_COOKIE="Please contact your SAs"
-
-WORKSPACE_ID="Your assigned workspace"
-
-ORIGIN=https://722369beeec33b4dd.transform-gamma.us-east-1.on.aws
-
-FES_ENDPOINT=https://api.transform-gamma.us-east-1.on.aws/
-
-Create a new job:
-
-JOB_NAME="My Job Name"
-
-JOB_TYPE="Please Contact SA"
-
-JOB_OBJECTIVE=""
-
-JOB_INTENT=""
-
-API_NAME=CreateJob
-
-curl -X POST -H "Content-Type: application/x-amz-json-1.0" \
-
--H "Cookie: ${BROWSER_COOKIE}" \
-
--H "Origin: ${ORIGIN}" \
-
--H "x-amz-target: ElasticGumbyFrontEndService.${API_NAME}" \
-
--d '{"workspaceId":"'${WORKSPACE_ID}'","objective":"'${JOB_OBJECTIVE}'","jobType":"'${JOB_TYPE}'","jobName":"'${JOB_NAME}'","intent":"'${JOB_INTENT}'"}' \
-
-${FES_ENDPOINT}
-
-Start the created job
-
-JOB_ID="Output from CreateJob"
-
-AGENT_VERSION=1.0.0-dev-yuwuchu
-
-API_NAME=StartJob
-
-curl -X POST -H "Content-Type: application/x-amz-json-1.0" \
-
--H "Cookie: ${BROWSER_COOKIE}" \
-
--H "Origin: ${ORIGIN}" \
-
--H "x-amz-target: ElasticGumbyFrontEndService.${API_NAME}" \
-
--H "x-amzn-qt-agentVersion: ${AGENT_VERSION}" \
-
--d '{"workspaceId":"'${WORKSPACE_ID}'","jobId":"'${JOB_ID}'"}' \
-
-${FES_ENDPOINT}
-
-Create a Job Plan via Chat forwarding the message to the agent (Your agent should already create a job plan. The script here is based on BaseOrchestractorAgent that in the workshop sample code)
-
-API_NAME=SendMessage
-
-WORKSPACE_ID=""
-
-JOB_ID=""
-
-TEXT_MESSAGE="Can you create a job plan with one single job step? like my first job step"
-
-curl -X POST -H "Content-Type: application/x-amz-json-1.0" \
-
--H "Cookie: ${BROWSER_COOKIE}" \
-
--H "Origin: ${ORIGIN}" \
-
--H "x-amz-target: ElasticGumbyFrontEndService.${API_NAME}" \
-
--d '{"text":"'${TEXT_MESSAGE}'","metadata":{"resourcesOnScreen":{"workspace":{"workspaceId":"'${WORKSPACE_ID}'","jobs":[{"jobId":"'${JOB_ID}"}]}}}}' \
-
-${FES_ENDPOINT}
-
-You will expect the log message in your agent like:
-
-2025-09-18 08:35:56,617 - agent_builder_sdk.server.agent_runtime_server - INFO - Received invocation for request: {'jsonrpc': '2.0', 'method': 'message/send', 'params': {'message': {'extensions': ['ATX_A2A.SourceInformation', 'https://aws.com/transform/ext/source_information/v1', 'ATX_A2A.AgentInitializationContext'], 'metadata': {'https://aws.com/transform/ext/source_information/v1': {'senderAgentInstanceId': 'ATX_CHAT', 'onBehalfOfUser': '94886488-8081-7043-77fd-388afdba955e'}, 'ATX_A2A.AgentInitializationContext': {'authorizationToken': -----', 'tokenExpiration': 1758227755625, 'jobMetadata': {'jobId': '5c20949f-498b-4030-86fe-4dd80099960f', 'workspaceId': 'e0fe7ddc-db8b-4c10-bbc3-ae56d3fe8fd4'}, 'agentInstanceId': '4cd63992-7053-4c13-bafe-d5b7c6f32cc3'}, 'ATX_A2A.SourceInformation': {'senderAgentInstanceId': 'ATX_CHAT', 'onBehalfOfUser': '94886488-8081-7043-77fd-388afdba955e'}}, 'role': 'user', 'kind': 'message', 'parts': [{'kind': 'text', 'text': 'Can you create a job plan with one single job step - like my first job step?'}], 'messageId': '431b0192-bd5c-4be2-b38e-9df6982659a0', 'contextId': 'bf19a558-18e5-41e1-b013-36442981dd2c'}}, 'id': '31638206-6703-4ec2-8148-758f034ab99e'}
-
-…
-
-2025-09-18 08:36:04,382 - strands.event_loop.event_loop - DEBUG - tool_use=<{'toolUseId': 'tooluse_32xprG8GTN-U965SwAcrCg', 'name': 'put_job_plan', 'input': {'mode': {'override': {}}, 'plan': {'nodes': [{'stepLabel': 'Step 1', 'stepName': 'Initial Job Step', 'description': 'This is the first and only step in the job plan.'}]}}}> | streaming
-
-Create Autoform HITL task via chat forwarding the message to the agent
-
-API_NAME=SendMessage
-
-WORKSPACE_ID=""
-
-JOB_ID=""
-
-TEXT_MESSAGE="Can you create a autoform hitl task with 2 text fields to ask user to provide first name and last name? The hitl task must attach to a job step"
-
-curl -X POST -H "Content-Type: application/x-amz-json-1.0" \
-
--H "Cookie: ${BROWSER_COOKIE}" \
-
--H "Origin: ${ORIGIN}" \
-
--H "x-amz-target: ElasticGumbyFrontEndService.${API_NAME}" \
-
--d '{"text":"'${TEXT_MESSAGE}'","metadata":{"resourcesOnScreen":{"workspace":{"workspaceId":"'${WORKSPACE_ID}'","jobs":[{"jobId":"'${JOB_ID}"}]}}}}' \
-
-${FES_ENDPOINT}
-
-You will expect the log message in your agent like:
-
-2025-09-18 08:36:45,193 - agent_builder_sdk.server.agent_runtime_server - INFO - Received invocation for request: {'jsonrpc': '2.0', 'method': 'message/send', 'params': {'message': {'extensions': ['ATX_A2A.SourceInformation', 'https://aws.com/transform/ext/source_information/v1', 'ATX_A2A.AgentInitializationContext'], 'metadata': {'https://aws.com/transform/ext/source_information/v1': {'senderAgentInstanceId': 'ATX_CHAT', 'onBehalfOfUser': '94886488-8081-7043-77fd-388afdba955e'}, 'ATX_A2A.AgentInitializationContext': {'authorizationToken': '---, 'tokenExpiration': 1758227803940, 'jobMetadata': {'jobId': '5c20949f-498b-4030-86fe-4dd80099960f', 'workspaceId': 'e0fe7ddc-db8b-4c10-bbc3-ae56d3fe8fd4'}, 'agentInstanceId': '4cd63992-7053-4c13-bafe-d5b7c6f32cc3'}, 'ATX_A2A.SourceInformation': {'senderAgentInstanceId': 'ATX_CHAT', 'onBehalfOfUser': '94886488-8081-7043-77fd-388afdba955e'}}, 'role': 'user', 'kind': 'message', 'parts': [{'kind': 'text', 'text': 'Can you create an autoform HITL task with 2 text fields to ask user to provide first name and last name? The HITL task must attach to the job step which we created in the past (Step ID: 0001-3ed0b1dc-2281-4674-8c61-33809406977a).'}], 'messageId': 'ceb88562-dae6-4b07-a98e-342cc807733e', 'contextId': '0238b724-4e85-4224-b5ba-e7ebcc43361c'}}, 'id': '193ca901-a73b-416d-9f6f-f2df5ba872f0'}
-
-…
-
-2025-09-18 08:36:54,463 - elastic_gumby_agentic_mcp.server._advanced_tools - INFO - create_hitl_task_with_json_input: {'properties': {'title': 'User Name Input', 'description': 'Please provide your first name and last name.', 'fields': [{'name': 'firstName', 'label': 'First Name', 'type': <FieldType.TEXT: 'text'>, 'required': True, 'placeholder': 'Enter your first name'}, {'name': 'lastName', 'label': 'Last Name', 'type': <FieldType.TEXT: 'text'>, 'required': True, 'placeholder': 'Enter your last name'}]}}
-
-Mimic Submit the HITL response from Human:
-
-Step 1: Prepare the json response
-
-echo '{"data":{"firstName":"hello","lastName":"world"}}' | tee my_hitl_input.json | json_pp
-
-Step 2: Create Artifact Upload URL via presigned URL. Capture the artifactId returned in the response.
-
-HUMAN_INPUT_JSON_FILE_NAME=my_hitl_input.json
-
-API_NAME=CreateArtifactUploadUrl
-
-WORKSPACE_ID=""
-
-JOB_ID=""
-
-SHA256_BASE64=$(cat ${HUMAN_INPUT_JSON_FILE_NAME} | openssl dgst -sha256 -binary | base64)
-
-curl -X POST -H "Content-Type: application/x-amz-json-1.0" \
-
--H "Cookie: ${BROWSER_COOKIE}" \
-
--H "Origin: ${ORIGIN}" \
-
--H "x-amz-target: ElasticGumbyFrontEndService.${API_NAME}" \
-
--d '{"workspaceId":"'${WORKSPACE_ID}'","jobId":"'${JOB_ID}'","contentDigest":{"Sha256":"'${SHA256_BASE64}'"},"artifactReference":{"artifactType":{"categoryType":"HITL_FROM_USER","fileType":"JSON"}}}' \
-
-${FES_ENDPOINT}
-
-Step 3: upload json file to s3 via generated presigned URL
-
-SHA256_BASE64=
-
-S3_ENCRYPTION_CONTEXT=
-
-PRESIGNED_URL=
-
-JSON_FILE_NAME=
-
-curl -X PUT -H "content-type: application/json" \
-
--H "host: aws-transform-us-east-1-a5d4ad3e7c2.s3.amazonaws.com" \
-
--H "x-amz-checksum-sha256: '${SHA256_BASE64}'" \
-
--H "x-amz-expected-bucket-owner: 311141564420" \
-
--H "x-amz-server-side-encryption: aws:kms" \
-
--H "x-amz-server-side-encryption-aws-kms-key-id: arn:aws:kms:us-east-1:711387114561:key/1adab0dc-f73d-43c8-92c4-19c627733e41" \
-
--H "x-amz-server-side-encryption-context: '${S3_ENCRYPTION_CONTEXT}'" \
-
---upload-file ./${JSON_FILE_NAME} ${PRESIGNED_URL}
-
-Step 4: Call CompleteArtifactUpload API
-
-HITL_ARTIFACT_ID="This is the output from CreateArtifactUploadUrl"
-API_NAME= CompleteArtifactUpload
-WORKSPACE_ID=""
-JOB_ID=""
-
-curl -X POST -H "Content-Type: application/x-amz-json-1.0" \
-
--H "Cookie: ${BROWSER_COOKIE}" \
-
--H "Origin: ${ORIGIN}" \
-
--H "x-amz-target: ElasticGumbyFrontEndService.${API_NAME}" \
-
--d '{"workspaceId":"'${WORKSPACE_ID}'","jobId":"'${JOB_ID}'","artifactId":"'${HITL_ARTIFACT_ID}'"}' \
-
-${FES_ENDPOINT}
-
-Step 5: Submit the HITL task
-
-API_NAME=SubmitStandardHitlTask or SubmitCriticalHitlTaskRequest
-
-WORKSPACE_ID=""
-
-JOB_ID=""
-
-HITL_TASK_ID="You could find it in your agent log"
-
-HITL_ARTIFACT_ID="This is the output from CreateArtifactUploadUrl"
-
-curl -X POST -H "Content-Type: application/x-amz-json-1.0" \
-
--H "Cookie: ${BROWSER_COOKIE}" \
-
--H "Origin: ${ORIGIN}" \
-
--H "x-amz-target: ElasticGumbyFrontEndService.${API_NAME}" \
-
--H "x-amzn-qt-agentVersion: 1.0.0-dev-yuwuchu" \
-
--d '{"workspaceId":"'${WORKSPACE_ID}'","jobId":"'${JOB_ID}'","taskId":"'${HITL_TASK_ID}'","taskId":{"Sha256":"'${HITL_TASK_ID}'"},"action":"APPROVE","humanArtifact":{"artifactId":"'${HITL_ARTIFACT_ID}'"}}' \
-
-${FES_ENDPOINT}
-
-You will expect the log message in your agent like:
-
-2025-09-18 08:37:55,360 - agent_builder_sdk.server.agent_runtime_server - INFO - Received invocation for request: {'jsonrpc': '2.0', 'method': 'atx_agent/notify', 'params': {'jobMetadata': {'jobId': '5c20949f-498b-4030-86fe-4dd80099960f', 'workspaceId': 'e0fe7ddc-db8b-4c10-bbc3-ae56d3fe8fd4'}, 'agentInstanceId': '4cd63992-7053-4c13-bafe-d5b7c6f32cc3', 'notification': {'type': 'HitlTaskStatusChangeNotification', 'detail': '{"hitlTaskId":"0e69c80a-4be7-451f-869f-364d28a1d2e1","oldStatus":"IN_PROGRESS","newStatus":"SUBMITTED"}'}, 'authorizationToken': ---', 'tokenExpiration': 1758227875036}, 'id': None}
-
-…
-
-Thank you for informing me about the submission of HITL Task 0e69c80a-4be7-451f-869f-364d28a1d2e1. I'll retrieve the output of this HITL task and analyze it to determine our next steps. Let me fetch the task output for you.
-
-…
-
-2025-09-18 08:38:01,479 - elastic_gumby_agentic_mcp.server._advanced_tools - INFO - Retrieving output of HITL task 0e69c80a-4be7-451f-869f-364d28a1d2e1: {'hitl_task': {'hitlTaskId': '0e69c80a-4be7-451f-869f-364d28a1d2e1', 'hitlTaskStatus': 'SUBMITTED', 'uxComponentId': 'AutoForm', 'blockingType': 'NON_BLOCKING', 'severity': 'STANDARD', 'hitlTaskType': 'NORMAL', 'createdAt': datetime.datetime(2025, 9, 18, 8, 36, 55, 96000, tzinfo=tzlocal()), 'updatedAt': datetime.datetime(2025, 9, 18, 8, 37, 54, 651000, tzinfo=tzlocal()), 'stepId': '0001-3ed0b1dc-2281-4674-8c61-33809406977a', 'agentArtifact': {'artifactId': '3fe837d9-46ff-4782-9066-57a93298f1d7'}, 'humanArtifact': {'artifactId': 'ac3265d2-81cd-4a06-9e82-46edaa1e3498'}, 'description': 'We need your first and last name for our records.'}}
-
 # Onboarding and Production Webapp Testing
 
-When you finish your developer testing and everything is working as expected, you can onboard your agent to ATX production environment and use WebApp for agent testing. 
+When you finish your developer testing and everything is working as expected, you can onboard your agent to AWS Transform production environment and use WebApp for agent testing. 
 
 You will go through three stages, 
 
@@ -2067,7 +1359,7 @@ Upload your local agent container into ECR
 
 Deploy your ECR agent container with Bedrock AgentCore, 
 
-Bring the Bedrock AgentCore runtime ARN with ATX to be invoked.
+Bring the Bedrock AgentCore runtime ARN with AWS Transform to be invoked.
 
 ## Update local agent container into ECR 
 
@@ -2105,7 +1397,7 @@ Create AgentCoreExecutionRole in the IAM console with trusted Relationship using
 
 }
 
-Then add below inline policy named as `ATXAgent-AgentCoreExecutionRolePolicy`. Replace the accountId to your own AWS account.
+Then add below inline policy named as `AWSTransformAgent-AgentCoreExecutionRolePolicy`. Replace the accountId to your own AWS account.
 
 {
 
@@ -2359,9 +1651,9 @@ REGION: us-east-1
 
 Click the hosting Agent and you could be able to provision the Agent Runtime and you can find the `agentRuntimeArn` in “View invocation code”.
 
-## Register Agent with ATX
+## Register Agent with AWS Transform
 
-In this step you will register your agent with ATX, you may publish new versions, update access control with sub-sequent APIs. We provide the production endpoint
+In this step you will register your agent with AWS Transform, you may publish new versions, update access control with sub-sequent APIs. We provide the production endpoint
 
 Production endpoint: https://iad.prod.agent-registry-external.elastic-gumby.ai.aws.dev
 
@@ -2371,7 +1663,7 @@ Depending on your testing scenarios, you need to register agent with different c
 
 keep it `false` during your development/testing phase to verify agent functionality.
 
-Set to `true` when agent is ready for customer to use. Agent would be deployed to your customer’s AgentCore Runtime.
+Set to `true` when agent is ready for customer to use. Agent would be deployed to your customer’s Bedrock AgentCore Runtime.
 
 ` customerConfiguredAgentDependencies`: Optional, required only for orchestrator agents that depend on customer-configured subagents when `customerConfigurationRequired` is set as `true`
 
@@ -2389,9 +1681,9 @@ Other New optional fields
 
 `jobOrchestratorMetadata`: optional 
 
-chatUILabel: required, displaying agent name in the selection buttons of ATX chat
+chatUILabel: required, displaying agent name in the selection buttons of AWS Transform chat
 
-chatAgentIdentifier: required, String used by agent for quick detection of capabilities in ATX chat.
+chatAgentIdentifier: required, String used by agent for quick detection of capabilities in AWS Transform chat.
 
 a2aSupported: required, if agent supports A2A 
 
@@ -2453,7 +1745,7 @@ Expected response:
 
 ### Publish An Agent Version
 
-Before publishing an agent version, make sure to create a role(named: ATXAgentInvokeRole) for ATX platform to assume to invoke your Agent Core runtime.
+Before publishing an agent version, make sure to create a role(named: AWSTransformAgentInvokeRole) for AWS Transform to assume to invoke your Agent Core runtime.
 
 Trust policy for this role 
 
@@ -2481,7 +1773,7 @@ Trust policy for this role
 
 }
 
-Create an inline policy with below template and named as `ATX-BedrockAgentRuntimePolicy` and then attach to this role 
+Create an inline policy with below template and named as `AWSTransform-BedrockAgentRuntimePolicy` and then attach to this role 
 
 {
 
@@ -2513,7 +1805,7 @@ Create an inline policy with below template and named as `ATX-BedrockAgentRuntim
 
             "Effect": "Allow",
 
-            "Sid": "ATXAgentCoreRuntimePermissions"
+            "Sid": "AWSTransformAgentCoreRuntimePermissions"
 
         }
 
@@ -2521,7 +1813,7 @@ Create an inline policy with below template and named as `ATX-BedrockAgentRuntim
 
 }
 
-Now create your agent version configuration. Example JSON `publish-agent-version.json`. Change the accountId in the `atxAccessRoleArn` and replace your own AgentCore Runtime Arn.
+Now create your agent version configuration. Example JSON `publish-agent-version.json`. Change the accountId in the `atxAccessRoleArn` and replace your own Bedrock AgentCore Runtime Arn.
 
 {
 
@@ -2539,7 +1831,7 @@ Now create your agent version configuration. Example JSON `publish-agent-version
 
         "agentCoreConfiguration": {
 
-          "atxAccessRoleArn": "arn:aws:iam::<AwsAccountId>:role/ATXAgentInvokeRole",
+          "atxAccessRoleArn": "arn:aws:iam::<AwsAccountId>:role/AWSTransformAgentInvokeRole",
 
           "runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:<AwsAccountId>:runtime/dynamic_showcase_agent-SpNsIl2ASS",
 
@@ -2751,7 +2043,7 @@ Expected response
 
                 "agentCoreConfiguration": {
 
-                    "atxAccessRoleArn": "arn:aws:iam::<AccountId>:role/ATXAgentInvokeRole",
+                    "atxAccessRoleArn": "arn:aws:iam::<AccountId>:role/AWSTransformAgentInvokeRole",
 
                     "runtimeArn": "arn:aws:bedrock-agentcore:us-east-1:<AccountId>:runtime/dynamic_showcase_agent-SpNsIl2ASS",
 
@@ -2809,27 +2101,27 @@ Expected response
 
 }
 
-## ATX Prod WebApp testing 
+## AWS Transform Prod WebApp testing 
 
-You can create the ATX profile in your own AWS account which is the `customerAccountId` allowlisted for agent usage and start testing without the assistance of SA. In this case, you can publish new version of agents and test it unlimited by yourself.
+You can create the AWS Transform profile in your own AWS account which is the `customerAccountId` allowlisted for agent usage and start testing without the assistance of SA. In this case, you can publish new version of agents and test it unlimited by yourself.
 
-Step1: Login your AWS console and go to `AWS Transform` service (https://us-east-1.console.aws.amazon.com/console/home?region=us-east-1#). Hit `Get started` and create the ATX profile 
+Step1: Login your AWS console and go to `AWS Transform` service (https://us-east-1.console.aws.amazon.com/console/home?region=us-east-1#). Hit `Get started` and create the AWS Transform profile 
 
-In the setting, you could be able to see your ATX application. 
+In the setting, you could be able to see your AWS Transform application. 
 
 Step2: Add new users to AWS Transform, example like this. Or you can go to `IAM Identity Center` to create a group and add users there. 
 
-Figure  - Add new users from ATX console
+Figure  - Add new users from AWS Transform console
 
 Figure  - Create a group and add users in IAM Identity Center
 
-For each user that is allowed to access ATX application, Admin needs to send email verification link and asks user to set up password. 
+For each user that is allowed to access AWS Transform application, Admin needs to send email verification link and asks user to set up password. 
 
-Step3: Login the ATX WebApp. Use the `Web application URL` in step 1 in ATX console and paste it in the browser. It will lead you to the log in page and you can fill in username and password.
+Step3: Login the AWS Transform WebApp. Use the `Web application URL` in step 1 in AWS Transform console and paste it in the browser. It will lead you to the log in page and you can fill in username and password.
 
 Step4: Create a new workspace and ask for questions like “What kind of job types are available to use?”. Your registered agent should show up. For example, our registered agent is “dynamic-showcase-agent-agentcore”. Then you can use natural language “create a job for 5. Dynamic-showcase-agent-agentcore”
 
-Step5. For debugging, you would be able to get jobId directly from webapp url part - ` workspace/99a33b83-f739-4e83-8ff6-9eae537962cd/job/669f2d52-4f3e-4eb5-8bbd-b663c4fbad2d`. You can go to CloudWatch Logs Insights in your AWS account where you deploy the AgentCore Runtime, to query by jobId and check agent log. 
+Step5. For debugging, you would be able to get jobId directly from webapp url part - ` workspace/99a33b83-f739-4e83-8ff6-9eae537962cd/job/669f2d52-4f3e-4eb5-8bbd-b663c4fbad2d`. You can go to CloudWatch Logs Insights in your AWS account where you deploy the Bedrock AgentCore Runtime, to query by jobId and check agent log. 
 
 Example CloudWatch log query
 
@@ -2843,7 +2135,7 @@ fields @timestamp, @message, @logStream, @log
 
 ## External Agentic API support [To Be released]
 
-ATX platform will release external Agentic API support in Agent SDK which requires no allowlisting on ATX side and could speed up the development. In order to use this feature, simply update the AgentCore Runtime hosting to add the new environment variable `USE_EXTERNAL_AGENTIC_API=true`
+AWS Transform will release external Agentic API support in Agent SDK which requires no allowlisting on AWS Transform side and could speed up the development. In order to use this feature, simply update the Bedrock AgentCore Runtime hosting to add the new environment variable `USE_EXTERNAL_AGENTIC_API=true`
 
 Example screenshot: 
 
@@ -2855,33 +2147,33 @@ If you have finished the development testing, you can now make agent available t
 
 # FAQ
 
-## ATX Concepts FAQs
+## AWS Transform Concepts FAQs
 
-### What is job plan of an ATX job?
+### What is job plan of an AWS Transform job?
 
-ATX job plan outlines the steps needed to complete a transformation job. The figure below shows an example job plan created by the agent to outline to the user how it is planning to complete the transformation job.
+AWS Transform job plan outlines the steps needed to complete a transformation job. The figure below shows an example job plan created by the agent to outline to the user how it is planning to complete the transformation job.
 
-Figure. Example of ATX Job Plan Created by A Transformation Agent
+Figure. Example of AWS Transform Job Plan Created by A Transformation Agent
 
 To keep the customers informed with the job progress, the job plan is constantly being updated by the agent to reflect which steps are complete, which steps require human attention (also known as HITL tasks) and which steps are yet to complete. 
 
 ### How is a job plan typically created?
 
-A job plan is created by the agent performing the transformation job via invoking ATX Job API (see section 8.2 ATX Agentic API Specification for details).
+A job plan is created by the agent performing the transformation job via invoking AWS Transform Job API (see section 8.2 AWS Transform Agentic API Specification for details).
 
-Agent may invoke ATX Job API with the following forms,
+Agent may invoke AWS Transform Job API with the following forms,
 
 A direct API invocation
 
-Via ATX AgenticMCP server
+Via AWS Transform Agentic MCP server
 
-## ATX Agent FAQs
+## AWS Transform Agent FAQs
 
-This section covers commonly asked questions about ATX agents, more details about using ATX Base Agent package to develop ATX agents can be found in 10.1.
+This section covers commonly asked questions about AWS Transform agents, more details about using AWS Transform Base Agent package to develop AWS Transform agents can be found in 10.1.
 
-### What is the minimum requirement for an agent to be an ATX agent?
+### What is the minimum requirement for an agent to be an AWS Transform agent?
 
-An ATX agent is an agent that is cable of communicating with agents/customers via ATX API and can perform transformation domain specific tasks.
+An AWS Transform agent is an agent that is cable of communicating with agents/customers via AWS Transform API and can perform transformation domain specific tasks.
 
 This requires the agent runtime having:
 
@@ -2889,11 +2181,11 @@ A HTTP server support /invocations and /ping API endpoints;
 
 The agent can get input job Id through environment variable or /invocations, get the job details, generate a plan, execute the plan and finish the job.
 
-### Do I have to use ATX provided base agent to build my agent?
+### Do I have to use AWS Transform provided base agent to build my agent?
 
 No. 
 
-ATX base agent provides a good starting point to build your domain agent. However, it is not necessary to use it. You can always build everything from scratch when you agent container follows the minimum agent requirement.
+AWS Transform base agent provides a good starting point to build your domain agent. However, it is not necessary to use it. You can always build everything from scratch when you agent container follows the minimum agent requirement.
 
 ### May I use langgraph to build my agent instead of strands agent?
 
@@ -2905,25 +2197,25 @@ You can either use langgraph or strands agent to build your domain agent.
 
 When you create the orchestrator agent, you can specify which subagents can be used optionally. Or this process can be totally dynamically decided by orchestrator agent in the runtime, based on the subagents in the agent registry.
 
-### How does AgentCore integration work with ATX?
+### How does Bedrock AgentCore integration work with AWS Transform?
 
-AgentCore provides a serverless runtime for ATX agents using JSON-RPC 2.0 protocol. 
+Bedrock AgentCore provides a serverless runtime for AWS Transform agents using JSON-RPC 2.0 protocol. 
 
 Key aspects:
 
-Single Endpoint: All ATX operations go through /invocations
+Single Endpoint: All AWS Transform operations go through /invocations
 
 Session Isolation: Each job runs in isolated microVMs
 
-Automatic Context: ATX context is extracted from any request type
+Automatic Context: AWS Transform context is extracted from any request type
 
-Protocol Compatibility: Supports both ATX operations and A2A messaging
+Protocol Compatibility: Supports both AWS Transform operations and A2A messaging
 
 Managed Infrastructure: No need to manage servers or scaling
 
 ### What’s the difference between BaseAgent AgentRuntimeServer and the traditional CLI approach?
 
-AgentRuntimeServer: Designed for AgentCore, uses JSON-RPC, single endpoint
+AgentRuntimeServer: Designed for Bedrock AgentCore, uses JSON-RPC, single endpoint
 
 Traditional CLI: Multiple REST endpoints, designed for MDE/ECS deployment
 
@@ -2975,7 +2267,7 @@ Certificate Chain Details
 
 When the SSL handshake fails, the proxy presents its certificate, which is signed by your corporate CA. For example, a successful connection would look for a chain like this:
 
-Target (Service): iad.gamma.agenticapi.elastic-gumby.ai.aws.dev
+Target (Service): iad.prod.agenticapi.elastic-gumby.ai.aws.dev
 
 Intermediate CA: Amazon RSA 2048 M03
 
@@ -3019,13 +2311,13 @@ Obtain your Corporate CA Certificate: Request the certificate file (e.g., corp
 
 Combine the bundles: Follow steps 2 and 3 from Solution 1 to create a combined certificate bundle.
 
-Update proxies and proxies_config in dependencies/ElasticGumbyPlatformPartnerBaseAgent/src/agent_builder_sdk/agentic_framework/client_factory.py to use corporate proxy
+Update proxies and proxies_config in agent_builder_sdk/agentic_framework/client_factory.py to use corporate proxy
 
-Re-install ATX dependencies via pip3 install -r requirements.txt with modified code
+Re-install AWS Transform dependencies via pip3 install -r requirements.txt with modified code
 
 """
 
-Client factory for ATX Agentic API.
+Client factory for AWS Transform Agentic API.
 
 """
 
@@ -3103,15 +2395,15 @@ def create_agentic_api_client(
 
 For local testing or in a controlled development environment, you can instruct Boto3 to skip SSL certificate validation entirely by setting verify=False when creating the client. 
 
-Update verify option in dependencies/ElasticGumbyPlatformPartnerBaseAgent/src/agent_builder_sdk/agentic_framework/client_factory.py to use corporate proxy
+Update verify option in agent_builder_sdk/agentic_framework/client_factory.py to use corporate proxy
 
-Re-install ATX dependencies via pip3 install -r requirements.txt with modified code
+Re-install AWS Transform dependencies via pip3 install -r requirements.txt with modified code
 
 Security Warning: Disabling SSL verification is not recommended for production environments as it exposes your application to security risks, including man-in-the-middle attacks.
 
 """
 
-Client factory for ATX Agentic API.
+Client factory for AWS Transform Agentic API.
 
 """
 
@@ -3141,7 +2433,7 @@ def create_agentic_api_client(
 
     """
 
-    Create boto3 client for ElasticGumbyAgenticAPI.
+    Create boto3 client for AWS Transform Agentic API.
 
     Args:
 
@@ -3203,15 +2495,15 @@ def create_agentic_api_client(
 
         )
 
-## Troubleshooting AgentCore Testing – 422 Unprocessable Entity Error
+## Troubleshooting Bedrock AgentCore Testing – 422 Unprocessable Entity Error
 
-A 422 Unprocessable Entity error in AgentCore testing indicates that the server has validated the request's format but found semantic errors in the payload, preventing it from being processed. While a missing input field is a common cause, other validation issues can also trigger this error.
+A 422 Unprocessable Entity error in Bedrock AgentCore testing indicates that the server has validated the request's format but found semantic errors in the payload, preventing it from being processed. While a missing input field is a common cause, other validation issues can also trigger this error.
 
 This troubleshooting guide provides steps to diagnose and resolve different causes of a 422 error.
 
 ### Symptom
 
-The 422 Unprocessable Entity is usually triggered and can be seen from an invocation of an AgentCore runtime instance, for example,
+The 422 Unprocessable Entity is usually triggered and can be seen from an invocation of a Bedrock AgentCore runtime instance, for example,
 
 aws bedrock-agentcore invoke-agent-runtime \
 
@@ -3229,7 +2521,7 @@ response.json
 
 An error occurred (RuntimeClientError) when calling the InvokeAgentRuntime operation: Received error (422) from runtime. Please check your CloudWatch logs for more information.
 
-### Step 1: Examine the AgentCore logs in CloudWatch
+### Step 1: Examine the Bedrock AgentCore logs in CloudWatch
 
 The most detailed information about the validation failure will be in your agent's logs, published to Amazon CloudWatch. Search for the specific invocation that failed.
 
@@ -3244,17 +2536,17 @@ fields @timestamp, @message, @logStream, @log
 
 ### Step 2: Validate general payload structure 
 
-Confirm that your request payload matches the expected JSON structure for the AgentCore runtime. 
+Confirm that your request payload matches the expected JSON structure for the Bedrock AgentCore runtime. 
 
-Missing or incorrect fields: The AgentCore runtime has specific requirements for the payload, including mandatory fields. 
+Missing or incorrect fields: The Bedrock AgentCore runtime has specific requirements for the payload, including mandatory fields. 
 
 Malformed JSON: Even if your test sends JSON, a syntax error (e.g., a misplaced comma or bracket) could cause the agent to fail during deserialization. Use a JSON linter to check for errors.
 
 Missing or incorrect Content-Type header: The server must be told that you are sending a JSON payload. Always include the Content-Type: application/json header in your request.
 
-### Step 3: Validate ATX specific payload structure
+### Step 3: Validate AWS Transform specific payload structure
 
-Agents built on AgentCore for ATX, is invoked by ATX service with certain specific structure, for example, ATX invokes AgentCore agent following JSONRPC schema with different payload structure of different ATX operations, make sure when your testing your AgentCore runtime, with the exact same payload structure required by ATX in Testing AgentCore Runtime with Additional Operations.
+Agents built on Bedrock AgentCore for AWS Transform, is invoked by AWS Transform service with certain specific structure, for example, AWS Transform invokes Bedrock AgentCore agent following JSONRPC schema with different payload structure of different AWS Transform operations, make sure when your testing your Bedrock AgentCore runtime, with the exact same payload structure required by AWS Transform in Testing Bedrock AgentCore Runtime with Additional Operations.
 
 ## Troubleshooting “Either endpoint_url or both stage and region must be provided” in Bedrock AgentCore
 
@@ -3286,11 +2578,11 @@ For the Value, enter the name of your deployment stage (e.g., Gamma).
 
 ## Base Agent Code Walkthrough
 
-ATX Base Agent code package is a foundational agent package for partners to easily extend and build their agents, built on Amazon's Strands framework with capabilities for production deployment.
+AWS Transform Base Agent code package is a foundational agent package for partners to easily extend and build their agents, built on Amazon's Strands framework with capabilities for production deployment.
 
 ### What This Package Provides
 
-This is your starting point for building agents that integrate with the ATX Platform. Instead of building from scratch, you extend the AsyncBaseOrchestrator class and customize it for your specific use case.
+This is your starting point for building agents that integrate with the AWS Transform. Instead of building from scratch, you extend the AsyncBaseOrchestrator class and customize it for your specific use case.
 
 ### Core Architecture
 
@@ -3300,7 +2592,7 @@ Production Runtime: AgentRuntimeServer for containerized deployment (legacy F
 
 Development Tools: Console mode with tracing for local testing and debugging. See DEVELOPMENT.md
 
-Platform Integration: Provided ATX platform connectivity and lifecycle management
+Platform Integration: Provided AWS Transform connectivity and lifecycle management
 
 Checkpointing Functionality: Background agent memory/conversation persistence with configurable triggers for recovery and continuity
 
@@ -3328,7 +2620,7 @@ Simplified interface: Combines both into a single unified server
 
 Agent factory pattern: Pluggable agent
 
-Compatible protocols: Supports both Bedrock AgentCore and ATX agentic compute endpoints
+Compatible protocols: Supports both Bedrock AgentCore and AWS Transform agentic compute endpoints
 
 _simple_stateless_cli_agent_core.py - (NEW) StatelessAgentRuntimeServer:
 
@@ -3340,7 +2632,7 @@ Concurrent processing: Handles multiple requests simultaneously
 
 Agent factory pattern: Pluggable agent
 
-Compatible protocols: Supports both Bedrock AgentCore and ATX agentic compute endpoints
+Compatible protocols: Supports both Bedrock AgentCore and AWS Transform agentic compute endpoints
 
 cli.py - For orchestrator agents:
 
@@ -3378,7 +2670,7 @@ Agent Execution → Your orchestrator handles the request using Strands framewo
 
 Checkpoint Trigger → After successful processing, checkpoint callback increments conversation turns or time-based triggers
 
-Background Checkpointing → Background task periodically saves agent state to ATX platform
+Background Checkpointing → Background task periodically saves agent state to AWS Transform
 
 Response → Results are returned via HTTP response or stored for async retrieval
 
@@ -3448,7 +2740,7 @@ Response → Results are returned via HTTP response or stored for async retriev
 
 │  │  │  • Background Checkpoint Creation                 │ │  │
 
-│  │  │  • ATX Platform Integration                       │ │  │
+│  │  │  • AWS Transform Integration                       │ │  │
 
 │  │  │                                                   │ │  │
 
@@ -3528,7 +2820,7 @@ MCP Binary:
 
 Agentic Model:
 
-aws configure add-model --service-model file://$(pwd)/elasticgumbyagentic-2018-05-10.normal.json --service-name elasticgumbyagenticservice
+aws configure add-model --service-model file://$(pwd)/service-2.json --service-name awstransformagenticservice
 
 Python version: Configure your version set with recommended Python 3.11. Python 3.10 still works but is not officially supported.
 
@@ -3583,9 +2875,9 @@ def another_tool(value: int) -> bool:
 
 See Strands Tools Documentation for more details.
 
-#### Create Your Entry Point - AgentCore (Recommended for AgentCore)
+#### Create Your Entry Point - Bedrock AgentCore (Recommended)
 
-For a simpler approach, use the new AgentRuntimeServer with a custom agent factory. This server is compatible with both Bedrock AgentCore runtime protocols and ATX agentic compute endpoints. See simple_cli_agent_core.py for a complete example:
+For a simpler approach, use the new AgentRuntimeServer with a custom agent factory. This server is compatible with both Bedrock AgentCore runtime protocols and AWS Transform agentic compute endpoints. See simple_cli_agent_core.py for a complete example:
 
 Implementation:
 
@@ -3637,7 +2929,7 @@ if __name__ == "__main__":
 
     main()
 
-Supported JSON-RPC Methods: The server automatically handles these AgentCore operations:
+Supported JSON-RPC Methods: The server automatically handles these Bedrock AgentCore operations:
 
 #### Create Your Entry Point – Old CLI Approach
 
@@ -3653,7 +2945,7 @@ def create_orchestrator(args, mcp_client: Optional[MCPClient]) -> MyCustomOrches
 
     """Override to return your custom orchestrator."""
 
-    # Configure memory components (optional, custom component provided by ATX)
+    # Configure memory components (optional, custom component provided by AWS Transform)
 
     # - FileSystemRepository: File-based memory storage
 
@@ -3669,17 +2961,17 @@ def create_orchestrator(args, mcp_client: Optional[MCPClient]) -> MyCustomOrches
 
     memory_manager = MemoryManager(memories=[episodic_memory])
 
-    # - Custom memory tool provided by ATX
+    # - Custom memory tool provided by AWS Transform
 
     memory_tool = MemoryTool(memory_manager)
 
-    # Configure conversation management (optional, custom component provided by ATX)
+    # Configure conversation management (optional, custom component provided by AWS Transform)
 
     # - FileMultiSourceConversationRepository: Multi-source conversation storage
 
     conversation_repository = FileMultiSourceConversationRepository(storage_dir=args.storage_dir)
 
-    # Configure hooks (optional, custom component provided by ATX)
+    # Configure hooks (optional, custom component provided by AWS Transform)
 
     # - ConversationHookProvider: Before/after conversation events
 
@@ -3705,7 +2997,7 @@ def create_orchestrator(args, mcp_client: Optional[MCPClient]) -> MyCustomOrches
 
         # guardrail_id=args.guardrail_id,     # Bedrock guardrails ID (optional, requires CDK set up)
 
-        mcp_clients=[mcp_client],  # ATX agentic MCP added by default, add you custom MCP clients
+        mcp_clients=[mcp_client],  # AWS Transform agentic MCP added by default, add you custom MCP clients
 
         region_name=args.region,  # AWS region
 
@@ -3865,7 +3157,7 @@ These endpoints correspond to Bedrock AgentCore runtime endpoints and A2A pro
 
 #### Notifications Handler (/invocations)
 
-The package includes a provided ATX system notification handler in notification_handler.py that helps handle notifications received from the ATX platform.
+The package includes a provided AWS Transform system notification handler in notification_handler.py that helps handle notifications received from the AWS Transform.
 
 The notification handler is used by default with the built-in FastAPI implementation for processing /invocations endpoint requests.
 
@@ -3967,9 +3259,9 @@ server = AgentRuntimeServer(
 
 #### Required Environment Variables
 
-# ATX Platform Integration. Pass in real ones if you want to test calling Agentic APIs
+# AWS Transform Integration. Pass in real ones if you want to test calling Agentic APIs
 
-export WORKSPACE_ID=your-workspace-id              # ATX workspace identifier
+export WORKSPACE_ID=your-workspace-id              # AWS Transform workspace identifier
 
 export JOB_ID=your-job-id                          # Current job identifier  
 
@@ -3977,9 +3269,9 @@ export AGENT_INSTANCE_ID=your-agent-instance-id    # Agent instance identifier
 
 export AUTHORIZATION_TOKEN=<<MY_SECRET_TOKEN>>     # Auth token
 
-# ATX API Endpoint (e.g. ATX Gamma)
+# AWS Transform API Endpoint
 
-export QT_AGENTIC_API_ENDPOINT=https://iad.gamma.agenticapi.elastic-gumby.ai.aws.dev
+export QT_AGENTIC_API_ENDPOINT=https://iad.prod.agenticapi.elastic-gumby.ai.aws.dev
 
 # AWS Configuration  
 
@@ -4005,9 +3297,9 @@ Optional: Guardrails are optional - agents will work without them but won't have
 
 #### Available Tools & Integrations
 
-Your agent automatically has access to ATX platform tools via MCP integration: ElasticGumbyAgenticMCP
+Your agent automatically has access to AWS Transform tools via MCP integration (AWS Transform MCP).
 
-## ATX Agentic API Specification
+## AWS Transform Agentic API Specification
 
 ### Common Error Responses
 
@@ -4535,9 +3827,9 @@ Request Parameters:
 
 Response: - testResults (PreProdTestResults) - REQUIRED - Test execution results
 
-## ATX Agent Registry External API Specification
+## AWS Transform Agent Registry External API Specification
 
-This section provides comprehensive API documentation for the ATX Dynamic Agent Registry, including new features for access control, provisioned compute support, and customer configuration management.
+This section provides comprehensive API documentation for the AWS Transform Dynamic Agent Registry, including new features for access control, provisioned compute support, and customer configuration management.
 
 ### Common Error Responses
 
@@ -4587,7 +3879,7 @@ Members:
 
 - `MARKETPLACE_AGENT` - Marketplace registered agents
 
-- `INTERNAL_AGENT` - Internal ATX developed agents
+- `INTERNAL_AGENT` - Internal AWS Transform developed agents
 
 #### AgentConfiguration
 
@@ -4727,7 +4019,7 @@ Structure for MDE configuration settings.
 
 Members:
 
-- atxAccessRoleArn (String) - REQUIRED - ATX access role ARN (pattern: ^(arn:aws:iam::[0-9]{12}:role/).+)
+- atxAccessRoleArn (String) - REQUIRED - AWS Transform access role ARN (pattern: ^(arn:aws:iam::[0-9]{12}:role/).+)
 
 - bootstrapRoleArn (String) - REQUIRED - Bootstrap role ARN for MDE service setup (pattern: ^(arn:aws:iam::[0-9]{12}:role/).+)
 
@@ -4745,9 +4037,9 @@ Structure for Agent Core configuration settings.
 
 Members:
 
-- atxAccessRoleArn (String) - REQUIRED - ATX access role ARN (pattern: ^(arn:aws:iam::[0-9]{12}:role/).+)
+- atxAccessRoleArn (String) - REQUIRED - AWS Transform access role ARN (pattern: ^(arn:aws:iam::[0-9]{12}:role/).+)
 
-- runtimeArn (String) - REQUIRED - ARN of the AgentCore Runtime Resource
+- runtimeArn (String) - REQUIRED - ARN of the Bedrock AgentCore Runtime Resource
 
 - qualifier (String) - Specific qualifier for runtime invocation (defaults to DEFAULT if not specified)
 
@@ -5967,21 +5259,21 @@ Output schema
 
 # Reference
 
-[🚧 WIP] ATX Agent Developer Guide
+[🚧 WIP] AWS Transform Agent Developer Guide
 
 [WIP][External][Confidential] AWS Transform Agent Developer Guide
 
 Agent Builder Base Agent SDK readme https://github.com/awslabs/agent-builder-toolkit-aws-transform/blob/main/packages/sdk/README.md
 
-ATX platform integration with Genesis
+AWS Transform integration with Genesis
 
 Partner Engagement for Q Transform Platform
 
 
 | Roles | Used by | Purpose |
-| ATXOnboardingScriptAccessRole | Script | Used by partner to access ECR and agent core, register the agent core with ATX |
-| AgentCoreExecutionRole | Agent core runtime | Used by agent instance to assume and access ATX primitives and other AWS resources |
-| ATXAgentInvokeRole | ATX platform | Used by ATX service to assume to invoke the agent in agent core |
+| AWSTransformOnboardingScriptAccessRole | Script | Used by partner to access ECR and agent core, register the agent core with AWS Transform |
+| AgentCoreExecutionRole | Agent core runtime | Used by agent instance to assume and access AWS Transform primitives and other AWS resources |
+| AWSTransformAgentInvokeRole | AWS Transform | Used by AWS Transform service to assume to invoke the agent in agent core |
 
 
 |  | A | B | C | D | E | F |
