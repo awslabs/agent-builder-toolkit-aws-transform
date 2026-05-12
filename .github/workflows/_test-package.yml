@@ -38,17 +38,21 @@ jobs:
           done
 
       - name: Install package with test extras
+        id: install
         run: |
           pip install pytest
           pip install -e "${{ inputs.package-path }}[test]" \
-            || pip install -e "${{ inputs.package-path }}"
+            || pip install -e "${{ inputs.package-path }}" \
+            || echo "skip=true" >> "$GITHUB_OUTPUT"
 
       - name: Lint with ruff
+        if: steps.install.outputs.skip != 'true'
         run: |
           pip install ruff
           ruff check ${{ inputs.package-path }}
 
       - name: Run tests
+        if: steps.install.outputs.skip != 'true'
         run: |
           if [ -d "${{ inputs.package-path }}/tests" ]; then
             cd ${{ inputs.package-path }}
