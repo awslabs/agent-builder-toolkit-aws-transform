@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agent-builder-mcp-client-aws-transform"
 version = "1.0.0"
-description = "Python MCP client provided by AWS Transform Platform team"
+description = "Python MCP client provided by the AWS Transform team"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "AWS Transform Team" }]
