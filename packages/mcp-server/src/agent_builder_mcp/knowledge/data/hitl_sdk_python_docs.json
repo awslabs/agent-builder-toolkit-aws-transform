@@ -6,7 +6,7 @@
     "description": "High-level client for HITL lifecycle management. Handles task creation, polling, artifact download, refresh loops, and task closure.",
     "signature": "HitlClient(agentic_client, request_context, poll_interval_seconds=15, poll_timeout_minutes=120)",
     "parameters": [
-      {"name": "agentic_client", "type": "AgenticClientProtocol", "required": true, "description": "boto3 ElasticGumbyAgenticService client"},
+      {"name": "agentic_client", "type": "AgenticClientProtocol", "required": true, "description": "boto3 AWSTransformAgenticService client"},
       {"name": "request_context", "type": "RequestContext | RequestContextTypeDef", "required": true, "description": "Snake_case dataclass or camelCase dict with job_id, workspace_id, agent_instance_id, authorization_token"},
       {"name": "poll_interval_seconds", "type": "int", "required": false, "default": 15, "description": "Seconds between status polls"},
       {"name": "poll_timeout_minutes", "type": "int", "required": false, "default": 120, "description": "Max minutes to wait for human submission (2 hours default)"}
@@ -328,7 +328,7 @@
     "name": "AgenticClientProtocol",
     "kind": "protocol",
     "module": "elastic_gumby_hitl_component_python_sdk.client.hitl_client",
-    "description": "Protocol defining the boto3 ElasticGumbyAgenticService client methods used by HitlClient. Any object implementing these methods can be passed as agentic_client.",
+    "description": "Protocol defining the boto3 AWSTransformAgenticService client methods used by HitlClient. Any object implementing these methods can be passed as agentic_client.",
     "methods": [
       {"name": "create_hitl_task", "signature": "create_hitl_task(requestContext, uxComponentId, title, description, hitlRequestArtifact, **kwargs) -> dict"},
       {"name": "start_hitl_task", "signature": "start_hitl_task(requestContext, hitlTaskId, firstInChain=True) -> dict"},

@@ -7,11 +7,11 @@
     "jsonVersion":"1.0",
     "protocol":"json",
     "protocols":["json"],
-    "serviceFullName":"ElasticGumbyAgenticService",
+    "serviceFullName":"AWSTransformAgenticService",
     "serviceId":"ElasticGumbyAgentic",
     "signatureVersion":"v4",
     "signingName":"eg-agenticapi",
-    "targetPrefix":"ElasticGumbyAgenticService",
+    "targetPrefix":"AWSTransformAgenticService",
     "uid":"elasticgumbyagentic-2018-05-10"
   },
   "operations":{

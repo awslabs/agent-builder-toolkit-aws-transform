@@ -51,7 +51,7 @@ __all__ = (
 
 class ListAgentInstancesPaginator(Boto3Paginator):
     """
-    [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Paginator.ListAgentInstances)
+    [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Awstransformagenticservice.Paginator.ListAgentInstances)
     [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/paginators.html#listagentinstancespaginator)
     """
 
@@ -63,13 +63,13 @@ class ListAgentInstancesPaginator(Boto3Paginator):
         PaginationConfig: PaginatorConfigTypeDef = None
     ) -> Iterator[ListAgentInstancesResponseTypeDef]:
         """
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Paginator.ListAgentInstances.paginate)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Awstransformagenticservice.Paginator.ListAgentInstances.paginate)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/paginators.html#listagentinstancespaginator)
         """
 
 class ListArtifactsPaginator(Boto3Paginator):
     """
-    [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Paginator.ListArtifacts)
+    [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Awstransformagenticservice.Paginator.ListArtifacts)
     [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/paginators.html#listartifactspaginator)
     """
 
@@ -82,13 +82,13 @@ class ListArtifactsPaginator(Boto3Paginator):
         PaginationConfig: PaginatorConfigTypeDef = None
     ) -> Iterator[ListArtifactsResponseTypeDef]:
         """
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Paginator.ListArtifacts.paginate)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Awstransformagenticservice.Paginator.ListArtifacts.paginate)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/paginators.html#listartifactspaginator)
         """
 
 class ListHitlTasksPaginator(Boto3Paginator):
     """
-    [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Paginator.ListHitlTasks)
+    [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Awstransformagenticservice.Paginator.ListHitlTasks)
     [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/paginators.html#listhitltaskspaginator)
     """
 
@@ -101,13 +101,13 @@ class ListHitlTasksPaginator(Boto3Paginator):
         PaginationConfig: PaginatorConfigTypeDef = None
     ) -> Iterator[ListHitlTasksResponseTypeDef]:
         """
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Paginator.ListHitlTasks.paginate)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Awstransformagenticservice.Paginator.ListHitlTasks.paginate)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/paginators.html#listhitltaskspaginator)
         """
 
 class ListJobPlanStepsPaginator(Boto3Paginator):
     """
-    [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Paginator.ListJobPlanSteps)
+    [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Awstransformagenticservice.Paginator.ListJobPlanSteps)
     [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/paginators.html#listjobplanstepspaginator)
     """
 
@@ -119,6 +119,6 @@ class ListJobPlanStepsPaginator(Boto3Paginator):
         PaginationConfig: PaginatorConfigTypeDef = None
     ) -> Iterator[ListJobPlanStepsResponseTypeDef]:
         """
-        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Elasticgumbyagenticservice.Paginator.ListJobPlanSteps.paginate)
+        [Show boto3 documentation](https://boto3.amazonaws.com/v1/documentation/api/1.42.95/reference/services/awstransformagenticservice.html#Awstransformagenticservice.Paginator.ListJobPlanSteps.paginate)
         [Show boto3-stubs documentation](https://vemel.github.io/boto3_stubs_docs/agent_builder_types/paginators.html#listjobplanstepspaginator)
         """

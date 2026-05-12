@@ -6,7 +6,7 @@
     "description": "Java high-level client for HITL lifecycle management. Handles task creation, polling, artifact upload/download, refresh loops, and task closure.",
     "signature": "new HitlClient(ElasticGumbyAgenticClient agenticClient, RequestContext requestContext)",
     "parameters": [
-      {"name": "agenticClient", "type": "ElasticGumbyAgenticClient", "required": true, "description": "AWS SDK v2 client for ElasticGumbyAgenticService"},
+      {"name": "agenticClient", "type": "ElasticGumbyAgenticClient", "required": true, "description": "AWS SDK v2 client for AWSTransformAgenticService"},
       {"name": "requestContext", "type": "RequestContext", "required": true, "description": "Built with RequestContext.builder().jobMetadata(...).agentInstanceId(...).authorizationToken(...).build()"},
       {"name": "statusPollingIntervalSeconds", "type": "int", "required": false, "default": 15, "description": "Seconds between status polls (overload constructor)"},
       {"name": "statusPollingTimeoutMinutes", "type": "int", "required": false, "default": 120, "description": "Max minutes to wait for human submission (overload constructor)"}
