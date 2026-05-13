@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'sdk-v*'
+      - 'agentic-mcp-server-v*'
       - 'mcp-server-v*'
       - 'mcp-client-v*'
       - 'types-v*'
@@ -20,7 +21,7 @@ jobs:
       package-name: ${{ steps.resolve.outputs.package-name }}
       version: ${{ steps.resolve.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Resolve package from tag
         id: resolve
@@ -31,6 +32,8 @@ jobs:
           # Map tag prefix to package directory
           if [[ "$TAG" == sdk-v* ]]; then
             PACKAGE_PATH="packages/sdk"
+          elif [[ "$TAG" == agentic-mcp-server-v* ]]; then
+            PACKAGE_PATH="packages/agentic-mcp-server"
           elif [[ "$TAG" == mcp-server-v* ]]; then
             PACKAGE_PATH="packages/mcp-server"
           elif [[ "$TAG" == mcp-client-v* ]]; then
@@ -82,7 +85,7 @@ jobs:
     outputs:
       package-path: ${{ needs.resolve-package.outputs.package-path }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -123,7 +126,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
