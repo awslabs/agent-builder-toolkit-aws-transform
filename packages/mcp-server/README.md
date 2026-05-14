@@ -1,11 +1,8 @@
 # Agent Builder MCP Server
-# Agent Builder MCP Server
 
-An [MCP](https://modelcontextprotocol.io/) server that gives [Kiro](https://kiro.dev/) the tools and knowledge it needs to build, deploy, and manage agents on [AWS Transform](https://aws.amazon.com/transform/).
+An [MCP](https://modelcontextprotocol.io/) server that provides tools and knowledge for building, deploying, and managing agents on [AWS Transform](https://aws.amazon.com/transform/).
 
-With this server configured, Kiro gains first-class help for AWS Transform agent development: searching documentation, scaffolding agent code, deploying to AWS, and managing runtime operations.
-
-Pair it with the [**AWS Transform Agent Builder Kiro Power**](https://kiro.dev/powers/) to unlock the full end-to-end experience — the Power provides curated steering rules and workflows that guide Kiro through the entire agent-building process on top of this server's tools.
+This server works with any MCP-compatible client — [Kiro](https://kiro.dev/), Claude Code, Cursor, Windsurf, or any other IDE/tool that supports the Model Context Protocol.
 
 ## Installation
 
@@ -17,7 +14,13 @@ This installs an `agent-builder-mcp` command that speaks MCP over stdio.
 
 ## Quick start
 
-Add the server to Kiro's MCP configuration:
+### With Kiro (recommended)
+
+Install the [**AWS Transform Agent Toolkit**](https://kiro.dev/powers/#aws-transform-agent-toolkit) Kiro Power for the full guided experience — it configures this MCP server automatically and adds steering rules that guide Kiro through the entire agent-building process.
+
+### With any MCP client
+
+Add the server to your MCP configuration:
 
 ```json
 {
@@ -30,7 +33,7 @@ Add the server to Kiro's MCP configuration:
 }
 ```
 
-Restart Kiro. It will now have access to the agent-builder tool set.
+Restart your IDE/tool. It will now have access to the agent-builder tool set.
 
 ## What it provides
 
@@ -42,8 +45,6 @@ Tools are grouped into six categories:
 - **Deployment** — package and deploy agents to AWS.
 - **Validation** — check agent manifests and configurations before deployment.
 - **CloudWatch** — query agent logs and metrics.
-
-Ask Kiro "what agent-builder tools do you have?" and it will list the exact set available in your installed version.
 
 ## Requirements
 
