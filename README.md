@@ -1,5 +1,8 @@
 # Agent Builder Toolkit for AWS Transform
 
+[![sdk downloads](https://static.pepy.tech/personalized-badge/agent-builder-sdk-aws-transform?period=total&units=none&left_color=grey&right_color=blue&left_text=sdk%20downloads)](https://pepy.tech/projects/agent-builder-sdk-aws-transform)
+[![mcp-server downloads](https://static.pepy.tech/personalized-badge/agent-builder-mcp-aws-transform?period=total&units=none&left_color=grey&right_color=blue&left_text=mcp-server%20downloads)](https://pepy.tech/projects/agent-builder-mcp-aws-transform)
+
 Build custom agents for [AWS Transform](https://aws.amazon.com/transform/). The agent builder toolkit enables AWS Partners and customers to build agents tailored to their specific modernization needs that work within AWS Transform.
 
 ## Getting Started
