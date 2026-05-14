@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-builder-sdk-aws-transform"
-version = "1.0.0"
+version = "1.0.1"
 description = "Base agent SDK for building orchestrator and subagents on AWS Transform"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
