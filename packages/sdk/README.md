@@ -12,7 +12,7 @@ The SDK wraps the common concerns — HTTP server, request routing, agent lifecy
 ## Installation
 
 ```bash
-pip install agent-builder-sdk
+pip install agent-builder-sdk-aws-transform
 ```
 
 ## Building an orchestrator
@@ -72,7 +72,7 @@ def main():
         agent_factory=agent_factory,
         host="0.0.0.0",
         port=8080,
-        binary_location="./agent-builder-mcp",
+        binary_location="agent-builder-agentic-mcp",
         storage_dir="/tmp/my_agent",
         checkpoint_strategy="conversation",  # optional, enables checkpointing
         checkpoint_interval=10,              # optional, enables checkpointing
@@ -132,7 +132,7 @@ def main():
         agent_factory=agent_factory,
         host="0.0.0.0",
         port=8080,
-        binary_location="./agent-builder-mcp",
+        binary_location="agent-builder-agentic-mcp",
     )
     server.start()
 
@@ -145,7 +145,7 @@ if __name__ == "__main__":
 
 - Python 3.11+
 - AWS credentials configured (standard `boto3` credential chain), with Bedrock access for model inference
-- The `agent-builder-mcp` binary on disk — see [agent-builder-mcp-aws-transform](https://pypi.org/project/agent-builder-mcp-aws-transform/)
+- The `agent-builder-agentic-mcp` binary on disk — see [agent-builder-agentic-mcp-aws-transform](https://pypi.org/project/agent-builder-agentic-mcp-aws-transform/)
 
 ## License
 

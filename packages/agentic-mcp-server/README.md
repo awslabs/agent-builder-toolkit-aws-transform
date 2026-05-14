@@ -1,6 +1,6 @@
 # Agent Builder Agentic MCP Server
 
-An [MCP](https://modelcontextprotocol.io/) server that agents built with the [Agent Builder SDK](https://pypi.org/project/agent-builder-sdk-aws-transform/) use at runtime to talk to the [AWS Transform](https://aws.amazon.com/transform/) platform.
+An [MCP](https://modelcontextprotocol.io/) server that agents built with the [Agent Builder SDK](https://pypi.org/project/agent-builder-sdk-aws-transform/) use at runtime to communicate with [AWS Transform](https://aws.amazon.com/transform/).
 
 ## Installation
 
