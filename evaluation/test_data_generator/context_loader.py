@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Callable
+from typing import Dict, List, Optional, Callable
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
