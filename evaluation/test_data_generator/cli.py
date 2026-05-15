@@ -187,8 +187,9 @@ def load_source_context(path: str) -> str:
                     priority += 20
                 elif file_size > 50 * 1024:   # >50KB: verbose, may be generated
                     priority -= 20
-            except Exception:
-                pass
+            except Exception as e:
+                # Best-effort scoring: if size-based adjustment fails, keep base priority.
+                logger.debug(f"Failed to apply size-based priority adjustment for {file_path}: {e}")
 
             # Signal 5: Directory name hints (objective, not filename guessing)
             path_parts_str = str(rel_path).lower()
