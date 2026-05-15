@@ -3,6 +3,7 @@
 
 import json
 import argparse
+import sys
 from pathlib import Path
 from collections import defaultdict
 
@@ -152,4 +153,4 @@ Examples:
 
 
 if __name__ == '__main__':
-    exit(main())
+    sys.exit(main())
