@@ -563,8 +563,6 @@ Be thorough and specific. This analysis will guide automated test generation."""
 
     def _parse_analysis_response(self, response: str) -> Dict[str, Any]:
         """Parse LLM analysis response."""
-        import re
-
         # Find JSON in response
         json_match = re.search(r'\{[\s\S]*\}', response)
         if not json_match:
