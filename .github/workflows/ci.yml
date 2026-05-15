@@ -74,6 +74,43 @@ jobs:
                packages/mcp-server/src/agent_builder_mcp/knowledge/data/registry_api.json \
             || { echo "::error::registry_api.json is out of sync. Run: cp packages/sdk/src/agent_builder_sdk/botocore_models/atxagentregistryexternal/2022-07-26/service-2.json packages/mcp-server/src/agent_builder_mcp/knowledge/data/registry_api.json"; exit 1; }
 
+  bench:
+    runs-on: ubuntu-latest
+    needs: [mcp-server]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install mcp-server
+        run: pip install -e packages/mcp-server
+
+      - name: Run retrieval benchmark
+        run: |
+          python packages/mcp-server/bench/eval_retrieval.py \
+            --output packages/mcp-server/bench/results/ci.json
+
+      - name: Check quality threshold
+        run: |
+          python -c "
+          import json, sys
+          from pathlib import Path
+          r = json.loads(Path('packages/mcp-server/bench/results/ci.json').read_text())
+          recall = r['overall']['recall']
+          mrr = r['overall']['mrr']
+          print(f'Recall@5={recall:.3f}  MRR={mrr:.3f}')
+          if recall < 0.70:
+              print(f'::error::Recall@5 dropped below 0.70 threshold ({recall:.3f})')
+              sys.exit(1)
+          if mrr < 0.60:
+              print(f'::error::MRR dropped below 0.60 threshold ({mrr:.3f})')
+              sys.exit(1)
+          print('PASS: Both thresholds met')
+          "
+
   integration:
     runs-on: ubuntu-latest
     needs: [types, mcp-client, mcp-server, agentic-mcp-server, sdk]
