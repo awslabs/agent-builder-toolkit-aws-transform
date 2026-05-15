@@ -50,6 +50,7 @@ Tools are grouped into six categories:
 
 - Python 3.11+
 - AWS credentials configured (standard `boto3` credential chain) for deployment and CloudWatch tools. Search and validation work offline.
+- **Deployment & registration tools**: Your AWS account must be allowlisted for the [AWS Transform composability initiative](https://aws.amazon.com/transform/partners/). Contact your Partner Development Manager (PDM) or apply through AWS Partner Central. Search and validation tools work without allowlisting.
 
 ## Development
 

@@ -146,6 +146,7 @@ if __name__ == "__main__":
 - Python 3.11+
 - AWS credentials configured (standard `boto3` credential chain), with Bedrock access for model inference
 - The `agent-builder-agentic-mcp` binary on disk — see [agent-builder-agentic-mcp-aws-transform](https://pypi.org/project/agent-builder-agentic-mcp-aws-transform/)
+- **Calling other AWS Transform agents**: Your AWS account must be allowlisted for the [AWS Transform composability initiative](https://aws.amazon.com/transform/partners/). Contact your Partner Development Manager (PDM) or apply through AWS Partner Central.
 
 ## License
 
