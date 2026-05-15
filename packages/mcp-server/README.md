@@ -51,6 +51,19 @@ Tools are grouped into six categories:
 - Python 3.11+
 - AWS credentials configured (standard `boto3` credential chain) for deployment and CloudWatch tools. Search and validation work offline.
 
+## Development
+
+### Retrieval benchmark
+
+The bundled BM25 search is gated by a quality benchmark (48 golden queries across 6 categories):
+
+```bash
+pip install -e .
+python bench/eval_retrieval.py
+```
+
+CI enforces **Recall@5 >= 0.70** and **MRR >= 0.60**. Current: Recall@5 = 0.80, MRR = 0.85.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE.txt) and [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).

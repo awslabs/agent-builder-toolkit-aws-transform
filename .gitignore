@@ -16,3 +16,6 @@ bom.xml
 sbom.json
 BSD-licenses.txt
 MIT-licenses.txt
+
+# Benchmark results (machine-specific, regenerated on each run)
+packages/mcp-server/bench/results/*.json
