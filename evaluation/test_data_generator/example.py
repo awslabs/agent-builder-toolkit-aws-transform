@@ -83,7 +83,7 @@ def example_with_power_md():
     generated = generator.generate_test_cases(
         teacher_samples=teacher_samples,
         count=3,
-        power_instructions=power_instructions,
+        context=power_instructions,
         diversity_factor=0.8,
         output_dir="./example_output/with_power"
     )
