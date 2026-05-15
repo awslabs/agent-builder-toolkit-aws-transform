@@ -5,6 +5,12 @@
 
 Build custom agents for [AWS Transform](https://aws.amazon.com/transform/). The agent builder toolkit enables AWS Partners and customers to build agents tailored to their specific modernization needs that work within AWS Transform.
 
+## Prerequisites
+
+Registering and deploying agents to AWS Transform requires your AWS account to be allowlisted for the [AWS Transform composability initiative](https://aws.amazon.com/transform/partners/). If you haven't joined yet, contact your Partner Development Manager (PDM) or apply through [AWS Partner Central](https://aws.amazon.com/transform/partners/).
+
+You can still use the toolkit locally for agent development, documentation search, and testing without allowlisting — only deployment and registration require it.
+
 ## Getting Started
 
 ### Install via Kiro (recommended)
