@@ -4,7 +4,6 @@ import json
 import logging
 import re
 from typing import Dict, Any, List, Optional, Tuple
-from pathlib import Path
 from collections import Counter
 import boto3
 
