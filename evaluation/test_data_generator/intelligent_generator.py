@@ -463,7 +463,6 @@ Generate exactly {count} complete test cases now:"""
         validated = []
 
         # Get required fields from teacher samples or use defaults
-        required_fields = set()
         if teacher_samples:
             required_fields = set(teacher_samples[0].keys())
         else:
