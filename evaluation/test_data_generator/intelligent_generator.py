@@ -210,6 +210,9 @@ class IntelligentTestGenerator:
                     logger.exception(f"Batch generation failed after {attempt + 1} attempts: {e}")
                     return []
 
+        logger.error("Batch generation exited retry loop without returning a result; returning empty list.")
+        return []
+
     def _build_generation_prompt(
         self,
         teacher_samples: List[Dict[str, Any]],
