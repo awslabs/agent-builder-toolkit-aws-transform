@@ -111,7 +111,7 @@ def example_domain_analysis():
     )
 
     # Analyze domain
-    analysis = analyzer.analyze_test_samples(teacher_samples)
+    analysis = analyzer.analyze_test_samples(teacher_samples, None)
 
     # Save analysis
     output_path = "./example_output/analysis/domain_analysis.json"
