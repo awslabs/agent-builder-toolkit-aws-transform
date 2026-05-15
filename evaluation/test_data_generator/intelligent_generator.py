@@ -476,6 +476,22 @@ Generate exactly {count} complete test cases now:"""
         for i, test in enumerate(generated_tests):
             try:
                 # Ensure required fields (ID will be assigned after final quality pass)
+                missing_fields = required_fields - set(test.keys())
+                if missing_fields:
+                    logger.warning(f"Test {i} missing required fields: {sorted(missing_fields)}")
+                    for field in missing_fields:
+                        if field in {"tags"}:
+                            test[field] = []
+                        elif field in {"metadata"}:
+                            test[field] = {}
+                        elif field in {"assertions", "simulated_human_guidance"}:
+                            test[field] = []
+                        elif field in {"max_turns", "timeout_seconds"}:
+                            test[field] = 0
+                        elif field in {"complexity"}:
+                            test[field] = "medium"
+                        else:
+                            test[field] = ""
                 if not test.get("name"):
                     test["name"] = f"Generated Test {i+1}"
 
