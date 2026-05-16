@@ -5,7 +5,7 @@ import unittest
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 
 # Import modules to test
 from evaluation.test_data_generator.context_loader import (
