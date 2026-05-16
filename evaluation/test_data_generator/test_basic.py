@@ -12,10 +12,8 @@ if __name__ == '__main__':
     if parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
     from evaluation.test_data_generator.domain_analyzer import DomainAnalyzer
-    from evaluation.test_data_generator.intelligent_generator import IntelligentTestGenerator
 else:
     from .domain_analyzer import DomainAnalyzer
-    from .intelligent_generator import IntelligentTestGenerator
 
 def run_smoke_tests():
     """Run basic smoke tests without AWS credentials."""
