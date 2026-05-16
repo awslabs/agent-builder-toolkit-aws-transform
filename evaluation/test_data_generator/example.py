@@ -5,8 +5,8 @@ import json
 import logging
 from pathlib import Path
 
-from intelligent_generator import IntelligentTestGenerator
-from domain_analyzer import DomainAnalyzer
+from .intelligent_generator import IntelligentTestGenerator
+from .domain_analyzer import DomainAnalyzer
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)

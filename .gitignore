@@ -16,3 +16,6 @@ bom.xml
 sbom.json
 BSD-licenses.txt
 MIT-licenses.txt
+
+# Generated test data
+evaluation/generated_test_data
