@@ -23,7 +23,13 @@ The fastest way to get started is through the **[AWS Transform Agent Toolkit](ht
 
 ### Install via pip
 
-Install the agent SDK and runtime dependencies:
+Install everything (SDK + runtime + dev tools):
+
+```bash
+pip install agent-builder-sdk-aws-transform[full]
+```
+
+Or install only what you need:
 
 ```bash
 pip install agent-builder-sdk-aws-transform agent-builder-agentic-mcp-aws-transform

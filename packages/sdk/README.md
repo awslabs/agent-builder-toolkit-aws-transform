@@ -15,6 +15,12 @@ The SDK wraps the common concerns — HTTP server, request routing, agent lifecy
 pip install agent-builder-sdk-aws-transform
 ```
 
+Or install everything (SDK + runtime + dev tools):
+
+```bash
+pip install agent-builder-sdk-aws-transform[full]
+```
+
 ## Building an orchestrator
 
 ### 1. Create your orchestrator class
