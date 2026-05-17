@@ -17,5 +17,5 @@ sbom.json
 BSD-licenses.txt
 MIT-licenses.txt
 
-# Generated test data
-evaluation/generated_test_data
+# Benchmark results (machine-specific, regenerated on each run)
+packages/mcp-server/bench/results/*.json

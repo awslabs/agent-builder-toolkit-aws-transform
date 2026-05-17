@@ -19,8 +19,8 @@ DATA_DIR = Path(__file__).parent / "data"
 SOURCE_NAMES = {
     "sdk": "AgentBuilderSDK",
     "agentic-api": "TransformAgenticApiModel",
-    "registry-api": "ATXAgentRegistryExternalServiceModel",
-    "dev-guide": "ATX-Developer-Guide",
+    "registry-api": "AWSTransformAgentRegistryExternalServiceModel",
+    "dev-guide": "AWSTransform-Developer-Guide",
     "hitl-component-library": "HITL-Component-Library",
     "hitl-common-patterns": "HITL-Common-Patterns",
     "hitl-custom-components": "HITL-Custom-Components",
