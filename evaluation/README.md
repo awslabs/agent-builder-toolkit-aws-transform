@@ -14,6 +14,7 @@ The evaluation infrastructure consists of:
 ```
 evaluation/
 ├── README.md                    # This file
+├── requirements.txt             # Python dependencies
 ├── test_data_generator/         # Intelligent test case generator
 │   ├── README.md               # Generator documentation
 │   ├── ARCHITECTURE.md         # Design decisions and rationale
@@ -26,7 +27,7 @@ evaluation/
 │   ├── example.py              # Usage examples
 │   ├── test_basic.py           # Smoke tests
 │   └── test_units.py           # Unit test suite (22 tests)
-├── test_sample/                 # Sample test cases
+├── test_samples/                # Sample test cases
 │   └── onboarding_intermediate.json
 └── generated_test_data/         # Generated tests (gitignored)
 ```
@@ -55,7 +56,7 @@ python -m evaluation.test_data_generator.cli \
 
 # Generate with teacher samples + source context
 python -m evaluation.test_data_generator.cli \
-  --teacher-samples evaluation/test_sample/ \
+  --teacher-samples evaluation/test_samples/ \
   --source-context /path/to/agent/code/ \
   --count 20 \
   --output generated_tests/
@@ -92,7 +93,7 @@ pytest evaluation/test_data_generator/test_units.py -v
 **Purpose:** An example of test cases demonstrating expected agent behavior.
 
 **Current Samples:**
-- `test_sample/onboarding_intermediate.json` - Intermediate user onboarding scenario
+- `test_samples/onboarding_intermediate.json` - Intermediate user onboarding scenario
 
 **Test Case Schema:**
 ```json
@@ -156,7 +157,7 @@ Generate tests with specific complexity:
 
 ```bash
 python -m evaluation.test_data_generator.cli \
-  --teacher-samples evaluation/test_sample/ \
+  --teacher-samples evaluation/test_samples/ \
   --source-context /path/to/agent/source/ \
   --count 30 \
   --complexity medium \
@@ -240,11 +241,11 @@ pytest evaluation/test_data_generator/test_units.py \
 
 ### Adding New Test Samples
 
-1. Create a new JSON file in `test_sample/`
+1. Create a new JSON file in `test_samples/`
 2. Follow the test case schema (see above)
 3. Include diverse assertion types
 4. Add simulated_human_guidance for reproducibility
-5. Validate JSON syntax: `python -m json.tool test_sample/new_test.json`
+5. Validate JSON syntax: `python -m json.tool test_samples/new_test.json`
 
 ## Common Workflows
 
@@ -261,11 +262,11 @@ python -m evaluation.test_data_generator.cli \
 
 # 2. Review and curate
 # Manually review generated_tests/all_generated_tests.json
-# Move high-quality tests to test_sample/
+# Move high-quality tests to test_samples/
 
 # 3. Use curated tests as teacher samples for refinement
 python -m evaluation.test_data_generator.cli \
-  --teacher-samples test_sample/ \
+  --teacher-samples test_samples/ \
   --source-context /path/to/agent/ \
   --count 30 \
   --output refined_tests/
@@ -275,7 +276,7 @@ python -m evaluation.test_data_generator.cli \
 ```bash
 # Generate stable, deterministic tests
 python -m evaluation.test_data_generator.cli \
-  --teacher-samples test_sample/ \
+  --teacher-samples test_samples/ \
   --source-context /path/to/agent/ \
   --count 40 \
   --diversity 0.5 \
@@ -298,12 +299,20 @@ python -m evaluation.test_data_generator.cli \
 
 ## Requirements
 
+Install dependencies:
+
+```bash
+pip install -r evaluation/requirements.txt
+```
+
 **For Test Generation:**
 - Python 3.11+
-- boto3
+- boto3>=1.28.0
+- AWS credentials with Bedrock access
 
 **For Development/Testing:**
-- pytest
+- pytest>=7.0.0
+- pytest-cov>=4.0.0 (optional, for coverage reports)
 - unittest (standard library)
 - Mock AWS credentials (for unit tests)
 

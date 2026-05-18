@@ -15,10 +15,7 @@
     "source_platform": "kiro",
     "target_platform": "aws_transform",
     "scenario_type": "onboarding",
-    "timeout_seconds": 300,
-    "max_turns": 12,
-    "simulated_human_guidance": "You are a developer who just installed the agent-builder Kiro Power and want to get started. You have Python 3.11, AWS CLI, and finch installed. Your AWS credentials are configured. Cooperate with the agent throughout the onboarding flow. When the agent asks about your Python version, say you have Python 3.11. When it offers to install the SDK, agree. When it offers to add workspace hooks, agree. When it offers MCP configuration, accept the defaults. Once the agent finishes the onboarding setup (tool validation, SDK, hooks, MCP config), ask it: 'Can you show me a quick example? Search the AWS Transform docs for how to build an orchestrator agent.' After the agent performs the search and presents results, output __DONE__.",
-    "source_file": "evaluation/test_data/onboarding_intermediate.json"
+    "source_file": "evaluation/test_samples/onboarding_intermediate.json"
   },
   "assertions": [
     {

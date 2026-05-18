@@ -70,14 +70,14 @@ Examples:
 
   # Generate with teacher samples + source context
   python -m test_data_generator.cli \\
-    --teacher-samples test_data/ \\
+    --teacher-samples test_samples/ \\
     --source-context /path/to/source/folder/ \\
     --count 20 \\
     --output generated_tests/
 
   # Generate with specific complexity and high diversity
   python -m test_data_generator.cli \\
-    --teacher-samples test_data/onboarding_intermediate.json \\
+    --teacher-samples test_samples/onboarding_intermediate.json \\
     --source-context /path/to/source/folder/ \\
     --count 10 \\
     --complexity medium \\
@@ -86,7 +86,7 @@ Examples:
 
   # Just analyze domain without generating
   python -m test_data_generator.cli \\
-    --teacher-samples test_data/ \\
+    --teacher-samples test_samples/ \\
     --source-context /path/to/source/folder/ \\
     --analyze-only \\
     --output analysis/
@@ -301,14 +301,14 @@ Examples:
                 logger.info(f"  {i+1}. {test.get('name', 'Unnamed')}")
 
         logger.info(f"\n{'=' * 80}")
-        logger.info("✅ SUCCESS")
+        logger.info("SUCCESS")
         logger.info(f"{'=' * 80}\n")
 
     except KeyboardInterrupt:
-        logger.info("\n⚠️  Interrupted by user")
+        logger.info("\nWARN: Interrupted by user")
         sys.exit(1)
     except Exception as e:
-        logger.exception("❌ Generation failed")
+        logger.exception("FAIL: Generation failed")
         sys.exit(1)
 
 

@@ -17,8 +17,8 @@ INPUT                          PROCESSING                       OUTPUT
 └──────────────┘              │  • Understand      │         └─────────────┘
                               │    capabilities    │
 ┌──────────────┐              │  • Identify personas│        ┌─────────────┐
-│  POWER.md    │─────────────>│  • Analyze         │        │   Domain    │
-│  (optional)  │              │    assertions      │        │  Analysis   │
+│ source files │─────────────>│  • Analyze         │        │   Domain    │
+│(agent, skill)│              │    assertions      │        │  Analysis   │
 └──────────────┘              └────────┬───────────┘        └─────────────┘
                                        │
                                        │ Domain Understanding

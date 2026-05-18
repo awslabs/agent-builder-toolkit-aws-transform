@@ -1,0 +1,6 @@
+# Runtime dependencies for test data generator
+boto3>=1.28.0
+
+# Development dependencies (optional)
+pytest>=7.0.0
+pytest-cov>=4.0.0

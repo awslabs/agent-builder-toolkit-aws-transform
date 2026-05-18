@@ -1,4 +1,4 @@
-"""Test data generator package for ATX Transform Gym self-improving agents.
+"""Test data generator package for AWS Transform agent evaluation.
 
 This package provides intelligent test data generation based on understanding
 of the task domain and teacher test samples.

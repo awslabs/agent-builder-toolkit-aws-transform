@@ -50,7 +50,7 @@ For best results, combine teacher samples with source context:
 
 ```bash
 python -m test_data_generator.cli \
-  --teacher-samples test_data/ \
+  --teacher-samples test_samples/ \
   --source-context /path/to/your/source/code/ \
   --count 20 \
   --output generated_tests/
@@ -62,7 +62,7 @@ Generate specific complexity with high diversity:
 
 ```bash
 python -m test_data_generator.cli \
-  --teacher-samples test_data/ \
+  --teacher-samples test_samples/ \
   --source-context /path/to/source/folder/ \
   --count 15 \
   --complexity medium \
@@ -77,7 +77,7 @@ Analyze your domain without generating tests:
 ```bash
 python -m test_data_generator.cli \
   --source-context /path/to/source/folder/ \
-  --teacher-samples test_data/ \
+  --teacher-samples test_samples/ \
   --analyze-only \
   --output analysis/
 ```
@@ -162,7 +162,7 @@ Use generated tests with your evolution workflow:
 # 1. Generate tests (source context always required)
 python -m test_data_generator.cli \
   --source-context src/ \
-  --teacher-samples test_data/ \
+  --teacher-samples test_samples/ \
   --count 30 \
   --output test_data_expanded/
 
