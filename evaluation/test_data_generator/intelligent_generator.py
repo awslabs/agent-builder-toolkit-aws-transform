@@ -482,12 +482,10 @@ Generate exactly {count} complete test cases now:"""
                 if missing_fields:
                     logger.warning(f"Test {i} missing required fields: {sorted(missing_fields)}")
                     for field in missing_fields:
-                        if field in {"tags"}:
+                        if field in {"tags", "assertions"}:
                             test[field] = []
                         elif field in {"metadata"}:
                             test[field] = {}
-                        elif field in {"assertions", "simulated_human_guidance"}:
-                            test[field] = []
                         elif field in {"max_turns", "timeout_seconds"}:
                             test[field] = 0
                         elif field in {"complexity"}:

@@ -2,6 +2,19 @@
 
 Generate diverse, high-quality test cases by understanding your task domain and learning from teacher samples.
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Quick Start](#quick-start)
+- [Command-Line Options](#command-line-options)
+- [How It Works](#how-it-works)
+- [Programmatic Usage](#programmatic-usage)
+- [Best Practices](#best-practices)
+- [Troubleshooting](#troubleshooting)
+- [Architecture](#architecture)
+- [Testing](#testing)
+- [Contributing](#contributing)
+
 ## Overview
 
 This intelligent test generator solves the problem of limited test data by:
@@ -12,19 +25,10 @@ This intelligent test generator solves the problem of limited test data by:
 
 **Key Feature**: Source context (code/docs) is **always required** for domain understanding. Teacher samples are optional - you can bootstrap from source code alone!
 
-## Why Use This?
+**Why Use This?**
 
-**Problem**: You need more test samples for agent evolution, but manually creating test cases is time-consuming and you want to ensure good coverage.
-
-**Solution**: This generator learns from a small set of teacher samples and generates diverse, realistic test cases automatically.
-
-## Features
-
-- 🧠 **Domain Understanding**: Uses Claude to deeply understand what your tests validate
-- 🎯 **Targeted Generation**: Generates tests covering different capabilities, personas, and scenarios  
-- 🔄 **Diversity Control**: Tune how similar/different generated tests should be from teachers
-- ✅ **Quality Validation**: Ensures generated tests have proper structure and valid assertions
-- 📊 **Analysis Reports**: Provides insights into domain patterns and test coverage
+- **Problem**: You need more test samples for agent evolution, but manually creating test cases is time-consuming
+- **Solution**: This generator learns from a small set of teacher samples and generates diverse, realistic test cases automatically
 
 ## Quick Start
 
@@ -39,11 +43,6 @@ python -m test_data_generator.cli \
   --output generated_tests/
 ```
 
-The generator analyzes your source code, documentation, and configuration files to understand:
-- What capabilities your system has
-- What should be tested
-- Appropriate test structures and assertions
-
 ### 2. Generate with Teacher Samples + Source Context
 
 For best results, combine teacher samples with source context:
@@ -57,8 +56,6 @@ python -m test_data_generator.cli \
 ```
 
 ### 3. Advanced: Tune Complexity and Diversity
-
-Generate specific complexity with high diversity:
 
 ```bash
 python -m test_data_generator.cli \
@@ -93,8 +90,6 @@ Required:
 Optional:
   --teacher-samples PATH    Path to teacher test samples (file or directory)
                            Optional - can bootstrap from source context alone
-
-Optional:
   --count N                Number of tests to generate (default: 10)
   --complexity LEVEL       Generate specific complexity: simple, medium, or complex
   --diversity FACTOR       Diversity 0-1: 0=similar, 1=very diverse (default: 0.8)
@@ -109,11 +104,19 @@ Optional:
   --verbose                Enable verbose logging
 ```
 
+### Diversity Control
+
+The `--diversity` parameter controls how different generated tests are:
+
+- **0.0 - 0.3**: Low diversity - Stay close to patterns, mostly variations
+- **0.4 - 0.6**: Medium diversity - Explore different aspects of core capabilities  
+- **0.7 - 1.0**: High diversity - Explore edge cases, error handling, unusual scenarios
+
 ## How It Works
 
 ### Phase 1: Domain Analysis
 
-The generator analyzes your teacher samples to extract:
+The generator analyzes your source context and optional teacher samples to extract:
 
 - **Core capabilities** being tested
 - **Domain-specific patterns** and scenarios
@@ -126,7 +129,7 @@ The generator analyzes your teacher samples to extract:
 
 Using the domain understanding, it generates tests that:
 
-- Follow the same structure as teacher samples
+- Follow the same structure as teacher samples (or infer structure from source)
 - Explore different scenarios and edge cases
 - Cover different user personas and skill levels
 - Maintain appropriate assertion quality
@@ -141,7 +144,7 @@ Each generated test is validated to ensure:
 - Structure matches teacher samples
 - Reasonable defaults for timing/turns
 
-## Output Files
+### Output Files
 
 After generation, you'll find:
 
@@ -154,39 +157,52 @@ output_directory/
 └── ...
 ```
 
-## Integration with Evolution
+## Programmatic Usage
 
-Use generated tests with your evolution workflow:
+### Bootstrap Without Teacher Samples
 
-```bash
-# 1. Generate tests (source context always required)
-python -m test_data_generator.cli \
-  --source-context src/ \
-  --teacher-samples test_samples/ \
-  --count 30 \
-  --output test_data_expanded/
+```python
+from test_data_generator import IntelligentTestGenerator
+from test_data_generator.context_loader import ContextLoader
 
-# 2. Update config to use expanded test data
-# Edit examples/config.yaml:
-#   test_data:
-#     path: "test_data_expanded/"
+# Load source context (required)
+loader = ContextLoader(strategy='agent_evaluation')
+source_context = loader.load('/path/to/your/source/')
 
-# 3. Run evolution with more tests
-python run_evolution.py \
-  --config examples/config.yaml \
-  --evolve \
-  --auto-patch \
-  --validation-method agent_judge \
-  --mode standard  # Now uses expanded test set
+generator = IntelligentTestGenerator(
+    region_name='us-west-2',
+    model_id='us.anthropic.claude-opus-4-5-20251101-v1:0',
+    temperature=0.8
+)
+
+# Generate from source context only
+generated = generator.generate_test_cases(
+    teacher_samples=[],  # Empty list
+    count=10,
+    source_context=source_context,  # Required
+    diversity_factor=0.8,
+    output_dir='output/'
+)
 ```
 
-## Diversity Control
+### With Teacher Samples + Source Context
 
-The `--diversity` parameter controls how different generated tests are from teacher samples:
+```python
+# Load source context and teacher samples
+loader = ContextLoader(strategy='agent_evaluation')
+source_context = loader.load('/path/to/your/source/')
+teacher_samples = [...]  # Your test samples
 
-- **0.0 - 0.3**: Low diversity - Stay close to teacher patterns, mostly variations
-- **0.4 - 0.6**: Medium diversity - Explore different aspects of core capabilities  
-- **0.7 - 1.0**: High diversity - Explore edge cases, error handling, unusual scenarios
+# Generate with both
+generated = generator.generate_test_cases(
+    teacher_samples=teacher_samples,
+    count=20,
+    source_context=source_context,
+    complexity='medium',
+    diversity_factor=0.8,
+    output_dir='output/'
+)
+```
 
 ## Best Practices
 
@@ -207,68 +223,316 @@ The `--diversity` parameter controls how different generated tests are from teac
 3. **Use refined tests as teachers**: Use generated tests as teacher samples for next round
 4. **Iterate to improve**: Each generation learns from previous results
 
-## Programmatic Usage
+## Troubleshooting
 
-You can also use the generator in your Python code. **Note**: `source_context` is always required.
+**No tests generated**: Check that source context is provided and teacher samples (if used) have valid structure with assertions
 
-### Bootstrap Without Teacher Samples
+**Low quality tests**: Try lowering diversity factor or providing more comprehensive source context
 
-```python
-from test_data_generator import IntelligentTestGenerator
-from test_data_generator.context_loader import ContextLoader
+**Bedrock errors**: Verify AWS credentials and model access in your region
 
-# Load source context (required)
-loader = ContextLoader(strategy='agent_evaluation')
-source_context = loader.load('/path/to/your/source/')
+**Memory issues**: Reduce count or generate in smaller batches
 
-generator = IntelligentTestGenerator(
-    region_name=your_region,
-    model_id=your_model,
-    temperature=0.8
-)
+**"Source context very large" warning**: 
+- Tool auto-skips .git, node_modules, __pycache__, etc.
+- Auto-skips files >100KB
+- Content truncated intelligently for analysis
+- Use specific file instead of full directory if needed
 
-# Generate from source context only (no teacher samples)
-generated = generator.generate_test_cases(
-    teacher_samples=[],  # Empty list
-    count=10,
-    source_context=source_context,  # Required
-    diversity_factor=0.8,
-    output_dir='output/'
-)
+## Architecture
 
-print(f"Generated {len(generated)} tests from source context")
+### System Overview
+
+```
+INPUT                          PROCESSING                       OUTPUT
+─────                          ──────────                       ──────
+
+┌──────────────┐              ┌────────────────────┐         ┌─────────────┐
+│   Teacher    │              │  Domain Analyzer   │         │  Generated  │
+│   Samples    │─────────────>│                    │         │   Tests     │
+│  (optional)  │              │  • Extract patterns│         │ (10-50 tests)│
+└──────────────┘              │  • Understand      │         └─────────────┘
+                              │    capabilities    │
+┌──────────────┐              │  • Identify personas│        ┌─────────────┐
+│Source Context│─────────────>│  • Analyze         │        │   Domain    │
+│  (required)  │              │    assertions      │        │  Analysis   │
+└──────────────┘              └────────┬───────────┘        └─────────────┘
+                                       │
+                                       │ Domain Understanding
+                                       │
+                                       ▼
+                              ┌────────────────────┐
+                              │ Intelligent Gen.   │
+                              │                    │
+                              │  • Build prompts   │
+                              │  • Generate batches│
+                              │  • Ensure diversity│
+                              │  • Validate output │
+                              └────────┬───────────┘
+                                       │
+                                       ▼
+                              ┌────────────────────┐
+                              │   AWS Bedrock      │
+                              │  (Claude Models)   │
+                              └────────────────────┘
 ```
 
-### With Teacher Samples + Source Context
+### Component Architecture
 
+```
+test_data_generator/
+│
+├── domain_analyzer.py
+│   └─ DomainAnalyzer
+│      ├─ analyze_test_samples()        # Phase 1: Understanding
+│      ├─ _extract_structural_patterns()
+│      ├─ _extract_domain_understanding()
+│      ├─ _two_pass_analysis()
+│      ├─ _smart_truncate()
+│      └─ _call_bedrock()
+│
+├── intelligent_generator.py
+│   └─ IntelligentTestGenerator
+│      ├─ generate_test_cases()         # Phase 2: Generation
+│      ├─ _generate_batch()
+│      ├─ _build_generation_prompt()
+│      ├─ _validate_and_fix_tests()
+│      └─ _final_quality_pass()
+│
+├── context_loader.py
+│   └─ ContextLoader
+│      ├─ load()                        # Load source context
+│      ├─ _discover_files()
+│      └─ _prioritize_files()
+│
+└── cli.py
+    ├─ main()                            # Command-line interface
+    ├─ load_teacher_samples()
+    └─ Argument parsing
+```
+
+### Key Design Decisions
+
+**1. Two-Phase Approach (Analysis → Generation)**
+
+*Why?* Separate understanding from generation, reusable domain analysis, better quality control
+
+*Tradeoffs:* Two LLM calls instead of one, slightly slower but much better quality
+
+**2. Batch Generation**
+
+*Why?* Ensures diversity across batches, better progress tracking, fault tolerance
+
+*Tradeoffs:* More API calls and complexity, but better results and reliability
+
+**3. Validation & Auto-Fix**
+
+*Why?* LLM output can be imperfect, ensures structural consistency, reduces manual cleanup
+
+*Tradeoffs:* May mask generation issues, but much better usability
+
+**4. Source Context Required, Teacher Samples Optional**
+
+*Why?* Source context provides ground truth, enables bootstrapping without existing tests
+
+*Tradeoffs:* More setup required, but more flexible and powerful
+
+### Validation Pipeline
+
+```
+Generated Test
+      │
+      ▼
+┌─────────────┐
+│ Has ID?     │ ─No─> Generate ID
+└──────┬──────┘
+       │ Yes
+       ▼
+┌─────────────┐
+│ Has name?   │ ─No─> Generate name
+└──────┬──────┘
+       │ Yes
+       ▼
+┌─────────────┐
+│ Valid       │ ─No─> Set default
+│ complexity? │
+└──────┬──────┘
+       │ Yes
+       ▼
+┌─────────────┐
+│ Has         │ ─No─> Skip test
+│ assertions? │
+└──────┬──────┘
+       │ Yes
+       ▼
+┌─────────────┐
+│ Validate    │ ─Invalid─> Remove invalid
+│ assertions  │
+└──────┬──────┘
+       │ Valid
+       ▼
+┌─────────────┐
+│ Add to      │
+│ output set  │
+└─────────────┘
+```
+
+### Error Handling Strategy
+
+**Level 1: Graceful Degradation**
+- No teacher samples? Generate from source context alone
+- Some tests invalid? Use valid ones
+- Batch failed? Continue with others
+
+**Level 2: Validation & Auto-Fix**
+- Missing fields? Add defaults
+- Invalid assertions? Remove them
+- Wrong structure? Fix if possible
+
+**Level 3: Clear Errors**
+- No source context? Error & exit
+- Bedrock unavailable? Error & exit
+- All tests invalid? Error & exit
+
+## Testing
+
+### Running Tests
+
+**Quick Smoke Test (No Dependencies)**
+```bash
+python3 evaluation/test_data_generator/test_basic.py
+```
+
+**Full Unit Test Suite**
+```bash
+# Run all unit tests
+pytest evaluation/test_data_generator/test_units.py -v
+
+# Run with coverage
+pytest evaluation/test_data_generator/test_units.py \
+  --cov=evaluation.test_data_generator \
+  --cov-report=term-missing
+```
+
+**Run Specific Test Classes**
+```bash
+# Test only ContextLoader
+pytest evaluation/test_data_generator/test_units.py::TestContextLoader -v
+
+# Test only Deduplication
+pytest evaluation/test_data_generator/test_units.py::TestDeduplication -v
+
+# Test only DomainAnalyzer
+pytest evaluation/test_data_generator/test_units.py::TestDomainAnalyzer -v
+```
+
+### Test Coverage Summary
+
+**TestContextLoader (10 tests)**
+- Strategy initialization and fallback behavior
+- Binary file detection
+- Single file and directory loading
+- Skip patterns (directories, large files)
+- Custom strategy creation
+
+**TestDeduplication (4 tests)**
+- `keep_first` - Keep first occurrence
+- `keep_best` - Keep test with most assertions
+- `keep_all_unique` - Rename duplicates
+- No duplicates case
+
+**TestDomainAnalyzer (5 tests)**
+- Structural pattern extraction
+- Complexity distribution analysis
+- Assertion pattern analysis
+- Default structure generation
+- Empty sample handling
+
+**TestCustomStrategyCreation (3 tests)**
+- Basic custom strategy creation
+- Priority pattern configuration
+- File size limits
+
+### What's Tested vs. Not Tested
+
+**Tested (22 unit tests, ~0.1s runtime)**
+- Context loading (~200 lines)
+- Deduplication (~100 lines)
+- Domain analysis (structural parts)
+- File discovery and filtering
+- Pattern extraction
+
+**Not Tested (Requires AWS/Bedrock)**
+- Domain understanding generation
+- Test case generation
+- Two-pass analysis
+- LLM API calls
+
+### CI/CD Integration
+
+```bash
+# Run tests and fail on any failures
+pytest evaluation/test_data_generator/test_units.py --tb=short || exit 1
+
+# Run with coverage threshold
+pytest evaluation/test_data_generator/test_units.py \
+    --cov=evaluation.test_data_generator \
+    --cov-fail-under=70
+```
+
+## Contributing
+
+The generator is designed to be extensible. To customize:
+
+1. **Modify domain analysis**: Edit `domain_analyzer.py` to extract additional patterns
+2. **Adjust generation**: Update `intelligent_generator.py` prompts for your domain
+3. **Add validation**: Add custom validation logic for your test structure
+4. **Create strategies**: Add new context loading strategies in `context_loader.py`
+
+### Code Style
+
+- Follow existing patterns for consistency
+- Add docstrings for public methods
+- Use type hints where appropriate
+- Keep functions focused and small
+- Add unit tests for deterministic logic
+
+### Pull Request Guidelines
+
+1. Ensure all tests pass
+2. Add tests for new functionality
+3. Update documentation as needed
+4. Keep changes focused and atomic
+5. Provide clear commit messages
+
+### Writing New Tests
+
+When adding new testable functionality:
+
+1. Add unit tests to `test_units.py` if the logic is **deterministic**
+2. Use mocking (`unittest.mock`) for external dependencies
+3. Use temp directories for file I/O tests
+4. Keep tests **fast**
+
+Example:
 ```python
-from test_data_generator import IntelligentTestGenerator
-from test_data_generator.context_loader import ContextLoader
+class TestNewFeature(unittest.TestCase):
+    def test_feature_works(self):
+        """Test that feature behaves correctly."""
+        # Arrange, Act, Assert
+```
 
-# Load source context (required)
-loader = ContextLoader(strategy='agent_evaluation')
-source_context = loader.load('/path/to/your/source/')
+## Installation
 
-generator = IntelligentTestGenerator(
-    region_name='us-west-2',
-    model_id='us.anthropic.claude-opus-4-5-20251101-v1:0',
-    temperature=0.8
-)
+Install the evaluation package from the repository root:
 
-# Load teacher samples
-teacher_samples = [...]  # Your test samples
+```bash
+# From agent-builder-toolkit-aws-transform/
+cd evaluation
+pip install -e .
 
-# Generate with both teacher samples and source context
-generated = generator.generate_test_cases(
-    teacher_samples=teacher_samples,
-    count=20,
-    source_context=source_context,  # Required
-    complexity='medium',
-    diversity_factor=0.8,
-    output_dir='output/'
-)
-
-print(f"Generated {len(generated)} tests")
+# Or with test dependencies
+pip install -e ".[test]"
 ```
 
 ## Requirements
@@ -277,45 +541,6 @@ print(f"Generated {len(generated)} tests")
 - boto3 (AWS Bedrock access)
 - AWS credentials configured
 - Access to Claude models in Bedrock
-
-## Troubleshooting
-
-**No tests generated**: Check that teacher samples have valid structure with assertions
-
-**Low quality tests**: Try lowering diversity factor or providing POWER.md context
-
-**Bedrock errors**: Verify AWS credentials and model access in your region
-
-**Memory issues**: Reduce count or generate in smaller batches
-
-**"Power instructions very large" warning**: 
-- Tool auto-skips .git, node_modules, __pycache__, etc.
-- Auto-skips files >100KB
-- Content truncated to 10K chars for analysis
-- Use specific file instead of full directory if needed
-
-## Examples
-
-See the [examples](../examples/) directory for sample configurations and generated tests.
-
-## Architecture
-
-```
-test_data_generator/
-├── __init__.py              # Package exports
-├── cli.py                   # Command-line interface
-├── domain_analyzer.py       # Domain understanding via LLM
-├── intelligent_generator.py # Test generation logic
-└── README.md               # This file
-```
-
-## Contributing
-
-The generator is designed to be extensible. To customize:
-
-1. Modify `domain_analyzer.py` to extract additional patterns
-2. Adjust `intelligent_generator.py` prompts for your domain
-3. Add custom validation logic for your test structure
 
 ## License
 

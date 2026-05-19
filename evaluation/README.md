@@ -14,11 +14,9 @@ The evaluation infrastructure consists of:
 ```
 evaluation/
 ├── README.md                    # This file
-├── requirements.txt             # Python dependencies
+├── pyproject.toml               # Package configuration (setuptools)
 ├── test_data_generator/         # Intelligent test case generator
-│   ├── README.md               # Generator documentation
-│   ├── ARCHITECTURE.md         # Design decisions and rationale
-│   ├── TEST_README.md          # Testing guide
+│   ├── README.md               # Complete documentation
 │   ├── cli.py                  # Command-line interface
 │   ├── intelligent_generator.py # Main generation logic
 │   ├── domain_analyzer.py      # Domain understanding from samples
@@ -75,9 +73,7 @@ python -m evaluation.test_data_generator.cli \
 - boto3 installed
 
 **Documentation:**
-- [Generator README](test_data_generator/README.md) - Usage guide
-- [Architecture](test_data_generator/ARCHITECTURE.md) - Design decisions
-- [Testing Guide](test_data_generator/TEST_README.md) - Running tests
+- [Generator README](test_data_generator/README.md) - Complete guide (usage, architecture, testing)
 
 **Testing:**
 ```bash
@@ -297,24 +293,24 @@ python -m evaluation.test_data_generator.cli \
 - [ ] **CI/CD integration** - GitHub Actions workflow
 - [ ] **Regression tracking** - Historical comparison
 
-## Requirements
+## Installation
 
-Install dependencies:
+Install the evaluation package:
 
 ```bash
-pip install -r evaluation/requirements.txt
+# From agent-builder-toolkit-aws-transform/
+cd evaluation
+pip install -e .
+
+# Or with test dependencies
+pip install -e ".[test]"
 ```
 
-**For Test Generation:**
+**Requirements:**
 - Python 3.11+
-- boto3>=1.28.0
-- AWS credentials with Bedrock access
-
-**For Development/Testing:**
-- pytest>=7.0.0
-- pytest-cov>=4.0.0 (optional, for coverage reports)
-- unittest (standard library)
-- Mock AWS credentials (for unit tests)
+- boto3>=1.28.0 (AWS Bedrock access)
+- AWS credentials configured
+- pytest>=7.0.0 (for testing, optional)
 
 ## Contributing
 
@@ -327,10 +323,8 @@ When adding new capabilities:
 
 ## Resources
 
-- [Test Data Generator README](test_data_generator/README.md)
-- [Architecture Documentation](test_data_generator/ARCHITECTURE.md)
-- [Testing Guide](test_data_generator/TEST_README.md)
-- [Example Usage](test_data_generator/example.py)
+- [Test Data Generator README](test_data_generator/README.md) - Complete documentation
+- [Example Usage](test_data_generator/example.py) - Code examples
 
 ## Support
 

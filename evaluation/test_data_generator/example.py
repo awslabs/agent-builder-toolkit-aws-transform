@@ -92,7 +92,12 @@ def example_with_power_md():
 
 
 def example_domain_analysis():
-    """Example: Domain analysis without generation."""
+    """Example: Domain analysis without generation.
+
+    Note: source_context is required for domain understanding.
+    This example uses a placeholder, but in practice you should load
+    from POWER.md, source code, or other documentation.
+    """
     print("\n" + "=" * 80)
     print("EXAMPLE 3: Domain Analysis Only")
     print("=" * 80 + "\n")
@@ -110,8 +115,21 @@ def example_domain_analysis():
         model_id='us.anthropic.claude-opus-4-5-20251101-v1:0'
     )
 
+    # Load source context (required for domain understanding)
+    # In real usage, load from POWER.md or source code
+    # For this example, we'll use a placeholder
+    source_context = """
+    # Example Agent Instructions
+    This is a placeholder for actual agent instructions, source code, or documentation.
+    In practice, you should load this from:
+    - POWER.md files with agent instructions
+    - Source code documentation
+    - Configuration files
+    - Any context that describes what the agent should do
+    """
+
     # Analyze domain
-    analysis = analyzer.analyze_test_samples(teacher_samples, None)
+    analysis = analyzer.analyze_test_samples(teacher_samples, source_context)
 
     # Save analysis
     output_path = "./example_output/analysis/domain_analysis.json"
