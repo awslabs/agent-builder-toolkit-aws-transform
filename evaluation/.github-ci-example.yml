@@ -1,0 +1,67 @@
+# Example GitHub Actions workflow for evaluation package CI
+# This file is for reference only - integrate into your existing CI pipeline
+
+name: Evaluation Tests
+
+on:
+  pull_request:
+    paths:
+      - 'evaluation/**'
+  push:
+    branches: [main, develop]
+    paths:
+      - 'evaluation/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12', '3.13']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install evaluation package
+        run: |
+          cd evaluation
+          pip install -e ".[test]"
+
+      - name: Run smoke tests
+        run: |
+          python3 evaluation/test_data_generator/test_basic.py
+
+      - name: Run unit tests
+        run: |
+          pytest evaluation/test_data_generator/test_units.py -v --tb=short
+
+      - name: Run unit tests with coverage
+        if: matrix.python-version == '3.11'
+        run: |
+          pytest evaluation/test_data_generator/test_units.py \
+            --cov=evaluation.test_data_generator \
+            --cov-report=term-missing \
+            --cov-fail-under=70
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint with ruff
+        run: |
+          ruff check evaluation/ --config pyproject.toml

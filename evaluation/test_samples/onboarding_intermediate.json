@@ -1,0 +1,95 @@
+[
+{
+  "id": "onboarding-intermediate",
+  "name": "Intermediate user onboarding — has tools installed, knows the platform",
+  "user_message": "I just installed the agent-builder power and want to use it.",
+  "prompt": "I just installed the agent-builder power and want to use it.",
+  "description": "An intermediate user who has Python 3.11, AWS CLI, and Finch already installed and configured. They know the AWS Transform platform and understand what the power can do. The power should walk through onboarding efficiently: validate prerequisites, offer SDK install, hooks, MCP config, then demonstrate a doc search when asked.",
+  "complexity": "medium",
+  "tags": ["matrix", "onboarding", "intermediate"],
+  "max_turns": 12,
+  "timeout_seconds": 600,
+  "simulated_human_guidance": "You are a developer who just installed the agent-builder Kiro Power and want to get started. You have Python 3.11, AWS CLI, and finch installed. Your AWS credentials are configured. Cooperate with the agent throughout the onboarding flow. When the agent asks about your Python version, say you have Python 3.11. When it offers to install the SDK, agree. When it offers to add workspace hooks, agree. When it offers MCP configuration, accept the defaults. Once the agent finishes the onboarding setup (tool validation, SDK, hooks, MCP config), ask it: 'Can you show me a quick example? Search the AWS Transform docs for how to build an orchestrator agent.' After the agent performs the search and presents results, output __DONE__.",
+  "metadata": {
+    "domain": "agent_builder",
+    "source_platform": "kiro",
+    "target_platform": "aws_transform",
+    "scenario_type": "onboarding",
+    "source_file": "evaluation/test_samples/onboarding_intermediate.json"
+  },
+  "assertions": [
+    {
+      "name": "introduces_capabilities",
+      "type": "llm_judge",
+      "description": "Agent introduces itself and lists its key capabilities",
+      "check": "Did the agent introduce itself as the AWS Transform agent-builder power (or AWS Transform agent development assistant) and mention at least three of its capabilities? Capabilities include: documentation search, agent registration, deployment to agent runtime, code generation, debugging, and skill management. The introduction should give the user a clear picture of what the power can help with."
+    },
+    {
+      "name": "validates_python",
+      "type": "llm_judge",
+      "description": "Agent checks or asks about Python version (3.11+ required)",
+      "check": "Did the agent validate or ask about the Python installation? It should check that Python 3.11 or higher is available, either by running a command (python3 --version) or asking the user. Simply mentioning Python as a prerequisite in a list counts if the agent is actively walking through validation."
+    },
+    {
+      "name": "validates_aws_cli",
+      "type": "llm_judge",
+      "description": "Agent checks or asks about AWS CLI installation and authentication",
+      "check": "Did the agent validate or ask about AWS CLI? It should check that the AWS CLI is installed (aws --version) and that credentials are configured (aws sts get-caller-identity). Mentioning AWS CLI validation as part of the onboarding walkthrough counts."
+    },
+    {
+      "name": "validates_container_runtime",
+      "type": "llm_judge",
+      "description": "Agent checks or asks about Finch or Docker availability",
+      "check": "Did the agent validate or ask about a container runtime (Finch or Docker)? It should check that at least one is available for building ARM64 images. Mentioning container runtime validation as part of the onboarding walkthrough counts."
+    },
+    {
+      "name": "checks_sdk_installation",
+      "type": "llm_judge",
+      "description": "Agent addresses AWS Transform Agent SDK installation",
+      "check": "Did the agent address the AWS Transform Agent SDK installation? This could be checking if the SDK is already installed, offering to install it, or providing installation instructions (install.sh or manual pip install of .whl files). The agent should not skip this step."
+    },
+    {
+      "name": "offers_workspace_hooks",
+      "type": "llm_judge",
+      "description": "Agent offers to add workspace hooks for deployment validation",
+      "check": "Did the agent offer to add workspace hooks (specifically a validate-deployment hook or similar)? The POWER.md onboarding Step 3 defines a hook that validates IAM roles, container runtime, and AWS access before deployment. The agent should offer to set this up."
+    },
+    {
+      "name": "offers_mcp_configuration",
+      "type": "llm_judge",
+      "description": "Agent offers MCP server environment configuration",
+      "check": "Did the agent mention or offer to configure the MCP server environment (STAGE, REGION settings in mcp.json)? This is Step 4 of the POWER.md onboarding. The agent may present it as optional, which is correct."
+    },
+    {
+      "name": "performs_doc_search_demo",
+      "type": "llm_judge",
+      "description": "Agent demonstrates the power by performing a documentation search",
+      "check": "After the user asked for a doc search demo (e.g., 'search the AWS Transform docs for how to build an orchestrator agent'), did the agent perform a live documentation search? It should have called keyword_search or search_by_source and presented results to the user. Simply describing the search capability without actually performing a search does NOT count."
+    },
+    {
+      "name": "search_tool_called",
+      "type": "tool_called",
+      "description": "Agent actually invoked a search MCP tool during the demo",
+      "check": "keyword_search"
+    },
+    {
+      "name": "includes_citations",
+      "type": "llm_judge",
+      "description": "Agent includes citation tags when presenting search results",
+      "check": "When the agent presented documentation search results, did it include citation tags (e.g., [dev-guide:...], [sdk:...], [api:...])? The POWER.md grounding rules require citations in every response that uses search results."
+    },
+    {
+      "name": "follows_onboarding_sequence",
+      "type": "llm_judge",
+      "description": "Agent follows a logical onboarding sequence without skipping major steps",
+      "check": "Review the full transcript. Did the agent follow a logical onboarding progression? The expected sequence is: (1) introduce capabilities, (2) validate tools and access, (3) SDK installation, (4) workspace hooks, (5) MCP configuration. After onboarding, the user asks for a doc search demo, and the agent should perform it. The agent does not need to follow this exact order rigidly, but it should cover all major onboarding steps and respond to the user's search request. Minor reordering is acceptable."
+    },
+    {
+      "name": "power_did_not_error",
+      "type": "transcript_not_contains",
+      "description": "No framework-level errors in the transcript",
+      "check": "ERROR:"
+    }
+  ]
+}
+]
