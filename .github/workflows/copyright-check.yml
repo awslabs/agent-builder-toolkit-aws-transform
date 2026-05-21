@@ -1,0 +1,50 @@
+name: Copyright Header Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  copyright-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check Python files for copyright header
+        run: |
+          header_line="# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved."
+          license_line="# SPDX-License-Identifier: Apache-2.0"
+          missing=()
+
+          while IFS= read -r -d '' file; do
+            first_line=$(sed -n '1p' "$file")
+            # Allow optional shebang on line 1
+            if [[ "$first_line" == "#!"* ]]; then
+              copy_line=$(sed -n '2p' "$file")
+              spdx_line=$(sed -n '3p' "$file")
+            else
+              copy_line="$first_line"
+              spdx_line=$(sed -n '2p' "$file")
+            fi
+            if [[ "$copy_line" != "$header_line" ]] || [[ "$spdx_line" != "$license_line" ]]; then
+              missing+=("$file")
+            fi
+          done < <(find . -name "*.py" -not -path "./.git/*" -not -path "*/__pycache__/*" -not -path "./.venv/*" -print0)
+
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "::error::The following files are missing the required copyright header:"
+            printf '  %s\n' "${missing[@]}"
+            echo ""
+            echo "Each .py file must start with:"
+            echo "  # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved."
+            echo "  # SPDX-License-Identifier: Apache-2.0"
+            echo "(A shebang line before the header is allowed.)"
+            exit 1
+          fi
+
+          echo "All Python files have the required copyright header."
