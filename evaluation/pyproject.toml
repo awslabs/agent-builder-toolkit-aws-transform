@@ -19,6 +19,7 @@ classifiers = [
 dependencies = [
     "boto3>=1.28.0",
     "botocore>=1.28.0",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
@@ -27,11 +28,14 @@ test = [
     "pytest-cov>=4.0.0",
 ]
 
+[project.scripts]
+agent-builder-eval = "eval_runner.cli:main"
+
 [tool.setuptools.packages.find]
 where = ["."]
 
 [tool.pytest.ini_options]
-testpaths = ["test_data_generator"]
+testpaths = ["test_data_generator", "eval_runner/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
