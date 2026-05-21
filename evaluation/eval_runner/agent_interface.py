@@ -19,7 +19,8 @@ class EvalAgentInterface(ABC):
     """
 
     @abstractmethod
-    def execute(self, test_case: TestCase) -> ExecutionResult: ...
+    def execute(self, test_case: TestCase) -> ExecutionResult:
+        raise NotImplementedError
 
 
 class EvolvableAgent(EvalAgentInterface):
@@ -30,4 +31,5 @@ class EvolvableAgent(EvalAgentInterface):
     """
 
     @abstractmethod
-    def get_source_dir(self) -> Path: ...
+    def get_source_dir(self) -> Path:
+        raise NotImplementedError

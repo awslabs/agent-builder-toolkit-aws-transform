@@ -5,8 +5,6 @@
 
 from pathlib import Path
 
-import pytest
-
 
 class TestEvalConfig:
     def test_defaults(self):
