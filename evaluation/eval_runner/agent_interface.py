@@ -1,35 +1,34 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Agent interface ABCs for evaluation and evolution."""
+"""Agent interface Protocols for evaluation and evolution."""
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Protocol, runtime_checkable
 
 from eval_runner.models import ExecutionResult
 from eval_runner.test_case import TestCase
 
 
-class EvalAgentInterface(ABC):
+@runtime_checkable
+class EvalAgentInterface(Protocol):
     """Minimal contract for any agent to participate in evaluation.
 
-    Implement execute() to run a test case and return results.
+    Any class with an execute() method satisfies this protocol.
     """
 
-    @abstractmethod
-    def execute(self, test_case: TestCase) -> ExecutionResult:
-        raise NotImplementedError
+    def execute(self, test_case: TestCase) -> ExecutionResult: ...
 
 
-class EvolvableAgent(EvalAgentInterface):
+@runtime_checkable
+class EvolvableAgent(Protocol):
     """Extension for agents that support autonomous evolution.
 
-    Adds get_source_dir() so the evolution framework knows where
-    to find and patch harness files.
+    Requires both execute() and get_source_dir().
     """
 
-    @abstractmethod
-    def get_source_dir(self) -> Path:
-        raise NotImplementedError
+    def execute(self, test_case: TestCase) -> ExecutionResult: ...
+
+    def get_source_dir(self) -> Path: ...
