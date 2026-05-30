@@ -33,6 +33,15 @@ class EvaluationEngine:
     @classmethod
     def from_config(cls, config: EvalConfig) -> EvaluationEngine:
         registry = MetricRegistry()
+        # The llm_judge metric needs the ACP orchestrator; bind it at wiring time
+        # when the config carries an execution_config (ACP execution path).
+        if config.execution_config is not None and "llm_judge" in config.metrics:
+            from eval_runner.metrics.llm_judge import LLMJudgeMetric
+
+            execution_config = config.execution_config
+            registry.register_factory(
+                "llm_judge", lambda: LLMJudgeMetric(execution_config=execution_config)
+            )
         metrics = registry.resolve(config.metrics)
         return cls(metrics=metrics, config=config)
 

@@ -8,6 +8,10 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from eval_runner.execution.runner import EvalCase
 
 
 @dataclass
@@ -45,6 +49,31 @@ class TestCase:
             simulated_human_guidance=data.get("simulated_human_guidance"),
             metadata=data.get("metadata", {}),
             assertions=data.get("assertions", []),
+        )
+
+    def to_scenario(self) -> "EvalCase":
+        """Convert this TestCase into an execution-engine ``EvalCase``.
+
+        Bridges the canonical eval_runner test model onto the ACP engine's
+        scenario model so it can be run. The two schemas are near-identical; the
+        only renames are ``user_message`` → ``prompt`` and ``metadata`` →
+        (dropped, the scenario model has no equivalent field).
+
+        Imported lazily so eval_runner's core stays importable without pulling in
+        the ACP engine.
+        """
+        from eval_runner.execution.runner import EvalCase
+
+        return EvalCase(
+            id=self.id,
+            name=self.name,
+            prompt=self.user_message,
+            description=self.description,
+            assertions=self.assertions,
+            tags=self.tags,
+            max_turns=self.max_turns,
+            timeout_seconds=self.timeout_seconds,
+            simulated_human_guidance=self.simulated_human_guidance,
         )
 
 

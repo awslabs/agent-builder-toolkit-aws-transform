@@ -20,6 +20,9 @@ dependencies = [
     "boto3>=1.28.0",
     "botocore>=1.28.0",
     "pyyaml>=6.0",
+    # Used by the ACP execution engine (eval_runner.execution) for eval-scenario
+    # JSON-Schema validation.
+    "jsonschema>=4.0.0",
 ]
 
 [project.optional-dependencies]
@@ -29,10 +32,21 @@ test = [
 ]
 
 [project.scripts]
-agent-builder-eval = "eval_runner.cli:main"
+# Repo wiring: builds the unified EvalConfig and runs the eval_runner CLI.
+agent-builder-eval = "run_eval:entry_point"
+
+[tool.setuptools]
+# run_eval.py is the repo-specific wiring module (holds the console entry point).
+py-modules = ["run_eval"]
 
 [tool.setuptools.packages.find]
+# Discovers eval_runner (+ subpackages) and test_data_generator.
 where = ["."]
+
+[tool.setuptools.package-data]
+# Bundle the ACP engine's data files (agent JSONs, system prompts, eval schema,
+# skills) so they ship with the installed package.
+"eval_runner.execution" = ["data/**/*", "*.json", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["test_data_generator", "eval_runner/tests"]

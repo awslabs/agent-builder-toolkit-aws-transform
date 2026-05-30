@@ -7,7 +7,7 @@ This directory contains tools and test data for evaluating AWS Transform agents 
 The evaluation infrastructure consists of:
 1. **Test Data Generator** - Intelligent test case generation from teacher samples and source context
 2. **Test Samples** - Curated test cases for agent evaluation
-3. **Evaluation Framework** *(Coming Soon)* - Automated test execution and scoring
+3. **Evaluation System** - Automated test execution and scoring (`eval_runner/`, with its ACP execution engine under `eval_runner/execution/`)
 
 ## Directory Structure
 
@@ -27,6 +27,27 @@ evaluation/
 │   └── test_units.py           # Unit test suite (22 tests)
 ├── test_samples/                # Sample test cases
 │   └── onboarding_intermediate.json
+├── eval_runner/                 # The evaluation package (single, consolidated)
+│   ├── models.py               # All data models (scoring + execution/transcript)
+│   ├── config.py               # EvalConfig (scoring) + ExecutionConfig (ACP)
+│   ├── cli.py                  # Canonical CLI: list / run / report / clean
+│   ├── engine.py               # EvaluationEngine (pluggable, parallel scoring)
+│   ├── agents/acp_agent.py     # Bridges TestCase → ACP execution engine
+│   ├── metrics/                # assertion_pass_rate + llm_judge (pluggable)
+│   ├── validators/             # Evolution safety layer (separate, not wired in)
+│   └── execution/              # ACP execution engine
+│       ├── runner.py          # EvalOrchestrator: multi-turn run + LLM-judge grading
+│       ├── acp_bridge.py      # ACP JSON-RPC client (agent-cli/kiro-cli subprocess)
+│       ├── bridge_runner.py   # High-level bridge wrapper (auto-approval, timeouts)
+│       ├── loader.py          # Scenario JSON loading + schema validation
+│       ├── agent_setup.py     # Generates/installs agent configs
+│       ├── mocking.py         # CLI + MCP mock generation
+│       ├── report.py          # HTML dashboard generator
+│       └── data/              # Bundled agents, eval-schema, judge/scenario skills
+├── agent_under_test/            # Agent definition the system evaluates
+│   ├── AGENT.md                # System prompt / onboarding behavior
+│   └── mcp.json                # Points at the agent-builder MCP server
+├── run_eval.py                  # Repo wiring: unified EvalConfig → CLI
 └── generated_test_data/         # Generated tests (gitignored)
 ```
 
@@ -124,14 +145,56 @@ pytest evaluation/test_data_generator/test_units.py -v
 - `transcript_contains` - Pattern matching in transcript
 - `transcript_not_contains` - Ensure pattern is absent
 
-### 3. Evaluation Framework *(Coming Soon)*
+### 3. Evaluation System (`eval_runner/`)
 
-**Planned Features:**
-- Automated test execution against agents
-- LLM-based assertion evaluation
-- Scoring and metrics (pass rate, ...)
-- Test result reporting (JSON, HTML, markdown)
-- Integration with CI/CD pipelines
+A single package with internal layers. The top level holds the **scoring +
+orchestration** layer (test-case model, pluggable metric registry, parallel
+`EvaluationEngine`, canonical CLI). Its `execution/` subpackage is the **ACP
+execution engine** that drives a multi-turn conversation with the agent under
+test and grades transcripts with an LLM judge.
+
+**Layers:**
+
+| Layer | Where | Responsibility |
+|-------|-------|----------------|
+| Execution | `eval_runner.execution` (`EvalOrchestrator`) | Run the agent/skill over ACP → transcript |
+| Scoring | `eval_runner` (`MetricRegistry`) | `assertion_pass_rate` (deterministic) + `llm_judge` (LLM-as-judge) |
+| Orchestration | `eval_runner.cli` + `execution/report.py` | Run many via `EvaluationEngine`, aggregate, HTML dashboard |
+
+`eval_runner.ACPAgent` is the bridge: it converts a `TestCase` to an engine
+scenario, runs it via `EvalOrchestrator.run_scenario()`, and flattens the
+transcript into an `ExecutionResult` so any metric can score it. The CLI `run`
+routes scenarios through `EvaluationEngine`; the `llm_judge` metric reuses the
+engine's judge via `EvalOrchestrator.grade_transcript()`.
+
+> The evolution layer (`eval_runner/validators/`) is intentionally separate and
+> not wired into the evaluation pipeline here.
+
+**Features:**
+- Automated multi-turn execution against the agent under test
+- Pluggable scoring: deterministic transcript/tool checks **and** LLM-as-judge,
+  mixed per config (`metrics: ["assertion_pass_rate", "llm_judge"]`)
+- Per-assertion pass/fail, pass rate, token usage
+- Test result reporting (JSON results + HTML dashboard)
+- CLI: `list` / `run` / `report` / `clean`
+
+**Wiring for this repo** (`run_eval.py` + `agent_under_test/`):
+
+```bash
+# List the curated test samples (offline — no model/CLI access needed)
+python evaluation/run_eval.py list
+
+# Run a scenario against the agent-builder agent (requires kiro-cli on PATH)
+python evaluation/run_eval.py run --scenario onboarding-intermediate --report
+```
+
+`run_eval.py` builds the unified `eval_runner.EvalConfig`. Its `framework_config`
+points the ACP engine at the agent defined in `agent_under_test/` (AGENT.md +
+mcp.json → the real `agent-builder` MCP server) and the scenarios in
+`test_samples/`. The CLI delegates `list`/`run`/`report`/`clean` to the framework's
+native implementation (so the HTML report is produced with zero fidelity loss).
+The `list` command works offline; `run` drives a live conversation and needs
+`kiro-cli` plus model access.
 
 ```
 
@@ -286,10 +349,10 @@ python -m evaluation.test_data_generator.cli \
 - [x] Context-aware test generation
 - [x] Deduplication utilities
 - [x] Comprehensive unit tests
-- [ ] **Evaluation framework** - Automated test execution
-- [ ] **Test runner** - Parallel test execution
-- [ ] **Scoring engine** - Pass/fail with metrics
-- [ ] **Results dashboard** - Visualization and reporting
+- [x] **Evaluation framework** - Automated multi-turn test execution (ACP)
+- [x] **Test runner** - Parallel test execution (`EvaluationEngine`)
+- [x] **Scoring engine** - Pass/fail with metrics (`assertion_pass_rate`, `llm_judge`)
+- [x] **Results dashboard** - HTML visualization and reporting
 - [ ] **CI/CD integration** - GitHub Actions workflow
 - [ ] **Regression tracking** - Historical comparison
 
@@ -335,4 +398,6 @@ For issues or questions:
 
 ---
 
-**Status:** Test data generation is complete and production-ready. Evaluation framework is planned for future development.
+**Status:** Test data generation and the evaluation system (multi-turn ACP
+execution, pluggable scoring, HTML reporting) are complete. CI/CD integration and
+regression tracking are the remaining roadmap items.

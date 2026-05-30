@@ -84,18 +84,37 @@ class TestAssertionPassRateMetric:
         assert result.score == 0.0
         assert result.passed is False
 
-    def test_unknown_type_fails_with_reason(self):
+    def test_ungradable_type_is_skipped_not_failed(self):
+        """Types this metric doesn't own (e.g. llm_judge) are abstained on, not
+        scored as failures — they emit no assertion entry and don't drag the score."""
         metric = AssertionPassRateMetric()
         tc = TestCase(
             id="t1", name="test", user_message="hi",
-            assertions=[{"name": "a1", "type": "invalid_type", "check": "x"}],
+            assertions=[{"name": "a1", "type": "llm_judge", "check": "x"}],
         )
         result = metric.evaluate(self._make_execution(), tc)
-        assert result.score == 0.0
-        assert result.passed is False
-        assertion_detail = result.details["assertions"][0]
-        assert assertion_detail["passed"] is False
-        assert "unknown assertion type" in assertion_detail["reason"]
+        # Abstains: no gradable assertions for this metric.
+        assert result.score == 10.0
+        assert result.passed is True
+        assert result.details.get("assertions", []) == []
+
+    def test_ungradable_types_excluded_from_denominator(self):
+        """A mix of gradable and ungradable: score reflects only the gradable ones."""
+        metric = AssertionPassRateMetric()
+        tc = TestCase(
+            id="t1", name="test", user_message="hi",
+            assertions=[
+                {"name": "a1", "type": "transcript_contains", "check": "hello"},
+                {"name": "a2", "type": "llm_judge", "check": "subjective"},
+            ],
+        )
+        execution = self._make_execution(transcript="hello world")
+        result = metric.evaluate(execution, tc)
+        # Only a1 is gradable, and it passes → 1/1.
+        assert result.score == 10.0
+        assert result.passed is True
+        names = [a["name"] for a in result.details["assertions"]]
+        assert names == ["a1"]
 
     def test_mixed_assertions_partial_score(self):
         metric = AssertionPassRateMetric()

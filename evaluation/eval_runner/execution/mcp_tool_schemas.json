@@ -1,0 +1,255 @@
+{
+  "_description": "Example MCP tool schemas used by mock_mcp_server.py for realistic tool metadata and as a reference for scenario authors. Replace with the tool schemas of the MCP server your agent under test uses.",
+  "_updated": "2026-04-10",
+  "tools": {
+    "get_status": {
+      "description": "Check status of all configured connections",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      }
+    },
+    "configure": {
+      "description": "Set up FES connection (cookie or SSO auth)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "authMode": { "type": "string", "enum": ["cookie", "sso"], "description": "Authentication mode" },
+          "stage": { "type": "string", "enum": ["gamma", "prod"], "description": "Service stage" },
+          "region": { "type": "string", "description": "AWS region" },
+          "sessionCookie": { "type": "string", "description": "Session cookie (cookie auth)" },
+          "origin": { "type": "string", "description": "Origin URL (cookie auth)" },
+          "startUrl": { "type": "string", "description": "SSO start URL (SSO auth)" },
+          "profileName": { "type": "string", "description": "SSO profile name (SSO auth)" }
+        }
+      }
+    },
+    "configure_sigv4": {
+      "description": "Set up AWS IAM credentials for SigV4 authentication",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "accountId": { "type": "string", "description": "AWS account ID" },
+          "role": { "type": "string", "description": "IAM role name" },
+          "stage": { "type": "string", "enum": ["gamma", "prod"], "description": "Service stage" },
+          "region": { "type": "string", "description": "AWS region" }
+        }
+      }
+    },
+    "create_workspace": {
+      "description": "Create a new workspace",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Workspace name" },
+          "description": { "type": "string", "description": "Workspace description" }
+        },
+        "required": ["name"]
+      }
+    },
+    "delete_workspace": {
+      "description": "Delete a workspace",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string", "description": "Workspace ID to delete" },
+          "confirm": { "type": "boolean", "description": "Must be true to confirm deletion" }
+        },
+        "required": ["workspaceId", "confirm"]
+      }
+    },
+    "create_job": {
+      "description": "Create and start a transformation job",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string" },
+          "jobName": { "type": "string" },
+          "jobType": { "type": "string" },
+          "orchestratorAgent": { "type": "string" },
+          "objective": { "type": "string" },
+          "intent": { "type": "string" }
+        },
+        "required": ["workspaceId", "jobName", "objective", "intent"]
+      }
+    },
+    "control_job": {
+      "description": "Start or stop a job",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string" },
+          "jobId": { "type": "string" },
+          "action": { "type": "string", "enum": ["start", "stop"] }
+        },
+        "required": ["workspaceId", "jobId", "action"]
+      }
+    },
+    "delete_job": {
+      "description": "Delete a job",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string" },
+          "jobId": { "type": "string" },
+          "confirm": { "type": "boolean", "description": "Must be true to confirm deletion" }
+        },
+        "required": ["workspaceId", "jobId", "confirm"]
+      }
+    },
+    "complete_task": {
+      "description": "Submit a HITL task response",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string" },
+          "jobId": { "type": "string" },
+          "taskId": { "type": "string" },
+          "content": { "type": "string", "description": "Text content for the response" },
+          "filePath": { "type": "string", "description": "Path to file to attach" },
+          "fileType": { "type": "string", "enum": ["JSON", "ZIP", "PDF", "HTML", "TXT"] },
+          "action": { "type": "string", "enum": ["APPROVE", "REJECT", "SEND_FOR_APPROVAL", "SAVE_DRAFT"] }
+        },
+        "required": ["workspaceId", "jobId", "taskId", "action"]
+      }
+    },
+    "upload_artifact": {
+      "description": "Upload a file artifact",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string" },
+          "jobId": { "type": "string" },
+          "content": { "type": "string", "description": "File path or content" },
+          "encoding": { "type": "string", "enum": ["utf-8", "base64"] },
+          "categoryType": { "type": "string", "enum": ["HITL_FROM_USER", "CUSTOMER_INPUT", "CUSTOMER_OUTPUT"] },
+          "fileType": { "type": "string", "enum": ["JSON", "ZIP", "PDF", "HTML", "TXT", "XLSX"] },
+          "fileName": { "type": "string" },
+          "planStepId": { "type": "string" }
+        },
+        "required": ["workspaceId", "jobId", "content"]
+      }
+    },
+    "create_connector": {
+      "description": "Create an S3 or code connector",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string" },
+          "connectorName": { "type": "string" },
+          "connectorType": { "type": "string" },
+          "configuration": { "type": "object", "description": "Connector-specific config" },
+          "awsAccountId": { "type": "string" }
+        },
+        "required": ["workspaceId", "connectorName", "connectorType", "awsAccountId"]
+      }
+    },
+    "accept_connector": {
+      "description": "Associate IAM role with a connector (requires both FES + SigV4)",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string" },
+          "connectorId": { "type": "string" },
+          "awsAccountId": { "type": "string" },
+          "roleArn": { "type": "string" }
+        },
+        "required": ["workspaceId", "connectorId", "awsAccountId", "roleArn"]
+      }
+    },
+    "list_resources": {
+      "description": "List resources by type",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "resource": { "type": "string", "enum": ["workspaces", "jobs", "connectors", "tasks", "artifacts", "messages", "worklogs", "plan", "account_connectors", "agents"] },
+          "workspaceId": { "type": "string" },
+          "jobId": { "type": "string" },
+          "taskType": { "type": "string", "enum": ["NORMAL", "DASHBOARD"] },
+          "category": { "type": "string", "enum": ["REGULAR", "TOOL_APPROVAL"] },
+          "agentType": { "type": "string", "enum": ["ORCHESTRATOR_AGENT", "SUB_AGENT"], "description": "Filter by agent type (agents only)" },
+          "ownerType": { "type": "string", "enum": ["INTERNAL_AGENT", "DIRECT_AGENT", "MARKETPLACE_AGENT"], "description": "Filter by owner type (agents only)" },
+          "planStepId": { "type": "string" },
+          "pathPrefix": { "type": "string" },
+          "source": { "type": "string", "enum": ["connector", "artifact_store"] },
+          "nextToken": { "type": "string", "description": "Pagination token" }
+        },
+        "required": ["resource"]
+      }
+    },
+    "get_resource": {
+      "description": "Get a specific resource",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "resource": { "type": "string", "enum": ["session", "workspace", "job", "connector", "task", "artifact", "asset", "messages", "plan"] },
+          "workspaceId": { "type": "string" },
+          "jobId": { "type": "string" },
+          "connectorId": { "type": "string" },
+          "taskId": { "type": "string" },
+          "artifactId": { "type": "string" },
+          "assetKey": { "type": "string" },
+          "messageIds": { "type": "array", "items": { "type": "string" } },
+          "savePath": { "type": "string" },
+          "fileName": { "type": "string" }
+        },
+        "required": ["resource"]
+      }
+    },
+    "send_message": {
+      "description": "Send a message to the Transform assistant",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string" },
+          "text": { "type": "string" },
+          "message": { "type": "string" },
+          "jobId": { "type": "string" },
+          "skipPolling": { "type": "boolean" }
+        },
+        "required": ["workspaceId"]
+      }
+    },
+    "get_guidance": {
+      "description": "Get guidance on auth, workflows, tools, and guidelines",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "topic": { "type": "string", "description": "Topic: auth, guidelines, hitl, tools" }
+        }
+      }
+    },
+    "update_task": {
+      "description": "[DEPRECATED] Attach human artifact to HITL task",
+      "deprecated": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string" },
+          "jobId": { "type": "string" },
+          "taskId": { "type": "string" },
+          "humanArtifactId": { "type": "string" },
+          "postUpdateAction": { "type": "string" }
+        },
+        "required": ["workspaceId", "jobId", "taskId"]
+      }
+    },
+    "respond_to_task": {
+      "description": "[DEPRECATED] Respond to a HITL task",
+      "deprecated": true,
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "workspaceId": { "type": "string" },
+          "jobId": { "type": "string" },
+          "taskId": { "type": "string" },
+          "content": { "type": "string" },
+          "action": { "type": "string", "enum": ["APPROVE", "REJECT"] },
+          "taskCriticality": { "type": "string", "enum": ["STANDARD", "CRITICAL"] }
+        },
+        "required": ["workspaceId", "jobId", "taskId", "content", "action", "taskCriticality"]
+      }
+    }
+  }
+}
