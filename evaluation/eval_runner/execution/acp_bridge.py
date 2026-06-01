@@ -158,6 +158,8 @@ class ACPClient:
                 try:
                     fh.close()
                 except Exception:
+                    # Best-effort teardown: a close failure here is not
+                    # actionable and must not mask the real error.
                     pass
 
     def start(self):
@@ -200,6 +202,9 @@ class ACPClient:
                     try:
                         self.proc.kill()
                     except Exception:
+                        # Already in start() failure cleanup; the process may
+                        # have exited on its own. Ignore so the original
+                        # exception is the one that propagates.
                         pass
             self._close_file_handles()
             raise

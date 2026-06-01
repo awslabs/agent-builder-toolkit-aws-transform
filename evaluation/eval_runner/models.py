@@ -183,7 +183,7 @@ class EvalResult:
     duration_seconds: float
     exit_code: int = 0
     error: str | None = None
-    token_usage: TokenUsage = field(default_factory=lambda: TokenUsage())
+    token_usage: TokenUsage = field(default_factory=TokenUsage)
     work_dir: str | None = None
     log_paths: dict[str, str | None] = field(default_factory=dict)
     session_ids: dict[str, str | None] = field(default_factory=dict)

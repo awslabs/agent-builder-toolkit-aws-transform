@@ -360,7 +360,10 @@ def install_agents(
         if lock_fd:
             try:
                 fcntl.flock(lock_fd.fileno(), fcntl.LOCK_UN)
-                lock_fd.close()
                 logger.debug(f"Released installation lock: {lock_file}")
             except Exception as e:
                 logger.warning(f"Failed to release installation lock: {e}")
+            finally:
+                # Always close the handle, even if unlocking raised, so the
+                # file descriptor never leaks.
+                lock_fd.close()

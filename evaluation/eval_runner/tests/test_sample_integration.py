@@ -14,6 +14,7 @@ live model calls, so they run in CI without external dependencies.
 
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -26,12 +27,9 @@ EVAL_DIR = Path(__file__).resolve().parent.parent.parent
 TEST_SAMPLES = EVAL_DIR / "test_samples"
 AGENT_UNDER_TEST = EVAL_DIR / "agent_under_test"
 
-try:
-    import jsonschema  # noqa: F401
-
-    _HAS_JSONSCHEMA = True
-except (ImportError, ModuleNotFoundError):
-    _HAS_JSONSCHEMA = False
+# jsonschema pulls in the rpds native extension, which isn't available on every
+# platform; probe for it so schema-dependent tests can skip cleanly.
+_HAS_JSONSCHEMA = importlib.util.find_spec("jsonschema") is not None
 
 needs_jsonschema = pytest.mark.skipif(
     not _HAS_JSONSCHEMA, reason="jsonschema (rpds native ext) not available on this platform"

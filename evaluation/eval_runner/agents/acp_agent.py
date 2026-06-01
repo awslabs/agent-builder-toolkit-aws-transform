@@ -19,12 +19,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from eval_runner.models import ExecutionResult
+from eval_runner.execution.runner import EvalOrchestrator, _format_transcript
+from eval_runner.models import ExecutionResult, TranscriptRole
 from eval_runner.test_case import TestCase
 
 if TYPE_CHECKING:
     from eval_runner.config import ExecutionConfig
-    from eval_runner.execution.runner import EvalOrchestrator
 
 
 class ACPAgent:
@@ -63,10 +63,8 @@ class ACPAgent:
 
     @property
     def orchestrator(self) -> "EvalOrchestrator":
-        """Lazily construct the orchestrator (avoids importing the ACP engine eagerly)."""
+        """Construct the orchestrator on first use from ``execution_config``."""
         if self._orchestrator is None:
-            from eval_runner.execution.runner import EvalOrchestrator
-
             self._orchestrator = EvalOrchestrator(
                 config=self.execution_config,
                 cwd=self.cwd,
@@ -85,8 +83,6 @@ class ACPAgent:
         result = self.orchestrator.run_scenario(scenario, workspace_cwd=self.cwd)
         self.last_results[test_case.id] = result
 
-        from eval_runner.execution.runner import _format_transcript
-
         transcript = _format_transcript(result.transcript)
         output = self._last_agent_text(result.transcript)
         tool_calls = self._tool_calls(result.transcript)
@@ -101,8 +97,6 @@ class ACPAgent:
     @staticmethod
     def _last_agent_text(entries: list) -> str:
         """Return the agent's final message — the natural 'output' of the run."""
-        from eval_runner.models import TranscriptRole
-
         for entry in reversed(entries):
             if entry.role == TranscriptRole.AGENT:
                 return entry.content
@@ -116,8 +110,6 @@ class ACPAgent:
         ``name`` key, so each record exposes the tool name under both ``name``
         and ``tool`` (the framework's native key), plus the originating turn.
         """
-        from eval_runner.models import TranscriptRole
-
         calls: list[dict] = []
         for entry in entries:
             if entry.role != TranscriptRole.TOOL_CALL:

@@ -891,8 +891,8 @@ class EvalOrchestrator:
                         shutil.copy2(src, dest)
                         collected.append(str(dest))
                         logger.info(f"Log collected: {dest}")
-                    except OSError:
-                        pass
+                    except OSError as e:
+                        logger.debug(f"Skipped log {src} → {dest}: {e}")
 
         # Collect agent-cli chat session files (~/.kiro/sessions/cli/<session-id>.*)
         if session_ids:
@@ -912,8 +912,8 @@ class EvalOrchestrator:
                             shutil.copy2(src, dest)
                             collected.append(str(dest))
                             logger.info(f"Session collected: {dest}")
-                        except OSError:
-                            pass
+                        except OSError as e:
+                            logger.debug(f"Skipped session {src} → {dest}: {e}")
 
         return collected
 

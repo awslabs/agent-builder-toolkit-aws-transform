@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 
@@ -12,12 +13,9 @@ import pytest
 
 from eval_runner.execution.loader import list_scenarios, load_scenarios
 
-try:
-    import jsonschema  # noqa: F401
-
-    _HAS_JSONSCHEMA = True
-except (ImportError, ModuleNotFoundError):
-    _HAS_JSONSCHEMA = False
+# jsonschema pulls in the rpds native extension, which isn't available on every
+# platform; probe for it so schema-dependent tests can skip cleanly.
+_HAS_JSONSCHEMA = importlib.util.find_spec("jsonschema") is not None
 
 needs_jsonschema = pytest.mark.skipif(
     not _HAS_JSONSCHEMA, reason="jsonschema (rpds native ext) not available on this platform"
