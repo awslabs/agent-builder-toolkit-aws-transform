@@ -150,8 +150,14 @@ def cmd_run(args: argparse.Namespace, config: EvalConfig) -> int:
 
     logger.info(f"\nRunning {len(scenarios)} scenario(s) via EvaluationEngine...\n")
 
-    # Shared orchestrator: ACPAgent executes scenarios; the llm_judge metric reuses
-    # the same orchestrator to grade transcripts (no second ACP driver process).
+    # EvalOrchestrator is a stateless factory — it holds no live bridge; each
+    # run_scenario / grade_transcript call spins up its ACP bridge(s) and tears
+    # them down in a finally. So this instance just drives ACPAgent's scenario
+    # execution. The llm_judge metric is wired separately in
+    # EvaluationEngine.from_config and builds its own orchestrator; that costs an
+    # object, not an extra process, since the judge always runs as a transient,
+    # isolated bridge regardless. (Per-call bridge lifecycle is also what keeps
+    # parallel batch grading thread-safe — a shared persistent bridge would not be.)
     orchestrator = EvalOrchestrator(config=exec_config, cwd=args.cwd, verbose=args.verbose)
     agent = ACPAgent(execution_config=exec_config, cwd=args.cwd, verbose=args.verbose,
                      orchestrator=orchestrator)
