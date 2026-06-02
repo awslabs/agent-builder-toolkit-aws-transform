@@ -14,6 +14,7 @@ Daemon/CLI code removed — only ACPClient is used.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import select
 import signal
@@ -21,6 +22,8 @@ import subprocess
 import time
 from itertools import count
 from typing import IO, Any, Callable
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -237,6 +240,10 @@ class ACPClient:
             try:
                 data = json.loads(line)
             except json.JSONDecodeError:
+                # Non-JSON on stdout (e.g. logging leakage). Skip the line and
+                # keep reading — the select() deadline above still bounds this
+                # loop, so a malformed line cannot cause a hang.
+                logger.warning("_read_result: skipping non-JSON stdout line: %r", line[:200])
                 continue
             self._log("<<<", data)
             if "error" in data:
@@ -299,6 +306,11 @@ class ACPClient:
             try:
                 data = json.loads(line)
             except json.JSONDecodeError:
+                # Non-JSON during MCP warm-up drain. Skip and keep draining —
+                # bounded by the deadline loop above.
+                logger.warning(
+                    "_drain_notifications: skipping non-JSON stdout line: %r", line[:200]
+                )
                 continue
             self._log("<<<", data)
 
@@ -373,6 +385,9 @@ class ACPClient:
             try:
                 data = json.loads(line)
             except json.JSONDecodeError:
+                # Non-JSON on stdout. Skip and keep reading — bounded by the
+                # deadline loop above.
+                logger.warning("prompt: skipping non-JSON stdout line: %r", line[:200])
                 continue
             self._log("<<<", data)
 
@@ -548,6 +563,9 @@ class ACPClient:
             try:
                 data = json.loads(line)
             except json.JSONDecodeError:
+                # Non-JSON on stdout. Skip and keep reading — bounded by the
+                # deadline loop above.
+                logger.warning("send_approval: skipping non-JSON stdout line: %r", line[:200])
                 continue
             self._log("<<<", data)
 

@@ -100,8 +100,10 @@ class LLMJudgeMetric:
         )
 
         passed = sum(1 for a in results if a.result == AssertionResultStatus.PASS)
+        # assertions is non-empty here (the empty case returned early above), so
+        # this fallback is always >= 1 — no divide-by-zero guard needed.
         total = len(results) or len(assertions)
-        score = (passed / total) * 10.0 if total else 0.0
+        score = (passed / total) * 10.0
 
         return MetricResult(
             metric_name=self.name,

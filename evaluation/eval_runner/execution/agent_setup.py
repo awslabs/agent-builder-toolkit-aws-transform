@@ -323,6 +323,12 @@ def install_agents(
             logger.info(f"Installed: {dest_path}")
 
         # --- 3. Resolve __POWER_DIR__ in system prompt files ---
+        # __POWER_DIR__ is a scoped template placeholder (a sentinel we own and
+        # control), not a general-purpose substitution mechanism. It is replaced
+        # verbatim with the resolved directory path in our own prompt templates.
+        # Keep this contract narrow: do not widen it to interpolate
+        # user-supplied tokens or paths, which would reintroduce the markdown /
+        # path-escaping concerns this sentinel deliberately sidesteps.
         for md_file in framework_agents_dir.glob("*.md"):
             md_content = md_file.read_text()
             if "__POWER_DIR__" in md_content:

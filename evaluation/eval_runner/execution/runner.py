@@ -708,8 +708,16 @@ class EvalOrchestrator:
                         logger.warning(f"  cleanup >> failed: {cleanup_response.error}")
                 except Exception as e:
                     logger.warning(f"  cleanup >> error: {e}")
-            power_bridge.destroy()
-            scenario_bridge.destroy()
+            # Guard each destroy() independently so a failure tearing down one
+            # bridge can't leak the other's subprocess.
+            try:
+                power_bridge.destroy()
+            except Exception as e:
+                logger.warning(f"  power_bridge.destroy() failed: {e}")
+            try:
+                scenario_bridge.destroy()
+            except Exception as e:
+                logger.warning(f"  scenario_bridge.destroy() failed: {e}")
 
             # Tear down mocks (restore PATH, clean up artifacts).
             if mock_manager:
