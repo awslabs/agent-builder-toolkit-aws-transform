@@ -1,11 +1,25 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for eval_runner data models — ExecutionResult, MetricResult, EvaluationResult."""
+"""Tests for eval_runner data models.
+
+Covers both families in :mod:`eval_runner.models`:
+- Scoring models: ExecutionResult, MetricResult, EvaluationResult.
+- Execution models: TokenUsage, TranscriptEntry, EvalGrade (and enums).
+"""
 
 from dataclasses import FrozenInstanceError
 
 import pytest
+
+from eval_runner.models import (
+    AssertionResult,
+    AssertionResultStatus,
+    EvalGrade,
+    TokenUsage,
+    TranscriptEntry,
+    TranscriptRole,
+)
 
 
 class TestExecutionResult:
@@ -125,3 +139,69 @@ class TestEvaluationResult:
             test_case_id="test-1", execution=execution, metric_results=[]
         )
         assert result.passed is True
+
+
+class TestTokenUsage:
+    def test_add_accumulates(self) -> None:
+        usage = TokenUsage()
+        usage.add(
+            {"inputTokens": 100, "outputTokens": 50, "totalTokens": 150, "cachedReadTokens": 20}
+        )
+        usage.add(
+            {"inputTokens": 200, "outputTokens": 80, "totalTokens": 280, "cachedReadTokens": 0}
+        )
+        assert usage.input_tokens == 300
+        assert usage.output_tokens == 130
+        assert usage.total_tokens == 430
+        assert usage.cached_read_tokens == 20
+
+    def test_add_none_is_noop(self) -> None:
+        usage = TokenUsage()
+        usage.add(None)
+        assert usage.total_tokens == 0
+
+    def test_add_empty_dict_is_noop(self) -> None:
+        usage = TokenUsage()
+        usage.add({})
+        assert usage.total_tokens == 0
+
+    def test_add_handles_none_values_in_dict(self) -> None:
+        usage = TokenUsage()
+        usage.add({"inputTokens": None, "outputTokens": 50, "totalTokens": None})
+        assert usage.input_tokens == 0
+        assert usage.output_tokens == 50
+        assert usage.total_tokens == 0
+
+
+class TestTranscriptEntry:
+    def test_defaults(self) -> None:
+        entry = TranscriptEntry(role=TranscriptRole.AGENT, content="Hello")
+        assert entry.turn == 0
+        assert entry.raw is None
+        assert entry.timestamp > 0
+
+
+class TestEvalGrade:
+    def test_passed_true_when_all_pass(self) -> None:
+        grade = EvalGrade(
+            eval_id="test",
+            passed=True,
+            assertions=[
+                AssertionResult(name="a", result=AssertionResultStatus.PASS, evidence="ok"),
+            ],
+            duration_seconds=1.0,
+            turn_count=1,
+        )
+        assert grade.passed is True
+
+    def test_needs_review_does_not_fail(self) -> None:
+        grade = EvalGrade(
+            eval_id="test",
+            passed=True,
+            assertions=[
+                AssertionResult(name="a", result=AssertionResultStatus.NEEDS_REVIEW, evidence="?"),
+            ],
+            duration_seconds=1.0,
+            turn_count=1,
+        )
+        assert grade.passed is True

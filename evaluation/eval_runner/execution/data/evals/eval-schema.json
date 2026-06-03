@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "agent-eval-scenario.json",
+  "title": "Agent Eval Scenario",
+  "description": "Schema for a single eval scenario that tests the Agent via multi-turn interaction with a simulated human agent.",
+  "type": "object",
+  "required": ["id", "name", "prompt", "description", "assertions"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference for IDE autocomplete."
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Unique scenario identifier (kebab-case). Used in session names, results, and filtering."
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable scenario name."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "The initial prompt sent to the Agent (turn 1). This is what the simulated human says first."
+    },
+    "description": {
+      "type": "string",
+      "description": "Scenario goal — what the simulated human is trying to accomplish. Guides the scenario agent's multi-turn behavior."
+    },
+    "agent": {
+      "type": "string",
+      "default": "agent-under-test",
+      "description": "The agent-cli agent name to test against. Defaults to the agent agent."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "Tags for filtering scenarios (e.g., 'journey', 'foundation', 'negative', 'dotnet', 'custom')."
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["power", "plugin"]
+      },
+      "default": [],
+      "description": "Which runtime formats this scenario is compatible with. 'power' = Agent (POWER.md + steering/), 'plugin' = Agent Plugin (SKILL.md + references/). Empty or omitted means compatible with both."
+    },
+    "max_turns": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "default": 10,
+      "description": "Maximum turns for the scenario agent. Journey scenarios need 15-20, step-gate tests need 5-8."
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 10,
+      "maximum": 600,
+      "default": 300,
+      "description": "Per-prompt timeout in seconds."
+    },
+    "simulated_human_guidance": {
+      "type": "string",
+      "description": "Extra behavioral instructions for the scenario agent (e.g., 'Choose .NET when asked about scope'). Optional."
+    },
+    "workspace_setup": {
+      "type": "string",
+      "description": "Description of required workspace state for this scenario (e.g., 'Workspace with .NET .csproj files'). For documentation only — not enforced."
+    },
+    "workspace_dir": {
+      "type": "string",
+      "description": "Path to a directory of fixture files to copy into the workspace before the scenario starts. Resolved relative to the scenario JSON file. Copied recursively — directory structure is preserved."
+    },
+    "mocks": {
+      "type": "object",
+      "description": "Mock definitions for CLI commands and MCP tools. When provided, the eval framework intercepts matching calls and returns canned responses instead of hitting real services.",
+      "additionalProperties": false,
+      "properties": {
+        "cli": {
+          "type": "array",
+          "description": "Canned responses for CLI commands (e.g., 'my-cli list'). Matched by prefix.",
+          "items": {
+            "type": "object",
+            "required": ["command"],
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "Command prefix to match (e.g., 'my-cli list --json'). Matches if the actual command starts with this string."
+              },
+              "stdout": {
+                "type": "string",
+                "default": "",
+                "description": "Standard output to return."
+              },
+              "stderr": {
+                "type": "string",
+                "default": "",
+                "description": "Standard error to return."
+              },
+              "exit_code": {
+                "type": "integer",
+                "default": 0,
+                "description": "Exit code (0 = success)."
+              }
+            }
+          }
+        },
+        "mcp": {
+          "type": "array",
+          "description": "Canned responses for MCP tool calls. The mock MCP server replaces the real MCP server.",
+          "items": {
+            "type": "object",
+            "required": ["tool", "response"],
+            "additionalProperties": false,
+            "properties": {
+              "tool": {
+                "type": "string",
+                "description": "MCP tool name to mock (e.g., 'get_status', 'configure_sigv4')."
+              },
+              "response": {
+                "description": "Response payload to return. Will be JSON-serialized as the tool result."
+              }
+            }
+          }
+        }
+      }
+    },
+    "assertions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/assertion" },
+      "description": "Assertions to check against the interaction transcript."
+    }
+  },
+  "$defs": {
+    "assertion": {
+      "type": "object",
+      "required": ["name", "type", "description", "check"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$",
+          "description": "Unique assertion name (snake_case). Used in grade output."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "transcript_contains",
+            "transcript_not_contains",
+            "transcript_contains_any",
+            "tool_called",
+            "file_created",
+            "llm_judge"
+          ],
+          "description": "Assertion type. Deterministic types (contains, tool_called) are checked first; llm_judge uses LLM reasoning."
+        },
+        "description": {
+          "type": "string",
+          "description": "What this assertion checks. Included in grade output for context."
+        },
+        "check": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+          ],
+          "description": "What to check. String for most types. Array of strings for transcript_contains_any. For llm_judge, this is the evaluation criteria/question."
+        }
+      }
+    }
+  }
+}

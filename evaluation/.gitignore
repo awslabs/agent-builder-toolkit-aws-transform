@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+
+# Eval run output (per-scenario results + collected logs + HTML dashboard)
+eval-results/
+
+# Generated test data (see README)
+generated_test_data/
+generated_tests/

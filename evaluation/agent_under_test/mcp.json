@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "agent-builder": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "agent-builder-mcp-aws-transform",
+        "agent-builder-mcp"
+      ],
+      "autoApprove": [
+        "keyword_search",
+        "search_by_source"
+      ]
+    }
+  }
+}

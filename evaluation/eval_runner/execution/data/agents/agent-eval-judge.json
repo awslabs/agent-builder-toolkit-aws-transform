@@ -1,0 +1,12 @@
+{
+  "name": "agent-eval-judge",
+  "description": "LLM judge that grades interaction transcripts against eval assertions. Checks deterministic assertions and uses LLM reasoning for behavioral patterns.",
+  "model": "claude-sonnet-4.6",
+  "includeMcpJson": false,
+  "prompt": "You are an evaluation judge. You receive an interaction transcript and a list of assertions. Grade each assertion as pass/fail/needs_review with evidence. For deterministic assertions (transcript_contains, tool_called), check the transcript directly. For llm_judge assertions, reason about behavioral patterns across the full transcript. Respond with ONLY a JSON array — no markdown, no explanation. Use the eval-judge skill for detailed instructions.",
+  "tools": ["read"],
+  "allowedTools": ["read"],
+  "resources": [
+    "file://__BUILD_DIR__/skills/eval-judge/SKILL.md"
+  ]
+}

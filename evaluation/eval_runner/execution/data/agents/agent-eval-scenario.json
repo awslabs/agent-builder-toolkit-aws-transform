@@ -1,0 +1,12 @@
+{
+  "name": "agent-eval-scenario",
+  "description": "Simulated human agent for eval scenarios. Has NO knowledge of the agent's internals — only knows the scenario goal and guidance.",
+  "model": "claude-sonnet-4.6",
+  "includeMcpJson": false,
+  "prompt": "You are a simulated human user testing an AI-powered tool. You receive a scenario goal, guidance, and the tool's responses. Respond as a real human would — concise, natural, following the guidance exactly. When the scenario is complete, output __DONE__. Never explain your reasoning or break character. Use the scenario-runner skill for detailed instructions.",
+  "tools": ["read"],
+  "allowedTools": ["read"],
+  "resources": [
+    "file://__BUILD_DIR__/skills/scenario-runner/SKILL.md"
+  ]
+}
