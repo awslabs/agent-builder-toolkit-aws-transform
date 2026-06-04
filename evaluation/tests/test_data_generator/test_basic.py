@@ -1,29 +1,20 @@
-#!/usr/bin/env python3
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Basic smoke tests for the intelligent test generator - can be run as a script."""
+"""Basic smoke tests for the intelligent test generator."""
 
 import json
 import sys
 from pathlib import Path
 
-# Import using absolute imports when run as script
-if __name__ == '__main__':
-    # Add parent to path for imports when run as script
-    parent_dir = str(Path(__file__).parent.parent.parent)
-    if parent_dir not in sys.path:
-        sys.path.insert(0, parent_dir)
-    from evaluation.test_data_generator.domain_analyzer import DomainAnalyzer
-else:
-    from .domain_analyzer import DomainAnalyzer
+from test_data_generator.domain_analyzer import DomainAnalyzer
 
 def run_smoke_tests():
     """Run basic smoke tests without AWS credentials."""
     print("Running basic smoke tests (no AWS required)...\n")
 
-    # Test that we can load a test sample
-    test_data_dir = Path(__file__).parent.parent / "test_samples"
+    # Test that we can load a test sample (tests/test_data_generator/ → up 2 = evaluation/)
+    test_data_dir = Path(__file__).resolve().parent.parent.parent / "test_samples"
     test_file = test_data_dir / "onboarding_intermediate.json"
 
     if test_file.exists():
@@ -85,9 +76,9 @@ def run_smoke_tests():
     print("=" * 60)
     print("\nThe test data generator is ready to use!")
     print("\nTo generate tests (requires AWS/Bedrock):")
-    print("  python -m evaluation.test_data_generator.cli --help")
+    print("  python -m test_data_generator.cli --help")
     print("\nTo run full unit tests:")
-    print("  pytest evaluation/test_data_generator/")
+    print("  pytest evaluation/tests/test_data_generator/")
     return True
 
 if __name__ == '__main__':

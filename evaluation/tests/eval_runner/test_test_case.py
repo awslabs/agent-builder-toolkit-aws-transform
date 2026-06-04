@@ -151,7 +151,12 @@ class TestTestCaseLoader:
         """Load the actual onboarding_intermediate.json from the repo."""
         from eval_runner.test_case import TestCaseLoader
 
-        sample_path = Path(__file__).parent.parent.parent / "test_samples" / "onboarding_intermediate.json"
+        # tests/eval_runner/ -> tests/ -> evaluation/
+        sample_path = (
+            Path(__file__).resolve().parent.parent.parent
+            / "test_samples"
+            / "onboarding_intermediate.json"
+        )
         if not sample_path.exists():
             pytest.skip("test_samples not available")
         cases = TestCaseLoader.from_file(sample_path)

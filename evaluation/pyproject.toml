@@ -40,8 +40,8 @@ agent-builder-eval = "run_eval:entry_point"
 py-modules = ["run_eval"]
 
 [tool.setuptools.packages.find]
-# Discovers eval_runner (+ subpackages) and test_data_generator.
-where = ["."]
+# src/ layout: discover eval_runner (+ subpackages) and test_data_generator.
+where = ["src"]
 
 [tool.setuptools.package-data]
 # Bundle the ACP engine's data files (agent JSONs, system prompts, eval schema,
@@ -49,7 +49,12 @@ where = ["."]
 "eval_runner.execution" = ["data/**/*", "*.json", "py.typed"]
 
 [tool.pytest.ini_options]
-testpaths = ["test_data_generator", "eval_runner/tests"]
+testpaths = ["tests"]
+pythonpath = ["src"]
+# importlib mode: tests live under tests/ with no __init__.py packages, so test
+# module names never collide with the src/ packages they exercise (e.g. the
+# tests/eval_runner/ dir vs the eval_runner package).
+addopts = "--import-mode=importlib"
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]

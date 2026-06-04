@@ -32,19 +32,17 @@ jobs:
           cd evaluation
           pip install -e ".[test]"
 
-      - name: Run smoke tests
+      - name: Run tests
         run: |
-          python3 evaluation/test_data_generator/test_basic.py
+          cd evaluation
+          pytest -v --tb=short
 
-      - name: Run unit tests
-        run: |
-          pytest evaluation/test_data_generator/test_units.py -v --tb=short
-
-      - name: Run unit tests with coverage
+      - name: Run tests with coverage
         if: matrix.python-version == '3.11'
         run: |
-          pytest evaluation/test_data_generator/test_units.py \
-            --cov=evaluation.test_data_generator \
+          cd evaluation
+          pytest \
+            --cov=eval_runner --cov=test_data_generator \
             --cov-report=term-missing \
             --cov-fail-under=70
 

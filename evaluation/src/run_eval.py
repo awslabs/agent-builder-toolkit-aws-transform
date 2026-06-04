@@ -17,8 +17,12 @@ The CLI (``list`` / ``run`` / ``report`` / ``clean``) is provided by
 
 Usage::
 
-    python evaluation/run_eval.py list
-    python evaluation/run_eval.py run --scenario onboarding-intermediate --report
+    python src/run_eval.py list
+    python src/run_eval.py run --scenario onboarding-intermediate --report
+
+or via the installed console script::
+
+    agent-builder-eval list
 
 ``run`` drives a live multi-turn conversation and requires the ACP driver binary
 (``kiro-cli``) on PATH plus model access. ``list`` works offline.
@@ -31,7 +35,9 @@ from pathlib import Path
 from eval_runner.cli import main
 from eval_runner.config import EvalConfig, ExecutionConfig
 
-EVAL_DIR = Path(__file__).resolve().parent
+# run_eval.py lives in src/; the repo's data dirs (agent_under_test/, test_samples/)
+# sit at the evaluation root one level up.
+EVAL_DIR = Path(__file__).resolve().parent.parent
 
 
 def get_execution_config() -> ExecutionConfig:

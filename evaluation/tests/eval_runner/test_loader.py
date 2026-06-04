@@ -11,7 +11,12 @@ from pathlib import Path
 
 import pytest
 
+from eval_runner import execution as _execution_pkg
 from eval_runner.execution.loader import list_scenarios, load_scenarios
+
+# Locate the bundled schema via the package itself, not by walking up from the
+# test file — keeps tests resilient to repo layout changes (src/, tests/, etc.).
+_BUNDLED_EVALS_DIR = Path(_execution_pkg.__file__).resolve().parent / "data" / "evals"
 
 # jsonschema pulls in the rpds native extension, which isn't available on every
 # platform; probe for it so schema-dependent tests can skip cleanly.
@@ -26,13 +31,7 @@ needs_jsonschema = pytest.mark.skipif(
 def evals_dir(tmp_path: Path) -> Path:
     """Create a temporary evals directory with schema and sample scenarios."""
     # Copy the real schema from the bundled execution data dir.
-    schema_src = (
-        Path(__file__).resolve().parent.parent
-        / "execution"
-        / "data"
-        / "evals"
-        / "eval-schema.json"
-    )
+    schema_src = _BUNDLED_EVALS_DIR / "eval-schema.json"
     schema_dest = tmp_path / "eval-schema.json"
     schema_dest.write_text(schema_src.read_text())
 
@@ -230,7 +229,6 @@ class TestRealSchemaValidation:
 
     def test_schema_file_exists(self) -> None:
         """The eval-schema.json ships bundled under execution/data/evals/."""
-        evals_dir = Path(__file__).resolve().parent.parent / "execution" / "data" / "evals"
-        if not evals_dir.exists():
+        if not _BUNDLED_EVALS_DIR.exists():
             pytest.skip("Evals directory not found")
-        assert (evals_dir / "eval-schema.json").exists()
+        assert (_BUNDLED_EVALS_DIR / "eval-schema.json").exists()

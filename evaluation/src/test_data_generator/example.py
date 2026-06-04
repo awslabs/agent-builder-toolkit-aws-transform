@@ -15,6 +15,10 @@ from .domain_analyzer import DomainAnalyzer
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Curated teacher samples live at the evaluation root:
+# src/test_data_generator/ -> src/ -> evaluation/test_samples/
+TEST_SAMPLES_DIR = Path(__file__).resolve().parent.parent.parent / "test_samples"
+
 
 def example_basic_generation():
     """Example: Basic test generation from teacher samples."""
@@ -23,8 +27,7 @@ def example_basic_generation():
     print("=" * 80 + "\n")
 
     # Load teacher samples
-    test_data_dir = Path(__file__).parent.parent / "test_data"
-    teacher_sample_file = test_data_dir / "onboarding_intermediate.json"
+    teacher_sample_file = TEST_SAMPLES_DIR / "onboarding_intermediate.json"
 
     with open(teacher_sample_file, 'r') as f:
         teacher_samples = json.load(f)
@@ -58,8 +61,7 @@ def example_with_power_md():
     print("=" * 80 + "\n")
 
     # Load teacher samples
-    test_data_dir = Path(__file__).parent.parent / "test_data"
-    teacher_sample_file = test_data_dir / "onboarding_intermediate.json"
+    teacher_sample_file = TEST_SAMPLES_DIR / "onboarding_intermediate.json"
 
     with open(teacher_sample_file, 'r') as f:
         teacher_samples = json.load(f)
@@ -106,8 +108,7 @@ def example_domain_analysis():
     print("=" * 80 + "\n")
 
     # Load teacher samples
-    test_data_dir = Path(__file__).parent.parent / "test_data"
-    teacher_sample_file = test_data_dir / "onboarding_intermediate.json"
+    teacher_sample_file = TEST_SAMPLES_DIR / "onboarding_intermediate.json"
 
     with open(teacher_sample_file, 'r') as f:
         teacher_samples = json.load(f)
@@ -155,8 +156,7 @@ def example_high_diversity():
     print("=" * 80 + "\n")
 
     # Load teacher samples
-    test_data_dir = Path(__file__).parent.parent / "test_data"
-    teacher_sample_file = test_data_dir / "onboarding_intermediate.json"
+    teacher_sample_file = TEST_SAMPLES_DIR / "onboarding_intermediate.json"
 
     with open(teacher_sample_file, 'r') as f:
         teacher_samples = json.load(f)
@@ -190,8 +190,7 @@ def example_specific_complexity():
     print("=" * 80 + "\n")
 
     # Load teacher samples
-    test_data_dir = Path(__file__).parent.parent / "test_data"
-    teacher_sample_file = test_data_dir / "onboarding_intermediate.json"
+    teacher_sample_file = TEST_SAMPLES_DIR / "onboarding_intermediate.json"
 
     with open(teacher_sample_file, 'r') as f:
         teacher_samples = json.load(f)
