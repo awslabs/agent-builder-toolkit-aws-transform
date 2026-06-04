@@ -398,32 +398,26 @@ Generated Test
 
 ### Running Tests
 
-**Quick Smoke Test (No Dependencies)**
+**Smoke + Unit Tests**
 ```bash
-python3 evaluation/test_data_generator/test_basic.py
-```
-
-**Full Unit Test Suite**
-```bash
-# Run all unit tests
-pytest evaluation/test_data_generator/test_units.py -v
+pytest evaluation/tests/test_data_generator/ -v
 
 # Run with coverage
-pytest evaluation/test_data_generator/test_units.py \
-  --cov=evaluation.test_data_generator \
+pytest evaluation/tests/test_data_generator/ \
+  --cov=test_data_generator \
   --cov-report=term-missing
 ```
 
 **Run Specific Test Classes**
 ```bash
 # Test only ContextLoader
-pytest evaluation/test_data_generator/test_units.py::TestContextLoader -v
+pytest evaluation/tests/test_data_generator/test_units.py::TestContextLoader -v
 
 # Test only Deduplication
-pytest evaluation/test_data_generator/test_units.py::TestDeduplication -v
+pytest evaluation/tests/test_data_generator/test_units.py::TestDeduplication -v
 
 # Test only DomainAnalyzer
-pytest evaluation/test_data_generator/test_units.py::TestDomainAnalyzer -v
+pytest evaluation/tests/test_data_generator/test_units.py::TestDomainAnalyzer -v
 ```
 
 ### Test Coverage Summary
@@ -472,11 +466,11 @@ pytest evaluation/test_data_generator/test_units.py::TestDomainAnalyzer -v
 
 ```bash
 # Run tests and fail on any failures
-pytest evaluation/test_data_generator/test_units.py --tb=short || exit 1
+pytest evaluation/tests/test_data_generator/ --tb=short || exit 1
 
 # Run with coverage threshold
-pytest evaluation/test_data_generator/test_units.py \
-    --cov=evaluation.test_data_generator \
+pytest evaluation/tests/test_data_generator/ \
+    --cov=test_data_generator \
     --cov-fail-under=70
 ```
 

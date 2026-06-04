@@ -3,7 +3,7 @@
 
 """Integration test: the framework ingests this repo's curated test samples.
 
-These tests exercise the wiring described in ``evaluation/run_eval.py`` — the
+These tests exercise the wiring described in ``evaluation/src/run_eval.py`` — the
 framework loads the scenarios in ``evaluation/test_samples/`` end-to-end
 (JSON → EvalCase → assertions) and an ``EvalConfig`` can be constructed against
 the ``evaluation/agent_under_test/`` agent definition.
@@ -22,7 +22,7 @@ import pytest
 from eval_runner.config import ExecutionConfig as EvalConfig
 from eval_runner.execution.loader import list_scenarios, load_scenarios
 
-# eval_runner/tests/ -> eval_runner/ -> evaluation/
+# tests/eval_runner/ -> tests/ -> evaluation/
 EVAL_DIR = Path(__file__).resolve().parent.parent.parent
 TEST_SAMPLES = EVAL_DIR / "test_samples"
 AGENT_UNDER_TEST = EVAL_DIR / "agent_under_test"

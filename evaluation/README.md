@@ -7,49 +7,25 @@ This directory contains tools and test data for evaluating AWS Transform agents 
 The evaluation infrastructure consists of:
 1. **Test Data Generator** - Intelligent test case generation from teacher samples and source context
 2. **Test Samples** - Curated test cases for agent evaluation
-3. **Evaluation System** - Automated test execution and scoring (`eval_runner/`, with its ACP execution engine under `eval_runner/execution/`)
+3. **Evaluation System** - Automated test execution and scoring (`src/eval_runner/`, with its ACP execution engine under `eval_runner/execution/`)
 
-## Directory Structure
+## Layout
 
-```
-evaluation/
-├── README.md                    # This file
-├── pyproject.toml               # Package configuration (setuptools)
-├── test_data_generator/         # Intelligent test case generator
-│   ├── README.md               # Complete documentation
-│   ├── cli.py                  # Command-line interface
-│   ├── intelligent_generator.py # Main generation logic
-│   ├── domain_analyzer.py      # Domain understanding from samples
-│   ├── context_loader.py       # Source context loading strategies
-│   ├── deduplicate_tests.py    # Deduplication utilities
-│   ├── example.py              # Usage examples
-│   ├── test_basic.py           # Smoke tests
-│   └── test_units.py           # Unit test suite (22 tests)
-├── test_samples/                # Sample test cases
-│   └── onboarding_intermediate.json
-├── eval_runner/                 # The evaluation package (single, consolidated)
-│   ├── models.py               # All data models (scoring + execution/transcript)
-│   ├── config.py               # EvalConfig (scoring) + ExecutionConfig (ACP)
-│   ├── cli.py                  # Canonical CLI: list / run / report / clean
-│   ├── engine.py               # EvaluationEngine (pluggable, parallel scoring)
-│   ├── agents/acp_agent.py     # Bridges TestCase → ACP execution engine
-│   ├── metrics/                # assertion_pass_rate + llm_judge (pluggable)
-│   ├── validators/             # Evolution safety layer (separate, not wired in)
-│   └── execution/              # ACP execution engine
-│       ├── runner.py          # EvalOrchestrator: multi-turn run + LLM-judge grading
-│       ├── acp_bridge.py      # ACP JSON-RPC client (agent-cli/kiro-cli subprocess)
-│       ├── bridge_runner.py   # High-level bridge wrapper (auto-approval, timeouts)
-│       ├── loader.py          # Scenario JSON loading + schema validation
-│       ├── agent_setup.py     # Generates/installs agent configs
-│       ├── mocking.py         # CLI + MCP mock generation
-│       ├── report.py          # HTML dashboard generator
-│       └── data/              # Bundled agents, eval-schema, judge/scenario skills
-├── agent_under_test/            # Agent definition the system evaluates
-│   ├── AGENT.md                # System prompt / onboarding behavior
-│   └── mcp.json                # Points at the agent-builder MCP server
-├── run_eval.py                  # Repo wiring: unified EvalConfig → CLI
-└── generated_test_data/         # Generated tests (gitignored)
-```
+Standard `src/` layout. The pieces worth knowing (the rest is discoverable from
+the tree):
+
+- **`src/eval_runner/`** — the evaluation library: the `list`/`run`/`report`/`clean`
+  CLI, the pluggable `EvaluationEngine`, scoring `metrics/` (`assertion_pass_rate`
+  + `llm_judge`), and the ACP execution engine under `execution/`. `validators/`
+  is a separate evolution-safety layer, **not** wired into the evaluation pipeline.
+- **`src/test_data_generator/`** — generates test cases from teacher samples and
+  source context.
+- **`src/run_eval.py`** — repo-specific wiring (the `agent-builder-eval` console
+  script); builds the `EvalConfig` pointing at this repo's `agent_under_test/` and
+  `test_samples/`.
+- **`tests/`** — mirrors the `src/` package layout.
+- **`test_samples/`, `agent_under_test/`** — repo data consumed at runtime; not
+  packaged into the wheel.
 
 ## Components
 
@@ -66,22 +42,25 @@ evaluation/
 - Configurable loading strategies for different domains
 
 **Quick Start:**
+
+Install the package first (`pip install -e evaluation/`), then:
+
 ```bash
 # Generate 20 test cases from source context only
-python -m evaluation.test_data_generator.cli \
+python -m test_data_generator.cli \
   --source-context /path/to/agent/code/ \
   --count 20 \
   --output generated_tests/
 
 # Generate with teacher samples + source context
-python -m evaluation.test_data_generator.cli \
+python -m test_data_generator.cli \
   --teacher-samples evaluation/test_samples/ \
   --source-context /path/to/agent/code/ \
   --count 20 \
   --output generated_tests/
 
 # High diversity generation for edge cases
-python -m evaluation.test_data_generator.cli \
+python -m test_data_generator.cli \
   --source-context /path/to/agent/code/ \
   --count 10 \
   --diversity 0.95 \
@@ -94,15 +73,12 @@ python -m evaluation.test_data_generator.cli \
 - boto3 installed
 
 **Documentation:**
-- [Generator README](test_data_generator/README.md) - Complete guide (usage, architecture, testing)
+- [Generator README](src/test_data_generator/README.md) - Complete guide (usage, architecture, testing)
 
 **Testing:**
 ```bash
-# Run smoke tests (no AWS required)
-python3 evaluation/test_data_generator/test_basic.py
-
-# Run full unit test suite
-pytest evaluation/test_data_generator/test_units.py -v
+# Run the generator smoke + unit tests
+pytest evaluation/tests/test_data_generator/ -v
 ```
 
 ### 2. Test Samples
@@ -178,14 +154,16 @@ engine's judge via `EvalOrchestrator.grade_transcript()`.
 - Test result reporting (JSON results + HTML dashboard)
 - CLI: `list` / `run` / `report` / `clean`
 
-**Wiring for this repo** (`run_eval.py` + `agent_under_test/`):
+**Wiring for this repo** (`src/run_eval.py` + `agent_under_test/`):
 
 ```bash
-# List the curated test samples (offline — no model/CLI access needed)
-python evaluation/run_eval.py list
+# After `pip install -e evaluation/`, use the console script:
+agent-builder-eval list
+agent-builder-eval run --scenario onboarding-intermediate --report
 
-# Run a scenario against the agent-builder agent (requires kiro-cli on PATH)
-python evaluation/run_eval.py run --scenario onboarding-intermediate --report
+# Or run the module directly:
+python evaluation/src/run_eval.py list
+python evaluation/src/run_eval.py run --scenario onboarding-intermediate --report
 ```
 
 `run_eval.py` builds the unified `eval_runner.EvalConfig`. Its `framework_config`
@@ -204,7 +182,7 @@ The `list` command works offline; `run` drives a live conversation and needs
 Generate diverse tests covering the agent's capabilities:
 
 ```bash
-python -m evaluation.test_data_generator.cli \
+python -m test_data_generator.cli \
   --source-context /path/to/agent/source/ \
   --count 50 \
   --diversity 0.8 \
@@ -215,7 +193,7 @@ python -m evaluation.test_data_generator.cli \
 Generate tests with specific complexity:
 
 ```bash
-python -m evaluation.test_data_generator.cli \
+python -m test_data_generator.cli \
   --teacher-samples evaluation/test_samples/ \
   --source-context /path/to/agent/source/ \
   --count 30 \
@@ -227,7 +205,7 @@ python -m evaluation.test_data_generator.cli \
 Use high diversity to find edge cases:
 
 ```bash
-python -m evaluation.test_data_generator.cli \
+python -m test_data_generator.cli \
   --source-context /path/to/agent/source/ \
   --count 20 \
   --diversity 0.95 \
@@ -260,7 +238,7 @@ The context loader supports different strategies for different tasks:
 - `generic` - Balanced loading
 
 ```bash
-python -m evaluation.test_data_generator.cli \
+python -m test_data_generator.cli \
   --source-context /path/to/code/ \
   --loading-strategy code_understanding \
   --output generated_tests/
@@ -275,7 +253,7 @@ When using `deduplicate_tests.py`:
 - `keep_all_unique` - Rename duplicates to make unique
 
 ```bash
-python -m evaluation.test_data_generator.deduplicate_tests \
+python -m test_data_generator.deduplicate_tests \
   --input generated_tests/all.json \
   --output generated_tests/unique.json \
   --strategy keep_best
@@ -286,15 +264,15 @@ python -m evaluation.test_data_generator.deduplicate_tests \
 ### Running Tests
 
 ```bash
-# Test data generator smoke tests
-python3 evaluation/test_data_generator/test_basic.py
+# Full suite (eval_runner + test_data_generator)
+pytest evaluation/
 
-# Full unit test suite
-pytest evaluation/test_data_generator/test_units.py -v
+# Just the test data generator
+pytest evaluation/tests/test_data_generator/ -v
 
 # With coverage
-pytest evaluation/test_data_generator/test_units.py \
-  --cov=evaluation.test_data_generator \
+pytest evaluation/tests/test_data_generator/ \
+  --cov=test_data_generator \
   --cov-report=term-missing
 ```
 
@@ -313,7 +291,7 @@ Generate initial test suite from source code:
 
 ```bash
 # 1. Generate diverse tests
-python -m evaluation.test_data_generator.cli \
+python -m test_data_generator.cli \
   --source-context /path/to/agent/ \
   --count 50 \
   --diversity 0.8 \
@@ -324,7 +302,7 @@ python -m evaluation.test_data_generator.cli \
 # Move high-quality tests to test_samples/
 
 # 3. Use curated tests as teacher samples for refinement
-python -m evaluation.test_data_generator.cli \
+python -m test_data_generator.cli \
   --teacher-samples test_samples/ \
   --source-context /path/to/agent/ \
   --count 30 \
@@ -334,7 +312,7 @@ python -m evaluation.test_data_generator.cli \
 
 ```bash
 # Generate stable, deterministic tests
-python -m evaluation.test_data_generator.cli \
+python -m test_data_generator.cli \
   --teacher-samples test_samples/ \
   --source-context /path/to/agent/ \
   --count 40 \
@@ -386,15 +364,15 @@ When adding new capabilities:
 
 ## Resources
 
-- [Test Data Generator README](test_data_generator/README.md) - Complete documentation
-- [Example Usage](test_data_generator/example.py) - Code examples
+- [Test Data Generator README](src/test_data_generator/README.md) - Complete documentation
+- [Example Usage](src/test_data_generator/example.py) - Code examples
 
 ## Support
 
 For issues or questions:
-1. Check existing documentation in `test_data_generator/`
-2. Run smoke tests to validate setup: `python3 evaluation/test_data_generator/test_basic.py`
-3. Review examples: `evaluation/test_data_generator/example.py`
+1. Check existing documentation in `src/test_data_generator/`
+2. Run the test suite to validate setup: `pytest evaluation/tests/test_data_generator/`
+3. Review examples: `evaluation/src/test_data_generator/example.py`
 
 ---
 

@@ -11,14 +11,14 @@ from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 # Import modules to test
-from evaluation.test_data_generator.context_loader import (
+from test_data_generator.context_loader import (
     LoadingStrategy,
     ContextLoader,
     LOADING_STRATEGIES,
     create_custom_strategy
 )
-from evaluation.test_data_generator.deduplicate_tests import deduplicate_tests
-from evaluation.test_data_generator.domain_analyzer import DomainAnalyzer
+from test_data_generator.deduplicate_tests import deduplicate_tests
+from test_data_generator.domain_analyzer import DomainAnalyzer
 
 
 class TestContextLoader(unittest.TestCase):
@@ -248,7 +248,7 @@ class TestDomainAnalyzer(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         # Mock boto3 to avoid needing AWS credentials
-        self.boto_patcher = patch('evaluation.test_data_generator.domain_analyzer.boto3')
+        self.boto_patcher = patch('test_data_generator.domain_analyzer.boto3')
         self.mock_boto = self.boto_patcher.start()
         self.mock_boto.client.return_value = MagicMock()
 

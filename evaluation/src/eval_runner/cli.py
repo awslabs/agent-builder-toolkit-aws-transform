@@ -42,7 +42,7 @@ def _require_execution_config(config: EvalConfig):
         raise ValueError(
             "EvalConfig.execution_config is required to run the CLI. Set it to an "
             "ExecutionConfig describing the agent or skill under test "
-            "(see evaluation/run_eval.py)."
+            "(see evaluation/src/run_eval.py)."
         )
     return config.execution_config
 
