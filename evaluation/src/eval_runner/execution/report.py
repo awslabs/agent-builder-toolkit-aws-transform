@@ -435,7 +435,7 @@ function renderSummary() {
   const passed = DATA.filter(d => d.passed).length;
   const failed = total - passed;
   const totalTime = DATA.reduce((s, d) => s + d.duration_seconds, 0);
-  const totalTokens = DATA.reduce((s, d) => s + (d.token_usage?.total_tokens || 0), 0);
+  const totalCredits = DATA.reduce((s, d) => s + (d.token_usage?.credits || 0), 0);
 
   document.getElementById('summary-bar').innerHTML = `
     <div class="summary-stat">
@@ -453,6 +453,10 @@ function renderSummary() {
     <div class="summary-stat">
       <div class="label">Time</div>
       <div class="value">${totalTime.toFixed(0)}s</div>
+    </div>
+    <div class="summary-stat">
+      <div class="label">Credits</div>
+      <div class="value">${totalCredits.toFixed(2)}</div>
     </div>
   `;
 }
@@ -519,7 +523,7 @@ function selectScenario(idx) {
       <span><strong>${passCount}/${totalCount}</strong> assertions</span>
       <span><strong>${d.turn_count}</strong> turns</span>
       <span><strong>${d.duration_seconds.toFixed(1)}s</strong> duration</span>
-      <span><strong>${(tok.total_tokens || 0).toLocaleString()}</strong> tokens</span>
+      <span><strong>${(tok.credits || 0).toFixed(2)}</strong> credits</span>
     </div>
     <div class="tabs">
       <button class="tab-btn active" data-panel="tab-transcript-${idx}">Transcript</button>
@@ -688,13 +692,23 @@ function renderDetails(d) {
   html += `<dt>Work Directory</dt><dd><code>${esc(d.work_dir || '(none)')}</code></dd>`;
   html += '</dl>';
 
-  html += '<dt style="margin-top:20px;font-size:0.78rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Token Usage</dt>';
-  html += `<div class="token-grid">
+  html += '<dt style="margin-top:20px;font-size:0.78rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Usage</dt>';
+  // kiro-cli reports credits + context %, not raw token counts. Show token
+  // counts only when a driver actually populated them (avoids a misleading 0).
+  const ctxPct = tok.context_usage_percentage || 0;
+  const ctxWindow = tok.context_window_tokens || 0;
+  const credits = tok.credits || 0;
+  let usageCells = `
+    <div class="token-item"><div class="label">Credits</div><div class="value">${credits.toFixed(2)}</div></div>
+    <div class="token-item"><div class="label">Context Used</div><div class="value">${ctxPct.toFixed(2)}%</div></div>
+    <div class="token-item"><div class="label">Context Window</div><div class="value">${ctxWindow ? ctxWindow.toLocaleString() : '—'}</div></div>`;
+  if ((tok.total_tokens || 0) > 0) {
+    usageCells += `
     <div class="token-item"><div class="label">Input</div><div class="value">${(tok.input_tokens || 0).toLocaleString()}</div></div>
     <div class="token-item"><div class="label">Output</div><div class="value">${(tok.output_tokens || 0).toLocaleString()}</div></div>
-    <div class="token-item"><div class="label">Cached</div><div class="value">${(tok.cached_read_tokens || 0).toLocaleString()}</div></div>
-    <div class="token-item"><div class="label">Total</div><div class="value">${(tok.total_tokens || 0).toLocaleString()}</div></div>
-  </div>`;
+    <div class="token-item"><div class="label">Total Tokens</div><div class="value">${(tok.total_tokens || 0).toLocaleString()}</div></div>`;
+  }
+  html += `<div class="token-grid">${usageCells}</div>`;
 
   if (d.log_files && d.log_files.length) {
     html += '<dt style="margin-top:20px;font-size:0.78rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.05em;">Log Files</dt>';

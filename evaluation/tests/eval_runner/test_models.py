@@ -205,3 +205,34 @@ class TestEvalGrade:
             turn_count=1,
         )
         assert grade.passed is True
+
+    def test_to_dict_serializes_all_usage_fields(self) -> None:
+        """to_dict() is the report.py / result.json boundary — it must carry the
+        usage fields (credits, context_usage_percentage, context_window_tokens)
+        the dashboard reads, not just the legacy token counts."""
+        grade = EvalGrade(
+            eval_id="test",
+            passed=True,
+            assertions=[],
+            duration_seconds=1.0,
+            turn_count=2,
+            token_usage=TokenUsage(
+                input_tokens=300,
+                output_tokens=130,
+                total_tokens=430,
+                cached_read_tokens=20,
+                credits=3.7,
+                context_usage_percentage=4.24,
+                context_window_tokens=1_000_000,
+            ),
+        )
+        tok = grade.to_dict()["token_usage"]
+        assert tok == {
+            "input_tokens": 300,
+            "output_tokens": 130,
+            "total_tokens": 430,
+            "cached_read_tokens": 20,
+            "credits": 3.7,
+            "context_usage_percentage": 4.24,
+            "context_window_tokens": 1_000_000,
+        }
