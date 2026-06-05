@@ -336,16 +336,19 @@ def install_agents(
                 resolved_path = agents_dir / md_file.name
                 resolved_path.write_text(md_content)
                 logger.info(f"Resolved __POWER_DIR__ → {resolved_path}")
-                # Update any agent config that references this prompt file
-                for agent_file in agents_dir.glob("*.json"):
+                # Update prompt paths only on the agents this run installed —
+                # never the user's other agents that share agents_dir
+                # (e.g. Kiro's default.json/global.json, which may carry a null
+                # prompt and aren't ours to rewrite).
+                for agent_file in installed:
                     try:
                         agent_json = json.loads(agent_file.read_text())
-                        current_prompt = agent_json.get("prompt", "")
-                        if md_file.name in current_prompt:
-                            agent_json["prompt"] = f"file://{resolved_path}"
-                            agent_file.write_text(json.dumps(agent_json, indent=2))
-                    except (json.JSONDecodeError, KeyError):
+                    except json.JSONDecodeError:
                         continue
+                    current_prompt = agent_json.get("prompt") or ""
+                    if md_file.name in current_prompt:
+                        agent_json["prompt"] = f"file://{resolved_path}"
+                        agent_file.write_text(json.dumps(agent_json, indent=2))
 
             if config.system_prompt_path and config.system_prompt_path.exists():
                 prompt_content = config.system_prompt_path.read_text()
