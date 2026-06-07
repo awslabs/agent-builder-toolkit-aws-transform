@@ -26,6 +26,7 @@ from ..config import ExecutionConfig
 from .loader import list_scenarios, load_scenarios
 from ..models import AssertionResultStatus
 from .runner import EvalOrchestrator
+from .usage import format_usage_summary
 
 logger = logging.getLogger(__name__)
 
@@ -159,13 +160,8 @@ def cmd_run(args: argparse.Namespace, config: ExecutionConfig) -> int:
             f"  Result: {status} ({passed_count}/{total_count} assertions,"
             f" {grade.duration_seconds:.1f}s)"
         )
-        usage = grade.token_usage
-        if usage.total_tokens > 0:
-            logger.info(
-                f"  Tokens: {usage.total_tokens:,} total"
-                f" (input: {usage.input_tokens:,}, output: {usage.output_tokens:,}"
-                f", cached: {usage.cached_read_tokens:,})"
-            )
+        for line in format_usage_summary(grade.token_usage):
+            logger.info(f"  {line}")
 
         for a in grade.assertions:
             icon = (

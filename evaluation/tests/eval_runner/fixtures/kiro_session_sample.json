@@ -1,0 +1,162 @@
+{
+  "session_state": {
+    "conversation_metadata": {
+      "user_turn_metadatas": [
+        {
+          "input_token_count": 0,
+          "output_token_count": 0,
+          "context_usage_percentage": 1.4652,
+          "metering_usage": [
+            {
+              "value": 0.11875745316749586,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.10091104623548923,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.1718615752570481,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.13765668597014924,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.09354780676616917,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.0947942304477612,
+              "unit": "credit",
+              "unitPlural": "credits"
+            }
+          ]
+        },
+        {
+          "input_token_count": 0,
+          "output_token_count": 0,
+          "context_usage_percentage": 3.1907,
+          "metering_usage": [
+            {
+              "value": 0.08233193568822555,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.1437680221890547,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.15664594364842455,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.17033359973466003,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.20299727044776122,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.12814992922056387,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.19752924378109454,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.21656009021558875,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.14830644669983417,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.16710132835820898,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.19314634832504143,
+              "unit": "credit",
+              "unitPlural": "credits"
+            }
+          ]
+        },
+        {
+          "input_token_count": 0,
+          "output_token_count": 0,
+          "context_usage_percentage": 3.3276,
+          "metering_usage": [
+            {
+              "value": 0.15399331243781095,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.24846050321724708,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.16048416908789387,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.14754269316749585,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.1790318265671642,
+              "unit": "credit",
+              "unitPlural": "credits"
+            }
+          ]
+        },
+        {
+          "input_token_count": 0,
+          "output_token_count": 0,
+          "context_usage_percentage": 4.2358,
+          "metering_usage": [
+            {
+              "value": 0.1857357293200663,
+              "unit": "credit",
+              "unitPlural": "credits"
+            },
+            {
+              "value": 0.42278628023217246,
+              "unit": "credit",
+              "unitPlural": "credits"
+            }
+          ]
+        }
+      ]
+    },
+    "rts_model_state": {
+      "model_info": {
+        "context_window_tokens": 1000000
+      },
+      "context_usage_percentage": 4.2358
+    }
+  }
+}

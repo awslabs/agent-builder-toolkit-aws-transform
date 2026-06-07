@@ -120,22 +120,37 @@ class TranscriptEntry:
 
 @dataclass
 class TokenUsage:
-    """Aggregated token usage for a scenario run.
+    """Usage metrics for a scenario run.
 
-    Tracks cumulative token counts across all prompts sent to an agent
-    during a single eval scenario.
+    Note on sources: the kiro-cli ACP driver does **not** report token usage over
+    the wire (the prompt result carries only ``stopReason``). The real usage
+    signals are persisted in the agent's session file and are surfaced here:
+
+    - ``credits`` — billed metering credits (the actual cost unit).
+    - ``context_usage_percentage`` — peak context-window utilisation.
+    - ``context_window_tokens`` — the model's context window size.
+
+    The raw ``*_tokens`` fields are retained for forward-compatibility: a driver
+    that does emit token counts (e.g. agent-cli, or a future kiro-cli) will
+    populate them, and :meth:`add` still accumulates ACP-style usage dicts.
 
     Attributes:
-        input_tokens: Total input tokens consumed.
-        output_tokens: Total output tokens generated.
+        input_tokens: Total input tokens consumed (0 if the driver omits them).
+        output_tokens: Total output tokens generated (0 if omitted).
         total_tokens: Total tokens (input + output).
         cached_read_tokens: Tokens served from cache (prompt caching).
+        credits: Total billed metering credits across the run.
+        context_usage_percentage: Peak context-window utilisation (0-100).
+        context_window_tokens: Model context window size.
     """
 
     input_tokens: int = 0
     output_tokens: int = 0
     total_tokens: int = 0
     cached_read_tokens: int = 0
+    credits: float = 0.0
+    context_usage_percentage: float = 0.0
+    context_window_tokens: int = 0
 
     def add(self, usage: dict[str, Any] | None) -> None:
         """Accumulate token counts from a bridge response usage dict.
@@ -280,6 +295,9 @@ class EvalGrade:
                 "output_tokens": self.token_usage.output_tokens,
                 "total_tokens": self.token_usage.total_tokens,
                 "cached_read_tokens": self.token_usage.cached_read_tokens,
+                "credits": self.token_usage.credits,
+                "context_usage_percentage": self.token_usage.context_usage_percentage,
+                "context_window_tokens": self.token_usage.context_window_tokens,
             },
             "transcript": [
                 {

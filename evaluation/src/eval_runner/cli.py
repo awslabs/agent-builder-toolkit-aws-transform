@@ -120,6 +120,7 @@ def cmd_run(args: argparse.Namespace, config: EvalConfig) -> int:
     from eval_runner.execution.cli import _find_evals_dir
     from eval_runner.execution.loader import load_scenarios
     from eval_runner.execution.runner import EvalOrchestrator
+    from eval_runner.execution.usage import format_usage_summary
     from eval_runner.test_case import TestCase
 
     exec_config = _require_execution_config(config)
@@ -210,6 +211,8 @@ def cmd_run(args: argparse.Namespace, config: EvalConfig) -> int:
             f"  Result: {status} ({passed_count}/{len(grade.assertions)} assertions,"
             f" {grade.duration_seconds:.1f}s)"
         )
+        for line in format_usage_summary(grade.token_usage):
+            logger.info(f"  {line}")
         for a in grade.assertions:
             icon = (
                 "+" if a.result == AssertionResultStatus.PASS

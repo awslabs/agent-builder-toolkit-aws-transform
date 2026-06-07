@@ -45,6 +45,7 @@ from typing import Any
 
 from .agent_setup import install_agents
 from .bridge_runner import BridgeResponse, BridgeResponseStatus, BridgeRunner
+from .usage import usage_from_session_file
 from ..config import ExecutionConfig
 from ..models import (
     AssertionResult,
@@ -723,6 +724,14 @@ class EvalOrchestrator:
             if mock_manager:
                 mock_manager.teardown()
 
+        # kiro-cli reports no usage over ACP, so token_usage is empty here.
+        # Recover the real signals (credits, context %) from the power agent's
+        # session file, which kiro-cli flushes on session end. Best-effort: keep
+        # the ACP-accumulated usage if the session file yields nothing.
+        session_usage = self._usage_from_power_session(session_ids.get("power"))
+        if session_usage is not None:
+            token_usage = session_usage
+
         return EvalResult(
             eval_id=scenario.id,
             transcript=transcript,
@@ -734,6 +743,24 @@ class EvalOrchestrator:
             session_ids=session_ids,
             run_timestamp=run_timestamp,
         )
+
+    @staticmethod
+    def _usage_from_power_session(session_id: str | None) -> TokenUsage | None:
+        """Read usage from the power agent's kiro-cli session file.
+
+        Returns None when there is no session id or the file carries no usable
+        signal, so the caller can fall back to the ACP-accumulated usage.
+        """
+        if not session_id:
+            return None
+        session_file = Path.home() / ".kiro" / "sessions" / "cli" / f"{session_id}.json"
+        usage = usage_from_session_file(session_file)
+        has_signal = (
+            usage.credits
+            or usage.context_usage_percentage
+            or usage.total_tokens
+        )
+        return usage if has_signal else None
 
     def grade(
         self,
