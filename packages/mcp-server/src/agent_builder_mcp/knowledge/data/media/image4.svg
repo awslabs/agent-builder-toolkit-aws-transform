@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="540" viewBox="0 0 980 540" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-end">
+      <path d="M0 0 L10 5 L0 10 z" fill="#16191f"/>
+    </marker>
+  </defs>
+  <style>
+    .ink   { fill: #16191f; }
+    .muted { fill: #5f6b7a; }
+    .lbl   { font-size: 14px; }
+    .boxlbl{ font-size: 15px; }
+  </style>
+
+  <!-- canvas -->
+  <rect x="0.5" y="0.5" width="979" height="539" fill="#ffffff" stroke="#e9ebed"/>
+
+  <!-- title -->
+  <text x="40" y="40" class="ink" font-size="20" font-weight="700">Third Party Agent Invocation Flow</text>
+
+  <!-- ================= AWS swimlane ================= -->
+  <g>
+    <rect x="120" y="66" width="380" height="448" rx="8" fill="#ffffff" stroke="#d5dbdb" stroke-width="1.4"/>
+    <!-- header bar -->
+    <path d="M120 74 a8 8 0 0 1 8 -8 h364 a8 8 0 0 1 8 8 v22 h-380 z" fill="#efe7fb" stroke="#d5dbdb" stroke-width="1.4"/>
+    <text x="310" y="91" class="ink" font-size="16" font-weight="700" text-anchor="middle">AWS</text>
+  </g>
+
+  <!-- ================= Partner swimlane ================= -->
+  <g>
+    <rect x="560" y="66" width="380" height="448" rx="8" fill="#ffffff" stroke="#d5dbdb" stroke-width="1.4"/>
+    <path d="M560 74 a8 8 0 0 1 8 -8 h364 a8 8 0 0 1 8 8 v22 h-380 z" fill="#e3f1e6" stroke="#d5dbdb" stroke-width="1.4"/>
+    <text x="750" y="91" class="ink" font-size="16" font-weight="700" text-anchor="middle">Partner</text>
+  </g>
+
+  <!-- ================= Customer stick figure ================= -->
+  <g stroke="#16191f" stroke-width="1.6" fill="none" stroke-linecap="round">
+    <circle cx="48" cy="178" r="11" fill="#ffffff"/>
+    <line x1="48" y1="189" x2="48" y2="222"/>
+    <line x1="30" y1="201" x2="66" y2="201"/>
+    <line x1="48" y1="222" x2="33" y2="246"/>
+    <line x1="48" y1="222" x2="63" y2="246"/>
+  </g>
+  <text x="48" y="268" class="ink" font-size="14" font-weight="700" text-anchor="middle">Customer</text>
+
+  <!-- ================= ATX Chat + ATX blue boxes ================= -->
+  <!-- ATX Chat -->
+  <rect x="150" y="150" width="78" height="120" rx="8" fill="#cfe2f3" stroke="#9fc5e8" stroke-width="1.6"/>
+  <text x="189" y="204" class="ink boxlbl" font-weight="700" text-anchor="middle">ATX</text>
+  <text x="189" y="224" class="ink boxlbl" font-weight="700" text-anchor="middle">Chat</text>
+
+  <!-- ATX -->
+  <rect x="228" y="138" width="150" height="144" rx="8" fill="#cfe2f3" stroke="#9fc5e8" stroke-width="1.6"/>
+  <text x="303" y="216" class="ink" font-size="17" font-weight="700" text-anchor="middle">ATX</text>
+
+  <!-- Customer -> ATX Chat -->
+  <line x1="70" y1="210" x2="146" y2="210" stroke="#16191f" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+  <!-- ================= An ATX vended TaskAgent ================= -->
+  <rect x="178" y="404" width="180" height="86" rx="8" fill="#fff2cc" stroke="#d6b656" stroke-width="1.6"/>
+  <text x="268" y="434" class="ink boxlbl" text-anchor="middle">An ATX vended</text>
+  <text x="268" y="455" class="ink boxlbl" font-weight="700" text-anchor="middle">TaskAgent</text>
+  <text x="268" y="475" class="ink boxlbl" font-weight="700" text-anchor="middle">(SubAgent)</text>
+
+  <!-- ================= Bedrock AgentCore (top) ================= -->
+  <g>
+    <rect x="600" y="120" width="300" height="120" rx="8" fill="#fffaf0" stroke="#d6b656" stroke-width="1.6" stroke-dasharray="4 4"/>
+    <text x="612" y="113" class="ink" font-size="14">Bedrock AgentCore</text>
+    <rect x="660" y="146" width="180" height="68" rx="8" fill="#fff2cc" stroke="#d6b656" stroke-width="1.6"/>
+    <text x="750" y="174" class="ink boxlbl" text-anchor="middle">A Partner created</text>
+    <text x="750" y="195" class="ink boxlbl" font-weight="700" text-anchor="middle">Orchestrator Agent</text>
+  </g>
+
+  <!-- ================= Bedrock AgentCore (bottom) ================= -->
+  <g>
+    <rect x="600" y="370" width="300" height="124" rx="8" fill="#fffaf0" stroke="#d6b656" stroke-width="1.6" stroke-dasharray="4 4"/>
+    <text x="612" y="363" class="ink" font-size="14">Bedrock AgentCore</text>
+    <rect x="660" y="398" width="180" height="72" rx="8" fill="#fff2cc" stroke="#d6b656" stroke-width="1.6"/>
+    <text x="750" y="424" class="ink boxlbl" text-anchor="middle">A Partner created</text>
+    <text x="750" y="445" class="ink boxlbl" font-weight="700" text-anchor="middle">Task Agent</text>
+    <text x="750" y="463" class="ink boxlbl" font-weight="700" text-anchor="middle">(SubAgent)</text>
+  </g>
+
+  <!-- ================= Arrows ================= -->
+  <!-- ATX -> Orchestrator (Manage Lifecycle) -->
+  <line x1="378" y1="168" x2="656" y2="168" stroke="#16191f" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="517" y="156" class="ink lbl" font-style="italic" text-anchor="middle">Manage Lifecycle</text>
+
+  <!-- Orchestrator -> ATX (ATX API Requests) -->
+  <line x1="656" y1="200" x2="382" y2="200" stroke="#16191f" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="519" y="222" class="muted lbl" font-style="italic" text-anchor="middle">ATX API Requests</text>
+
+  <!-- ATX -> ATX vended TaskAgent (Manage Lifecycle) -->
+  <line x1="268" y1="282" x2="268" y2="400" stroke="#16191f" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="268" y="320" class="ink lbl" font-style="italic" text-anchor="middle">Manage Lifecycle</text>
+
+  <!-- ATX -> Partner Task Agent (Manage Lifecycle, elbow) -->
+  <path d="M378 252 H498 V434 H656" fill="none" stroke="#16191f" stroke-width="1.6" marker-end="url(#arrow)"/>
+  <text x="450" y="296" class="ink lbl" font-style="italic" text-anchor="middle">Manage Lifecycle</text>
+</svg>

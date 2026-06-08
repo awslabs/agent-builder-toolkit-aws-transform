@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="250" viewBox="0 0 1320 250" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <style>
+    .muted { fill: #5f6b7a; }
+    .ink   { fill: #16191f; }
+    .link  { fill: #0972d3; }
+    .err   { fill: #d91515; }
+  </style>
+
+  <!-- card -->
+  <rect x="0.5" y="0.5" width="1319" height="249" rx="8" fill="#ffffff" stroke="#e9ebed"/>
+
+  <!-- summary tab bar -->
+  <g transform="translate(24,22)" font-size="15">
+    <path d="M4 2 l9 -2 l9 2 v6 c0 6 -4 10 -9 12 c-5 -2 -9 -6 -9 -12 z" fill="none" stroke="#5f6b7a" stroke-width="1.4"/>
+    <text x="22" y="14" class="muted">Security: 0</text>
+
+    <g transform="translate(150,0)">
+      <circle cx="8" cy="9" r="9" fill="#d91515"/>
+      <path d="M5 6 l6 6 M11 6 l-6 6" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"/>
+      <text x="24" y="14" class="err" font-weight="700">Errors: 1</text>
+      <rect x="0" y="28" width="86" height="3" fill="#d91515"/>
+    </g>
+
+    <g transform="translate(300,0)">
+      <path d="M9 1 l9 16 h-18 z" fill="none" stroke="#5f6b7a" stroke-width="1.4" stroke-linejoin="round"/>
+      <text x="26" y="14" class="muted">Warnings: 0</text>
+    </g>
+
+    <g transform="translate(470,0)">
+      <circle cx="8" cy="8" r="7" fill="none" stroke="#5f6b7a" stroke-width="1.4"/>
+      <rect x="6" y="15" width="4" height="4" rx="1" fill="#5f6b7a"/>
+      <text x="24" y="14" class="muted">Suggestions: 0</text>
+    </g>
+  </g>
+
+  <line x1="0" y1="56" x2="1320" y2="56" stroke="#e9ebed"/>
+
+  <!-- inner error panel -->
+  <rect x="24" y="74" width="1272" height="120" rx="8" fill="#ffffff" stroke="#d5dbdb"/>
+
+  <g font-size="15">
+    <text x="44" y="100" class="link" font-weight="600">Learn more about policy validation</text>
+    <path d="M308 90 h9 v9 M317 90 l-11 11" stroke="#0972d3" stroke-width="1.4" fill="none"/>
+    <path d="M1268 90 l14 14 M1282 90 l-14 14" stroke="#16191f" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- search box -->
+  <rect x="44" y="114" width="700" height="34" rx="6" fill="#ffffff" stroke="#aab7b8"/>
+  <circle cx="64" cy="131" r="6" fill="none" stroke="#5f6b7a" stroke-width="1.6"/>
+  <line x1="68" y1="135" x2="73" y2="140" stroke="#5f6b7a" stroke-width="1.6" stroke-linecap="round"/>
+  <text x="82" y="136" class="muted" font-size="15" font-style="italic">Search errors</text>
+
+  <line x1="44" y1="166" x2="1276" y2="166" stroke="#e9ebed"/>
+
+  <!-- error row -->
+  <g font-size="15">
+    <text x="44" y="186" class="ink">Ln 7, Col 14</text>
+    <text x="250" y="186" class="ink" font-weight="700">Invalid Service In Action:</text>
+    <text x="475" y="186" class="ink">The service <tspan font-weight="700">transform-agents:*</tspan> specified in the action does not exist.</text>
+    <text x="1095" y="186" class="link" font-weight="600">Learn more</text>
+    <path d="M1180 177 h9 v9 M1189 177 l-11 11" stroke="#0972d3" stroke-width="1.4" fill="none"/>
+  </g>
+
+  <!-- footer buttons -->
+  <g font-size="15">
+    <text x="1150" y="230" class="link" font-weight="700">Cancel</text>
+    <rect x="1218" y="214" width="78" height="30" rx="15" fill="#ff7300"/>
+    <text x="1257" y="234" fill="#16191f" font-weight="700" text-anchor="middle">Next</text>
+  </g>
+</svg>
