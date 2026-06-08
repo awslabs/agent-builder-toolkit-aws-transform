@@ -345,6 +345,12 @@ pip install -e .
 
 # Or with test dependencies
 pip install -e ".[test]"
+
+# For the evolution verbs (insights / evolve / review / evohistory), install the
+# evolve extra. It pulls in the sibling harness-evolver package (../evolution)
+# via [tool.uv.sources], so install it with uv (plain pip can't resolve a local
+# path extra):
+uv pip install -e ".[evolve]"
 ```
 
 **Requirements:**
@@ -352,6 +358,8 @@ pip install -e ".[test]"
 - boto3>=1.28.0 (AWS Bedrock access)
 - AWS credentials configured
 - pytest>=7.0.0 (for testing, optional)
+- For the `evolve` extra: [`uv`](https://docs.astral.sh/uv/) (resolves the local
+  `harness-evolver` path dependency) + `kiro-cli` on PATH for live runs
 
 ## Contributing
 

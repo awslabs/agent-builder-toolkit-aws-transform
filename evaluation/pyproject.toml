@@ -25,22 +25,38 @@ dependencies = [
     "jsonschema>=4.0.0",
 ]
 
+[project.scripts]
+# Unified lifecycle CLI: generate / list / run / report / clean (eval_runner) +
+# insights / evolve / review / evohistory (evolution adapter → HarnessEvolver).
+agent-builder-eval = "cli:entry_point"
+
 [project.optional-dependencies]
 test = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
 ]
+# Evolution verbs (insights / evolve / review / evohistory). Pulls in the
+# harness-evolver package (which itself depends on anyio + claude-agent-sdk).
+# It lives in the sibling evolution/ directory; resolved via [tool.uv.sources]
+# below, so install this extra with uv: `uv pip install -e ".[evolve]"`.
+evolve = [
+    "harness-evolver",
+]
 
-[project.scripts]
-# Repo wiring: builds the unified EvalConfig and runs the eval_runner CLI.
-agent-builder-eval = "run_eval:entry_point"
+[tool.uv.sources]
+# harness-evolver is a sibling project in the repo (../evolution), not on PyPI.
+# uv resolves the [evolve] extra to that path as an editable install; plain pip
+# does not read this table, so use uv to install the evolve extra.
+harness-evolver = { path = "../evolution", editable = true }
 
 [tool.setuptools]
-# run_eval.py is the repo-specific wiring module (holds the console entry point).
-py-modules = ["run_eval"]
+# cli.py is the unified CLI entry point; run_eval.py holds the repo's EvalConfig
+# wiring (imported by cli). Both are top-level modules under src/.
+py-modules = ["cli", "run_eval"]
 
 [tool.setuptools.packages.find]
-# src/ layout: discover eval_runner (+ subpackages) and test_data_generator.
+# src/ layout: discover eval_runner (+ subpackages), test_data_generator, and the
+# evolution adapter package.
 where = ["src"]
 
 [tool.setuptools.package-data]

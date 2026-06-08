@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Build artifacts (python -m build / hatchling)
+build/
+dist/
+
+# Local virtualenv
+.venv/
+venv/
+
+# Test / tooling caches
+.pytest_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+.deepeval/
+
+# Evolution run output (snapshots, traces, reports, per-step eval artifacts —
+# regenerated on each run; the analogue of evaluation/'s eval-results/)
+runs/

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "harness-evolver"
+version = "0.1.0"
+description = "Evolve agent harnesses by analyzing run artifacts and editing the agent's target directory."
+requires-python = ">=3.11"
+dependencies = [
+    "anyio",
+    "claude-agent-sdk",
+]
+
+[project.optional-dependencies]
+# Live monitoring dashboard (dashboard/evolution_dashboard.py). Optional — the
+# evolution loop itself doesn't need these.
+dashboard = [
+    "flask>=3.0.0",
+    "plotly>=5.0.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/harness_evolver"]
