@@ -12,6 +12,7 @@ Usage:
 import json
 import re
 from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -190,8 +191,8 @@ def plot_results(data, output_path):
 
     colors = ['#06A77D' if gap < 5 else '#F77F00' if gap < 10 else '#D62828'
               for gap in data["train_gap"]]
-    bars = ax3.bar(steps, data["train_gap"], color=colors, alpha=0.7,
-                   edgecolor='black', linewidth=1.5)
+    ax3.bar(steps, data["train_gap"], color=colors, alpha=0.7,
+            edgecolor='black', linewidth=1.5)
 
     # Add threshold line
     ax3.axhline(y=5, color='orange', linestyle='--', linewidth=2,
@@ -317,16 +318,16 @@ def print_detailed_summary(data):
     print("="*80)
 
     print(f"\n1. BEST CHECKPOINT: Step {best_val_step}")
-    print(f"   - Best validation performance with smallest train/val gap")
-    print(f"   - This checkpoint should have been used for final test")
+    print("   - Best validation performance with smallest train/val gap")
+    print("   - This checkpoint should have been used for final test")
 
-    print(f"\n2. OVERFITTING PROGRESSION:")
+    print("\n2. OVERFITTING PROGRESSION:")
     worst_gap_idx = max(range(len(data["train_gap"])),
                         key=lambda i: data["train_gap"][i] if data["train_gap"][i] is not None else -1)
     print(f"   - Step {steps[worst_gap_idx]}: Peak overfitting (gap = {data['train_gap'][worst_gap_idx]:.1f}%)")
     print(f"   - Validation dropped from {data['val_pass_rates'][0]:.1f}% to {data['val_pass_rates'][worst_gap_idx]:.1f}%")
 
-    print(f"\n3. TEST SET DEGRADATION:")
+    print("\n3. TEST SET DEGRADATION:")
     assertion_change = data["test_after_pass_rate"] - data["test_before_pass_rate"]
     test_change = data["test_after_test_rate"] - data["test_before_test_rate"]
     print(f"   - Assertion pass rate: {data['test_before_pass_rate']:.1f}% → {data['test_after_pass_rate']:.1f}% ({assertion_change:+.1f}%)")
@@ -367,5 +368,5 @@ if __name__ == "__main__":
     print("Generating enhanced plot...")
     plot_results(data, output_path)
 
-    print(f"\n✅ DONE! View the plot:")
+    print("\n✅ DONE! View the plot:")
     print(f"   {output_path}")

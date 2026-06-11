@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 SYSTEM_PROMPT = """Your job is to improve a target agent's performance
 by editing files inside a target directory (given as your cwd), based on
 diagnostic reports describing how the target agent has been failing.
@@ -219,23 +218,11 @@ Prefer targeted fixes over large additions.
     # Evolution history section (if provided)
     history_section = ""
     if history_context:
-        # Check if history contains snapshot references
-        has_snapshots = "Code snapshot:" in history_context or "git --git-dir=" in history_context
-
+        # The evolver's toolset is Read/Glob/Grep/Write/Edit — deliberately no
+        # Bash (see evolver.py write-confinement), so it cannot run `git diff`
+        # against the snapshot SHAs. The history's snapshot references are for a
+        # human reading the run later, not an action the agent can take.
         snapshot_note = ""
-        if has_snapshots:
-            snapshot_note = """
-**Code Snapshots Available**: Each step includes a git snapshot SHA.
-
-**When to inspect code** (use Bash tool to run git diff):
-  1. 🚨 HIGH: Validation diverged from training (train↑ val↓) → Check for overfitting
-  2. 🚨 HIGH: Outcome is surprising/unclear → Verify what really changed
-  3. ⚠️ MEDIUM: Similar changes failed multiple times → Understand the pattern
-  4. 💡 DEFAULT: Pattern is clear from summary → No inspection needed (80% of cases)
-
-Run the git diff command shown in the history to see exact code changes.
-
-"""
 
         history_section = f"""## Evolution History (Cross-Step Context)
 

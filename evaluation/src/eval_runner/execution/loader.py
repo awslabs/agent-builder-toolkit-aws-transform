@@ -166,7 +166,12 @@ def load_scenarios(
             is already guaranteed.
 
     Returns:
-        List of ``EvalCase`` objects sorted by ID.
+        List of ``EvalCase`` objects in a deterministic order: scenarios are
+        emitted by sorted source-file path, then by their order within each
+        file. This is stable for a fixed directory layout, but it is **not** an
+        ID sort — renaming/adding/moving a file can change the order. Callers
+        that need a scenario pinned to a fixed position (e.g. a train/val/test
+        split) should select by explicit ``filter_ids`` rather than by index.
 
     Raises:
         FileNotFoundError: If ``evals_dir`` or the schema file doesn't exist.

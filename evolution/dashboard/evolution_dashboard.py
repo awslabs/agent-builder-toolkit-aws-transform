@@ -27,13 +27,12 @@ Usage:
 import argparse
 import json
 import re
-import time
-from pathlib import Path
 from datetime import datetime
-from flask import Flask, render_template, jsonify
+from pathlib import Path
+
 import plotly.graph_objs as go
 import plotly.utils
-
+from flask import Flask, jsonify, render_template
 
 app = Flask(__name__)
 
@@ -48,7 +47,6 @@ def collect_metrics(run_dir: Path):
     if not train_dir.exists():
         return None
 
-    steps = []
     metrics = {
         "steps": [],
         "train_pass_rates": [],
@@ -134,8 +132,9 @@ def collect_metrics(run_dir: Path):
                     "tests_passed": sum(1 for t in data.get("tests", []) if t.get("passed", False)),
                     "total_tests": data.get("total_tests", 0),
                 }
-        except Exception:
-            pass
+        except (OSError, json.JSONDecodeError) as e:
+            # Non-fatal: the file may be mid-write or absent; leave test_before as None.
+            print(f"Could not read test_before summary: {e}")
 
     if test_after.exists():
         try:
@@ -146,8 +145,9 @@ def collect_metrics(run_dir: Path):
                     "tests_passed": sum(1 for t in data.get("tests", []) if t.get("passed", False)),
                     "total_tests": data.get("total_tests", 0),
                 }
-        except Exception:
-            pass
+        except (OSError, json.JSONDecodeError) as e:
+            # Non-fatal: the file may be mid-write or absent; leave test_after as None.
+            print(f"Could not read test_after summary: {e}")
 
     # Find best validation checkpoint
     if metrics["val_pass_rates"] and any(v is not None for v in metrics["val_pass_rates"]):
@@ -384,11 +384,11 @@ def main():
         CURRENT_RUN_DIR.mkdir(parents=True, exist_ok=True)
 
     print(f"\n{'='*80}")
-    print(f"Agent Builder Evolution Dashboard")
+    print("Agent Builder Evolution Dashboard")
     print(f"{'='*80}")
     print(f"\nMonitoring: {CURRENT_RUN_DIR}")
     print(f"\nDashboard URL: http://{args.host}:{args.port}")
-    print(f"\nPress Ctrl+C to stop\n")
+    print("\nPress Ctrl+C to stop\n")
 
     app.run(host=args.host, port=args.port, debug=False)
 

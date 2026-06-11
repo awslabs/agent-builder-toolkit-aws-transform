@@ -26,7 +26,6 @@ Usage:
 
 from __future__ import annotations
 
-import collections
 import json
 from dataclasses import dataclass
 from datetime import datetime
@@ -208,7 +207,7 @@ class EvolutionHistory:
                 lines.append(f"- 📌 Stable fail: {len(diff.stable_fail)} tasks")
 
         # Task breakdown
-        lines.append(f"\n**Task Details**:")
+        lines.append("\n**Task Details**:")
         if train_stats.passed_tasks:
             task_list = ', '.join(train_stats.passed_tasks[:15])
             if len(train_stats.passed_tasks) > 15:
@@ -224,7 +223,7 @@ class EvolutionHistory:
         # Metadata
         if metadata:
             if metadata.get("final_eval"):
-                lines.append(f"\n🏁 **Final evaluation** (no further evolution after this step)")
+                lines.append("\n🏁 **Final evaluation** (no further evolution after this step)")
             if metadata.get("early_stopping_triggered"):
                 lines.append(f"\n⚠️ **Early stopping triggered** "
                            f"(best step: {metadata.get('best_validation_step', '?')})")

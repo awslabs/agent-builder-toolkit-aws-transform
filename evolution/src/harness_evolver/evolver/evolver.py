@@ -7,24 +7,28 @@ import json
 import logging
 from pathlib import Path
 
-from claude_agent_sdk import ClaudeAgentOptions, query
+from claude_agent_sdk import (
+    ClaudeAgentOptions,
+    ClaudeSDKClient,
+    PermissionResultAllow,
+    PermissionResultDeny,
+)
 
-from harness_evolver.environment import Environment
 from harness_evolver.analyst import analyze
-from harness_evolver.snapshots import TargetSnapshots
-from harness_evolver.trajectory import Trajectory, serialize_message
+from harness_evolver.environment import Environment
 from harness_evolver.evolution_history import (
-    EvolutionHistory,
     EvaluationStats,
+    EvolutionHistory,
     compute_step_diff_from_dirs,
 )
+from harness_evolver.snapshots import TargetSnapshots
+from harness_evolver.trajectory import Trajectory, serialize_message
 
 from .prompt import (
     SYSTEM_PROMPT,
     build_edit_prompt,
     summarize_trace_for_traj,
 )
-
 
 log = logging.getLogger(__name__)
 
@@ -66,6 +70,54 @@ async def _run_env_and_evaluate(
     return env.name, report
 
 
+# Tools whose file_path argument we confine to target_dir.
+_WRITE_TOOLS = {"Write", "Edit", "MultiEdit"}
+
+
+def _make_confine_to_target(target_dir: Path):
+    """Build a can_use_tool callback that confines writes to target_dir.
+
+    ``cwd`` only sets the SDK's resolution base for *relative* paths; it does not
+    sandbox the filesystem, and ``permission_mode="acceptEdits"`` auto-approves
+    every Write/Edit. Since the edit ``file_path`` is LLM-driven over input that
+    ultimately derives from the agent-under-test's own transcripts (a prompt-
+    injection surface), an absolute or ``..`` path could write anywhere the
+    operator can. This callback rejects any write whose resolved path escapes
+    target_dir, closing that injection → arbitrary-file-write chain.
+    """
+    target_resolved = target_dir.resolve()
+
+    async def can_use_tool(tool_name: str, inp: dict, context):
+        if tool_name not in _WRITE_TOOLS:
+            return PermissionResultAllow()
+
+        raw = inp.get("file_path")
+        if not raw:
+            return PermissionResultDeny(
+                message=f"{tool_name} called without a file_path."
+            )
+
+        # Resolve relative paths against target_dir (the agent's cwd), mirroring
+        # the SDK, then require the result to stay inside target_dir.
+        candidate = Path(raw)
+        if not candidate.is_absolute():
+            candidate = target_resolved / candidate
+        resolved = candidate.resolve()
+
+        if resolved == target_resolved or target_resolved in resolved.parents:
+            return PermissionResultAllow()
+
+        return PermissionResultDeny(
+            message=(
+                f"Refusing {tool_name} to {raw!r}: path resolves to {resolved}, "
+                f"outside the editable target directory {target_resolved}. "
+                f"Only edit files inside the target directory."
+            )
+        )
+
+    return can_use_tool
+
+
 async def _run_evolver_step(
     target_dir: Path,
     edit_prompt: str,
@@ -77,15 +129,25 @@ async def _run_evolver_step(
         allowed_tools=["Read", "Glob", "Grep", "Write", "Edit"],
         permission_mode="acceptEdits",
         system_prompt=SYSTEM_PROMPT,
+        can_use_tool=_make_confine_to_target(target_dir),
     )
+
+    # Use ClaudeSDKClient (not the one-shot query()) because can_use_tool sends
+    # its allow/deny verdict back to the CLI *over stdin*. query()'s streaming
+    # path calls end_input() as soon as the prompt iterator is exhausted, and it
+    # only keeps stdin open for sdk_mcp_servers/hooks — not a can_use_tool-only
+    # setup — so the permission response could fail to send. ClaudeSDKClient
+    # holds the session (and stdin) open until disconnect, so the callback works.
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     with trace_path.open("w") as f:
-        async for msg in query(prompt=edit_prompt, options=options):
-            try:
-                f.write(json.dumps(serialize_message(msg), default=str) + "\n")
-                f.flush()
-            except Exception as e:
-                f.write(json.dumps({"type": "SERIALIZATION_ERROR", "error": repr(e)}) + "\n")
+        async with ClaudeSDKClient(options=options) as client:
+            await client.query(edit_prompt)
+            async for msg in client.receive_response():
+                try:
+                    f.write(json.dumps(serialize_message(msg), default=str) + "\n")
+                    f.flush()
+                except Exception as e:
+                    f.write(json.dumps({"type": "SERIALIZATION_ERROR", "error": repr(e)}) + "\n")
 
 
 async def run(

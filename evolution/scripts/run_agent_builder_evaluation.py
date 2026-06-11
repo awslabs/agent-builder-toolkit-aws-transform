@@ -30,10 +30,11 @@ _EVAL_ROOT = Path(os.environ.get("AGENT_BUILDER_EVAL_ROOT", _REPO_ROOT / "evalua
 EVAL_FRAMEWORK_DIR = Path(os.environ.get("AGENT_BUILDER_EVAL_FRAMEWORK_DIR", _EVAL_ROOT / "src"))
 sys.path.insert(0, str(EVAL_FRAMEWORK_DIR))
 
-from eval_runner.config import ExecutionConfig
-from eval_runner.execution.loader import load_scenarios
-from eval_runner.execution.runner import EvalCase, EvalOrchestrator
-from eval_runner.models import AssertionResultStatus
+# Imported after the sys.path insert above; E402 is intentional here.
+from eval_runner.config import ExecutionConfig  # noqa: E402
+from eval_runner.execution.loader import load_scenarios  # noqa: E402
+from eval_runner.execution.runner import EvalCase, EvalOrchestrator  # noqa: E402
+from eval_runner.models import AssertionResultStatus  # noqa: E402
 
 # Agent-under-test wiring, mirroring evaluation/src/run_eval.py.
 AGENT_NAME = "aws-transform-agent-builder"
@@ -151,7 +152,7 @@ def main():
     with summary_file.open("w") as f:
         json.dump(summary, f, indent=2)
 
-    print(f"\nEvaluation Summary:")
+    print("\nEvaluation Summary:")
     print(f"  Scenarios run: {len(scenarios)}")
     print(f"  Total assertions: {total_assertions}")
     print(f"  Passed assertions: {passed_assertions}")

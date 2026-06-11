@@ -109,13 +109,19 @@ def make_eval_runner_env(
         )
         scenarios = _select_slice(scenarios, test_slice)
         if not scenarios:
-            (artifacts_dir / "ERROR.txt").write_text(
-                f"No scenarios matched (dir={test_dir}, slice={test_slice}, "
-                f"ids={scenario_ids}).\n"
+            # Fail loudly. A zeroed summary here is indistinguishable from "the
+            # agent scored 0", which silently poisons checkpoint selection and
+            # the before/after test numbers — exactly the honest-generalization
+            # story this feature exists to produce. An empty slice is a config
+            # error (slice spec or test_dir), not a 0% result.
+            msg = (
+                f"env {name!r}: no scenarios matched "
+                f"(dir={test_dir}, slice={test_slice}, ids={scenario_ids}). "
+                f"Populate {test_dir} or fix the slice/ids so this resolves to a "
+                f"non-empty set."
             )
-            # Still emit a zeroed summary so the evolver can proceed.
-            _write_summary(artifacts_dir, name, test_slice, [])
-            return
+            (artifacts_dir / "ERROR.txt").write_text(msg + "\n")
+            raise ValueError(msg)
 
         workspace = artifacts_dir / "workspace"
         orchestrator = EvalOrchestrator(

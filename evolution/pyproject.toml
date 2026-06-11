@@ -9,7 +9,10 @@ description = "Evolve agent harnesses by analyzing run artifacts and editing the
 requires-python = ">=3.11"
 dependencies = [
     "anyio",
-    "claude-agent-sdk",
+    # Pinned: the SDK's control-protocol surface (e.g. the can_use_tool
+    # permission callback and streaming-prompt requirement) is exercised
+    # directly, and it is a fast-moving external dep.
+    "claude-agent-sdk>=0.2,<0.3",
 ]
 
 [project.optional-dependencies]
@@ -19,6 +22,10 @@ dashboard = [
     "flask>=3.0.0",
     "plotly>=5.0.0",
 ]
+test = ["pytest", "pytest-asyncio"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/harness_evolver"]

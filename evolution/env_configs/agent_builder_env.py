@@ -22,9 +22,9 @@ the ACP driver binary on PATH plus Bedrock model access.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
-import json
 import uuid
 from pathlib import Path
 
@@ -43,11 +43,12 @@ EVAL_FRAMEWORK_DIR = Path(
 if str(EVAL_FRAMEWORK_DIR) not in sys.path:
     sys.path.insert(0, str(EVAL_FRAMEWORK_DIR))
 
-from eval_runner.config import ExecutionConfig
-from eval_runner.execution.loader import load_scenarios
-from eval_runner.execution.runner import EvalOrchestrator
-from eval_runner.models import AssertionResultStatus
-
+# Imported after the sys.path insert above so the in-repo eval framework
+# resolves; E402 (import-not-at-top) is intentional here.
+from eval_runner.config import ExecutionConfig  # noqa: E402
+from eval_runner.execution.loader import load_scenarios  # noqa: E402
+from eval_runner.execution.runner import EvalOrchestrator  # noqa: E402
+from eval_runner.models import AssertionResultStatus  # noqa: E402
 
 # Agent-under-test wiring, mirroring evaluation/src/run_eval.py.
 AGENT_NAME = "aws-transform-agent-builder"
@@ -95,8 +96,10 @@ def make_env(
 
     Args:
         name: Short slug identifying this env (used in run paths)
-        test_slice: e.g. "0:10" for first 10 tests, "10:20" for next 10
-        n_concurrent: Number of parallel test executions (default 1 for stability)
+        test_slice: e.g. "0:10" for first 10 tests, "10:20" for next 10.
+            Open-ended ("0:", ":5") and bare-index ("3") forms are supported.
+        n_concurrent: Accepted for call-site symmetry but currently unused —
+            scenarios run sequentially via ``orchestrator.run_eval``.
     """
 
     def run(target_dir: Path, artifacts_dir: Path) -> None:
@@ -114,25 +117,35 @@ def make_env(
         run_id = f"{name}_{uuid.uuid4().hex[:8]}"
         eval_log_path = artifacts_dir / "evaluation.log"
 
-        # Parse slice spec
+        # Parse slice spec. Supports open-ended forms ("0:", ":5") and a bare
+        # index ("3" -> [3:4]), matching the adapter's _select_slice.
         if ":" in test_slice:
-            start, end = map(int, test_slice.split(":"))
+            start_s, end_s = test_slice.split(":")
+            start = int(start_s) if start_s else None
+            end = int(end_s) if end_s else None
         else:
             start = int(test_slice)
             end = start + 1
 
         # Load scenarios from the test-sample directory (schema validation falls
         # back to the framework's bundled eval-schema.json) and take the slice.
-        # load_scenarios returns scenarios sorted by id, so slicing is stable.
+        # load_scenarios returns scenarios in a deterministic order, so slicing
+        # is stable for a fixed layout.
         all_scenarios = load_scenarios(TEST_DATA_DIR)
         scenario_subset = all_scenarios[start:end]
 
         if not scenario_subset:
-            (artifacts_dir / "ERROR.txt").write_text(
-                f"No scenarios found in slice {test_slice}. "
-                f"Total scenarios in {TEST_DATA_DIR}: {len(all_scenarios)}\n"
+            # Fail loudly: an empty slice is a config error, not a 0% result.
+            # Silently returning here would leave the orchestrator with no
+            # summary (score stays -1.0), quietly disabling early stopping and
+            # checkpoint selection.
+            msg = (
+                f"No scenarios found in slice {test_slice!r}. "
+                f"Total scenarios in {TEST_DATA_DIR}: {len(all_scenarios)}. "
+                f"Populate the test-sample directory or fix the slice."
             )
-            return
+            (artifacts_dir / "ERROR.txt").write_text(msg + "\n")
+            raise ValueError(msg)
 
         # Initialize results
         summary = {

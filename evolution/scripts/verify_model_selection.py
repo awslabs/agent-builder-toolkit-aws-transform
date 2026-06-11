@@ -135,7 +135,7 @@ def analyze_run(run_dir: Path):
 
             change = after_pass_rate - before_pass_rate
 
-            print(f"\nBefore Training (Baseline):")
+            print("\nBefore Training (Baseline):")
             print(f"  Pass Rate: {before_pass_rate:.1%} ({before_tests}/{before_total} tests)")
 
             print(f"\nAfter Training (Step {final['step']} - FINAL):")
@@ -144,7 +144,7 @@ def analyze_run(run_dir: Path):
 
             if change < 0:
                 print(f"\n⚠️  TEST PERFORMANCE DEGRADED by {abs(change):.1%}")
-                print(f"   This indicates overfitting to the training set.")
+                print("   This indicates overfitting to the training set.")
                 print(f"\n💡 If we had selected Step {best_val['step']} (best validation),")
                 print(f"   the gap would likely be smaller since validation gap was {best_val['gap']:+.1%}")
                 print(f"   vs final gap of {final['gap']:+.1%}.")
@@ -165,7 +165,7 @@ def analyze_run(run_dir: Path):
 
     if abs(final['gap']) > 0.05:
         print(f"\n⚠️  Large train/val gap ({final['gap']:+.1%}) suggests overfitting")
-        print(f"  Consider: early stopping, regularization, or more validation data")
+        print("  Consider: early stopping, regularization, or more validation data")
 
     print()
 

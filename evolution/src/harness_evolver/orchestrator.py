@@ -5,14 +5,13 @@ from __future__ import annotations
 import inspect
 import json
 import re
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 from harness_evolver import evolver
 from harness_evolver.analyst import analyze
 from harness_evolver.environment import Environment
-
+from harness_evolver.snapshots import TargetSnapshots
 
 EnvPair = tuple[Environment, Environment | None]
 
@@ -137,8 +136,67 @@ class Orchestrator:
         await _run_test(test, test_dir / "after")
 
 
+def _checkpoint_for_measurement(measurement_dir_name: str, max_step: int) -> str:
+    """Map an eval directory to the snapshot whose tree it measured.
+
+    The loop measures *before* editing within a step, so each eval reflects the
+    tree as captured at the *end of the previous step*:
+
+      - ``step_000`` measures the ``baseline`` snapshot.
+      - ``step_NNN`` (N>0) measures ``post_step_{NNN-1}`` — content-identical to
+        ``pre_step_NNN`` (nothing edits ``target_dir`` between the two; only the
+        measurement + analyst run there), but ``post_step_{NNN-1}`` is the
+        snapshot guaranteed to exist: when early stopping breaks at step N, the
+        loop records ``step_N``'s summary but never takes ``pre_step_N`` /
+        ``post_step_N``. Restoring ``post_step_NNN`` here would instead ship the
+        edit made *during* step N — a tree this score never scored (the
+        off-by-one).
+      - ``final_eval`` is the measurement-only pass after the last edit, so it
+        measures ``post_step_{max_step}`` — the only post-edit tree no ``step_*``
+        directory covers. Mapping it lets the final edit be selected.
+    """
+    m = re.search(r"step_(\d+)", measurement_dir_name)
+    if m:
+        step = int(m.group(1))
+        return "baseline" if step == 0 else f"post_step_{step - 1:03d}"
+    # final_eval (or any non-step dir): the last edit's tree.
+    return f"post_step_{max_step:03d}"
+
+
+def _iter_score_candidates(train_run_dir: Path, env_name: str):
+    """Yield ``(measurement_dir_name, summary_dict)`` for each scored eval.
+
+    Covers both ``step_*`` directories and the terminal ``final_eval`` pass.
+    """
+    measurement_dirs = sorted(train_run_dir.glob("step_*"))
+    final_eval = train_run_dir / "final_eval"
+    if final_eval.is_dir():
+        measurement_dirs.append(final_eval)
+
+    for mdir in measurement_dirs:
+        summary_file = mdir / env_name / "run" / "evaluation_summary.json"
+        if not summary_file.exists():
+            continue
+        try:
+            with summary_file.open() as f:
+                yield mdir.name, json.load(f)
+        except Exception as e:
+            print(f"  Warning: Could not parse {summary_file}: {e}")
+            continue
+
+
+def _max_edited_step(train_run_dir: Path) -> int:
+    """Highest ``step_NNN`` index that ran an edit (i.e. has a ``post_step``)."""
+    steps = [
+        int(m.group(1))
+        for d in train_run_dir.glob("step_*")
+        if (m := re.search(r"step_(\d+)", d.name))
+    ]
+    return max(steps) if steps else 0
+
+
 def _select_best_validation_checkpoint(run_dir: Path, env_pairs: list[EnvPair]) -> str | None:
-    """Find the checkpoint with highest validation pass rate."""
+    """Find the checkpoint (snapshot ref) with highest validation pass rate."""
     train, validation = env_pairs[0]
     if validation is None:
         return None
@@ -147,85 +205,58 @@ def _select_best_validation_checkpoint(run_dir: Path, env_pairs: list[EnvPair]) 
     if not train_run_dir.exists():
         return None
 
-    best_step = None
+    max_step = _max_edited_step(train_run_dir)
+    best_ref = None
     best_score = -1.0
-    best_step_info = ""
+    best_info = ""
 
-    # Check all training steps (including step 0)
-    for step_dir in sorted(train_run_dir.glob("step_*")):
-        step_match = re.search(r"step_(\d+)", step_dir.name)
-        if not step_match:
-            continue
-        step = int(step_match.group(1))
+    for mdir_name, summary in _iter_score_candidates(train_run_dir, validation.name):
+        score = summary.get("assertion_pass_rate", 0.0)
+        if score > best_score:
+            best_score = score
+            best_ref = _checkpoint_for_measurement(mdir_name, max_step)
+            tests_passed = sum(1 for t in summary.get("tests", []) if t.get("passed", False))
+            total_tests = summary.get("total_tests", 0)
+            best_info = f"{mdir_name} -> {best_ref}: {score:.1%} pass rate ({tests_passed}/{total_tests} tests)"
+            print(f"  Found better checkpoint: {best_info}")
 
-        # Parse pass rate from validation evaluation_summary.json
-        summary_file = step_dir / validation.name / "run" / "evaluation_summary.json"
-        if not summary_file.exists():
-            continue
-
-        try:
-            with summary_file.open() as f:
-                summary = json.load(f)
-                score = summary.get("assertion_pass_rate", 0.0)
-                tests_passed = sum(1 for t in summary.get("tests", []) if t.get("passed", False))
-                total_tests = summary.get("total_tests", 0)
-
-            if score > best_score:
-                best_score = score
-                best_step = step
-                best_step_info = f"step {step}: {score:.1%} pass rate ({tests_passed}/{total_tests} tests)"
-                print(f"  Found better checkpoint: {best_step_info}")
-        except Exception as e:
-            print(f"  Warning: Could not parse {summary_file}: {e}")
-            continue
-
-    if best_step is not None:
-        print(f"\n  Best validation checkpoint: {best_step_info}")
-        return f"post_step_{best_step:03d}"
+    if best_ref is not None:
+        print(f"\n  Best validation checkpoint: {best_info}")
+        return best_ref
 
     return None
 
 
 def _select_best_train_checkpoint(run_dir: Path, env_pairs: list[EnvPair]) -> str | None:
-    """Find the checkpoint with highest training pass rate."""
+    """Find the checkpoint (snapshot ref) with highest training pass rate."""
     train, _ = env_pairs[0]
 
     train_run_dir = run_dir / train.name
     if not train_run_dir.exists():
         return None
 
-    best_step = None
+    max_step = _max_edited_step(train_run_dir)
+    best_ref = None
     best_score = -1.0
 
-    # Check all training steps
-    for step_dir in sorted(train_run_dir.glob("step_*")):
-        step_match = re.search(r"step_(\d+)", step_dir.name)
-        if not step_match:
-            continue
-        step = int(step_match.group(1))
+    for mdir_name, summary in _iter_score_candidates(train_run_dir, train.name):
+        score = summary.get("assertion_pass_rate", 0.0)
+        if score > best_score:
+            best_score = score
+            best_ref = _checkpoint_for_measurement(mdir_name, max_step)
 
-        # Parse pass rate from training evaluation_summary.json
-        summary_file = step_dir / train.name / "run" / "evaluation_summary.json"
-        if not summary_file.exists():
-            continue
-
-        try:
-            with summary_file.open() as f:
-                summary = json.load(f)
-                score = summary.get("assertion_pass_rate", 0.0)
-
-            if score > best_score:
-                best_score = score
-                best_step = step
-        except Exception:
-            continue
-
-    return f"post_step_{best_step:03d}" if best_step is not None else None
+    return best_ref
 
 
 def _restore_checkpoint(checkpoint_name: str, target_dir: Path, run_dir: Path) -> None:
-    """Restore target_dir to a specific checkpoint."""
-    # Find the snapshots git repo
+    """Restore target_dir to a specific checkpoint snapshot.
+
+    Delegates to ``TargetSnapshots.rollback`` (read-tree --reset + clean -fdx) so
+    the work-tree ends up *byte-for-byte* equal to the snapshot. A manual
+    ``git checkout <sha> -- .`` would only overwrite tracked paths and leave
+    files a later step added behind, producing a tree no evaluation ever scored.
+    """
+    # Find the snapshots git ledger (each env's run dir owns one).
     snapshots_dir = None
     for env_dir in run_dir.iterdir():
         if not env_dir.is_dir():
@@ -239,45 +270,22 @@ def _restore_checkpoint(checkpoint_name: str, target_dir: Path, run_dir: Path) -
         print(f"  Warning: Could not find snapshots.git to restore {checkpoint_name}")
         return
 
-    # Resolve checkpoint_name to commit hash
-    # The checkpoint name is stored as a commit message, not a branch/tag
-    resolve_result = subprocess.run(
-        [
-            "git",
-            f"--git-dir={snapshots_dir}",
-            "log",
-            "--all",
-            "--oneline",
-            "--grep",
-            f"^{checkpoint_name}$",
-            "--format=%H",
-        ],
-        capture_output=True,
-        text=True,
-    )
+    snapshots = TargetSnapshots(target_dir=target_dir, ledger_dir=snapshots_dir)
 
-    if resolve_result.returncode != 0 or not resolve_result.stdout.strip():
+    # Checkpoint names are commit messages, not refs — resolve via the ledger log.
+    resolve = snapshots._git(
+        "log", "--all", "--grep", f"^{checkpoint_name}$", "--format=%H", check=False
+    )
+    if resolve.returncode != 0 or not resolve.stdout.strip():
         print(f"  Warning: Could not resolve checkpoint {checkpoint_name} to commit hash")
         return
 
-    commit_hash = resolve_result.stdout.strip().split("\n")[0]
+    commit_hash = resolve.stdout.strip().split("\n")[0]
 
-    # Restore files from git
-    result = subprocess.run(
-        [
-            "git",
-            f"--git-dir={snapshots_dir}",
-            f"--work-tree={target_dir}",
-            "checkout",
-            commit_hash,
-            "--",
-            ".",
-        ],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        snapshots.rollback(commit_hash)
+    except Exception as e:
+        print(f"  Warning: Failed to restore checkpoint {checkpoint_name}: {e}")
+        return
 
-    if result.returncode != 0:
-        print(f"  Warning: Failed to restore checkpoint {checkpoint_name}: {result.stderr}")
-    else:
-        print(f"  Restored target_dir to {checkpoint_name}")
+    print(f"  Restored target_dir to {checkpoint_name}")

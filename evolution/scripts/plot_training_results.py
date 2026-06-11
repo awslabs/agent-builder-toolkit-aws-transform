@@ -12,8 +12,8 @@ Usage:
 import json
 import re
 from pathlib import Path
+
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 
 
 def collect_data(run_dir: Path):
@@ -245,7 +245,7 @@ def print_summary(data):
     # Test results
     if data["test_before_pass_rate"] and data["test_after_pass_rate"]:
         change = data["test_after_pass_rate"] - data["test_before_pass_rate"]
-        print(f"\nTest Set Performance:")
+        print("\nTest Set Performance:")
         print(f"  Before Training:  {data['test_before_pass_rate']:.1f}%")
         print(f"  After Training:   {data['test_after_pass_rate']:.1f}%")
         print(f"  Change:           {change:+.1f}% {'⚠️ DEGRADED' if change < 0 else '✓ IMPROVED'}")
@@ -269,5 +269,5 @@ if __name__ == "__main__":
     print("Generating plot...")
     plot_results(data, output_path)
 
-    print(f"\n✓ Done! Open the plot with:")
+    print("\n✓ Done! Open the plot with:")
     print(f"  xdg-open {output_path}")

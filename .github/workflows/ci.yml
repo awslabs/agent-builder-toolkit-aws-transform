@@ -40,6 +40,11 @@ jobs:
       package-path: packages/sdk
       extra-deps: packages/types packages/mcp-client
 
+  evolution:
+    uses: ./.github/workflows/_test-package.yml
+    with:
+      package-path: evolution
+
   docs-freshness:
     runs-on: ubuntu-latest
     steps:

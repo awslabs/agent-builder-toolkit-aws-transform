@@ -7,7 +7,6 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
-
 log = logging.getLogger(__name__)
 
 

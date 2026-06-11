@@ -3,13 +3,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """Test script for evolution history module."""
 
-from pathlib import Path
-import tempfile
 import json
+import tempfile
+from pathlib import Path
 
 from harness_evolver.evolution_history import (
-    EvolutionHistory,
     EvaluationStats,
+    EvolutionHistory,
     StepDiff,
     get_code_diff_command,
 )

@@ -20,13 +20,12 @@ support the train/validation/test split before running a real evolution):
 - Full: full slices, budget=5 (comprehensive)
 """
 
-import anyio
 import shutil
 from pathlib import Path
 
-from harness_evolver import Orchestrator, configure_logging
+import anyio
 from env_configs.agent_builder_env import make_env as make_agent_env
-
+from harness_evolver import Orchestrator, configure_logging
 
 configure_logging()
 
@@ -34,19 +33,56 @@ configure_logging()
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+def _slice_upper_bound(test_slice: str) -> int:
+    """Highest scenario index a slice spec needs present (for preflight)."""
+    if ":" in test_slice:
+        _, end_s = test_slice.split(":")
+        # Open-ended ("0:") needs at least 1 scenario; we can't know the real
+        # upper bound without the data, so treat it as 1 for the count check.
+        return int(end_s) if end_s else 1
+    return int(test_slice) + 1
+
+
+def _preflight_scenarios(config: dict) -> None:
+    """Fail fast (with guidance) if test_samples can't satisfy the slices."""
+    from env_configs.agent_builder_env import TEST_DATA_DIR
+    from eval_runner.execution.loader import load_scenarios
+
+    total = len(load_scenarios(TEST_DATA_DIR))
+    needed = max(
+        _slice_upper_bound(config["train_slice"]),
+        _slice_upper_bound(config["validation_slice"]),
+        _slice_upper_bound(config["test_slice"]),
+    )
+    if total < needed:
+        raise SystemExit(
+            f"Not enough eval scenarios to run this mode.\n"
+            f"  Found {total} scenario(s) in {TEST_DATA_DIR}\n"
+            f"  Slices (train={config['train_slice']}, "
+            f"validation={config['validation_slice']}, test={config['test_slice']}) "
+            f"need at least {needed}.\n"
+            f"Populate {TEST_DATA_DIR} with more scenarios, or pick smaller "
+            f"slices, before running a real evolution."
+        )
+
+
 async def main():
     """Run evolution on the AWS Transform agent-builder agent."""
 
     # Configuration - adjust these as needed
-    RUN_MODE = "full"  # quick | standard | full
+    RUN_MODE = "quick"  # quick | standard | full
 
+    # Slices index into the scenarios loaded from test_samples/. Each mode needs
+    # at least `test_slice`'s upper bound scenarios present; with fewer, the env
+    # now raises rather than silently producing empty val/test splits. Populate
+    # test_samples/ to match the mode you run (e.g. "full" needs >= 50 scenarios).
     configs = {
         "quick": {
             "train_slice": "0:2",
             "validation_slice": "2:4",
             "test_slice": "4:6",
             "budget": 5,
-            "early_stopping": 3,  # Phase 2: Aggressive for quick testing
+            "early_stopping": 3,
             "run_dir": "runs/agent_builder_quick",
         },
         "standard": {
@@ -54,21 +90,27 @@ async def main():
             "validation_slice": "10:15",
             "test_slice": "15:20",
             "budget": 5,
-            "early_stopping": 3,  # Phase 2: Recommended patience
+            "early_stopping": 3,
             "run_dir": "runs/agent_builder_standard",
         },
         "full": {
-            "train_slice": "0:30",        # Phase 4: Reduced from 0:30 (less training data)
-            "validation_slice": "30:40",  # Phase 4: Increased from 30:40 (more validation)
-            "test_slice": "40:50",        # Phase 4: Increased from 40:50 (more test data)
+            "train_slice": "0:30",
+            "validation_slice": "30:40",
+            "test_slice": "40:50",
             "budget": 5,
-            "early_stopping": 3,          # Phase 2: Early stopping enabled
+            "early_stopping": 3,
             "run_dir": "runs/agent_builder_full",
         },
     }
 
     config = configs[RUN_MODE]
     run_dir = _REPO_ROOT / config["run_dir"]
+
+    # Preflight: make sure the committed test_samples can satisfy every slice
+    # before we spend a single (expensive, live-ACP) eval. Without this the run
+    # would proceed until an empty val/test slice raises mid-flight — or, worse,
+    # used to silently produce empty splits.
+    _preflight_scenarios(config)
 
     # Clean previous run
     if run_dir.exists():
@@ -102,8 +144,8 @@ async def main():
     print(f"  Test slice: {config['test_slice']}")
     print(f"  Budget: {config['budget']}")
     print(f"  Early stopping patience: {config.get('early_stopping', 0)}")
-    print(f"  Model selection: validation")
-    print(f"  Regularization: enabled (via prompt)")
+    print("  Model selection: validation")
+    print("  Regularization: enabled (via prompt)")
     print(f"  Output: {run_dir}")
 
     orch = Orchestrator(run_dir=run_dir)

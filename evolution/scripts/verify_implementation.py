@@ -8,7 +8,6 @@ Usage:
     python scripts/verify_implementation.py
 """
 
-import ast
 import sys
 from pathlib import Path
 

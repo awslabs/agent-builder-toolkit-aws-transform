@@ -11,8 +11,12 @@ The Python package (`harness_evolver`, under [`src/`](src/harness_evolver/)) is
 **engine-agnostic**: it drives any `Environment` whose
 `run(target_dir, artifacts_dir)` callback evaluates the current target and
 leaves an `evaluation_summary.json` behind. In this repo that callback drives
-the in-repo evaluation framework (`../evaluation/src/eval_runner`), so
-**evolution and plain evaluation share one engine** and can never diverge.
+the in-repo evaluation framework (`../evaluation/src/eval_runner`). Via the
+**adapter** path (entry point A below — the `agent-builder-eval evolve` verb),
+evolution and the plain `run` verb share the *same* `eval_runner` grading path,
+so they can't drift apart. The self-contained `experiment/` script (entry point
+B) is a convenience harness that emits the same `evaluation_summary.json`
+contract but wires its own driver; prefer A when the two must stay in lockstep.
 
 ---
 
@@ -83,7 +87,7 @@ sets:
 | **Training set** | `--train-slice` of the scenarios — the evolver sees these failures and edits against them |
 | **Validation set** | `--validation-slice` — used for early stopping and to pick the best checkpoint; the evolver only sees it *after* it has already edited (step > 0) |
 | **Test set** | `--test-slice` — measured once before and once after the whole run; **never** shown to the evolver |
-| **Checkpoint** | A snapshot of the agent definition after each step (`post_step_NNN`) |
+| **Checkpoint** | A git snapshot of the agent definition. Each step takes two: `pre_step_NNN` (state before that step's edit) and `post_step_NNN` (state after it). Selection restores the snapshot the *winning score actually measured* — `baseline` or `post_step_{N-1}`, see "After the loop" — not necessarily the step it's labeled with. |
 | **Early stopping** | Stop when validation pass rate stops improving for `patience` steps |
 | **Generalization gap** | Train pass rate − validation pass rate; a large gap means the evolver overfit to the scenarios it saw |
 
@@ -145,10 +149,12 @@ For each step `0 … budget`:
             └─────────────────────────────────────────────────────────┘
 ```
 
-The last iteration (`step == budget`, or the step that triggers early stopping)
-is **measurement-only** — it runs the scenarios one more time without editing, so
-the final data point is never dropped. It lands in `final_eval/` instead of
-`step_NNN/`.
+When the loop runs to `step == budget`, the last iteration is
+**measurement-only** — it re-runs the scenarios without editing, so the final
+data point is never dropped, and it lands in `final_eval/`. Early stopping is
+different: it is detected partway through a normal `step_NNN` iteration (after
+that step's measurement), so the terminal data point for an early-stopped run
+lives in that `step_NNN/`, not `final_eval/`.
 
 **The contract.** Everything downstream — early stopping, checkpoint selection,
 the history file, the dashboard — reads a single JSON file the `run` callback
@@ -157,9 +163,23 @@ writes: `evaluation_summary.json`, with at least
 long as a `run` callback emits that schema, the loop works with any engine.
 
 **After the loop**, `run_experiment` selects the best checkpoint by
-`selection_metric` (default `validation`), restores the target directory to that
-`post_step_NNN` snapshot, and re-measures the held-out test set. So the agent you
-end up with is the one that validated best — not necessarily the last one.
+`selection_metric` (default `validation`) and restores the target directory to
+the snapshot **that score actually measured**, then re-measures the held-out
+test set. Because each step measures *before* it edits, the score recorded at
+`step_NNN` reflects the tree as it stood at the *end of the previous step*:
+`step_000` → `baseline`, and `step_NNN` (N>0) → `post_step_{NNN-1}`. (That's the
+snapshot guaranteed to exist: when early stopping breaks at step N, the loop
+records `step_NNN`'s score but never takes `pre_step_NNN`/`post_step_NNN`.) The
+terminal `final_eval` score reflects the last `post_step` snapshot. Selecting and
+restoring that exact snapshot is what makes "the agent you end up with is the one
+that validated best" true — including the case where *no* edit beat the baseline,
+which restores `baseline`.
+
+> The validation pass rate is itself optimistically biased: the evolver sees the
+> validation report from step 1 on, and selection arg-maxes over validation. Only
+> the **test** split — never shown to the evolver and never selected on — is an
+> honest generalization estimate. Treat the before/after **test** delta, not the
+> validation number, as the result.
 
 ---
 
@@ -444,17 +464,17 @@ the [evaluation README](../evaluation/README.md) for the unified CLI.
 - **Bedrock auth / `NoCredentialsError`.** Set `AWS_PROFILE` (or other boto3
   credentials) before running. The setup script's credential check catches this.
 - **Empty / degenerate split.** With only a handful of scenarios in
-  `test_samples/`, the validation and test slices may be empty (the `run`
-  callback writes an `ERROR.txt` and returns). Add more scenarios, point at a
-  generated suite, or shrink the slices.
+  `test_samples/`, a requested slice can resolve to empty. The `run` callback now
+  **raises** in that case (and the standalone script preflights all slices before
+  spending any eval) rather than silently scoring 0, so the run stops with a clear
+  message. Add more scenarios, point at a generated suite, or shrink the slices.
 - **Analyst returns "did not produce a report".** The harness retries up to 3
   times. If it persists, inspect
   `runs/<run>/<env>/step_NNN/<env>/analyst_output/` and adjust the prompt in
   [`src/harness_evolver/analyst.py`](src/harness_evolver/analyst.py).
 - **Pass rate jumps around between runs.** Expected — both the agent under test
   and the LLM judge are non-deterministic. Trust the validation/test split and
-  the trend across steps, not a single number.
-- **`verify_implementation.py` Phase-4 failures.** A known pre-existing quirk: the
-  check expects slice values that don't match the experiment script's `full`
-  mode. Unrelated to the loop's correctness.
+  the trend across steps, not a single number. Note the **validation** number is
+  optimistically biased (the evolver sees it and selection arg-maxes on it); only
+  the held-out **test** before/after delta is an honest generalization estimate.
 ```
