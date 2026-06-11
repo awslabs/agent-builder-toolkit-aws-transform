@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="540" height="220" viewBox="0 0 540 220" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <style>
+    .ink { fill: #16191f; }
+  </style>
+
+  <!-- legend card with dark navy border -->
+  <rect x="20.5" y="20.5" width="499" height="179" rx="6" fill="#ffffff" stroke="#16263f" stroke-width="1.6"/>
+
+  <!-- title -->
+  <text x="270" y="62" class="ink" font-size="24" font-weight="700" text-anchor="middle">Environment Type</text>
+
+  <!-- row 1: ATX Service (light green) -->
+  <rect x="48" y="92" width="150" height="36" rx="2" fill="#d4edda" stroke="#b7e0c0" stroke-width="1.4"/>
+  <text x="258" y="116" class="ink" font-size="20" font-weight="700">ATX Service</text>
+
+  <!-- row 2: Partner Account (light blue) -->
+  <rect x="48" y="148" width="150" height="36" rx="2" fill="#cfe2f3" stroke="#9fc5e8" stroke-width="1.4"/>
+  <text x="258" y="172" class="ink" font-size="20" font-weight="700">Partner Account</text>
+</svg>
