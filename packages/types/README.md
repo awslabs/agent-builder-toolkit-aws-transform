@@ -18,7 +18,7 @@ No import or code change required. Once installed, your type checker picks up th
 import boto3
 
 # Your IDE now knows the full shape of this client.
-client = boto3.client("elasticgumbyagenticservice")
+client = boto3.client("transformagenticservice")
 
 # Autocomplete works on method names and arguments.
 response = client.list_agents(...)
@@ -30,8 +30,23 @@ For explicit annotations, you can import type defs directly:
 from agent_builder_types import TransformAgenticServiceClient
 from agent_builder_types.type_defs import GetAgentInstanceResponseTypeDef
 
-client: TransformAgenticServiceClient = boto3.client("elasticgumbyagenticservice")
+client: TransformAgenticServiceClient = boto3.client("transformagenticservice")
 response: GetAgentInstanceResponseTypeDef = client.get_agent_instance(...)
+```
+
+## Regenerating stubs
+
+If the service model (`service-2.json`) is updated, regenerate stubs:
+
+```bash
+pip install mypy-boto3-builder
+python scripts/generate_stubs.py --model ../sdk/src/agent_builder_sdk/botocore_models/transformagenticservice/2018-05-10/service-2.json
+```
+
+Validate that current stubs match the model (useful in CI):
+
+```bash
+python scripts/generate_stubs.py --model ../sdk/src/agent_builder_sdk/botocore_models/transformagenticservice/2018-05-10/service-2.json --validate
 ```
 
 ## Requirements
