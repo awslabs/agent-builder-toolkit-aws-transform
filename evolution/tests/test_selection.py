@@ -63,6 +63,10 @@ def test_measurement_to_checkpoint_mapping():
     assert _checkpoint_for_measurement("step_000", max_step=3) == "baseline"
     assert _checkpoint_for_measurement("step_002", max_step=3) == "post_step_001"
     assert _checkpoint_for_measurement("final_eval", max_step=3) == "post_step_003"
+    # No edit step ran (budget=0 -> only final_eval, max_step=-1): final_eval
+    # measured the un-edited tree, so it maps to baseline, not a never-created
+    # post_step_000.
+    assert _checkpoint_for_measurement("final_eval", max_step=-1) == "baseline"
 
 
 def test_selection_picks_measured_tree_not_post_edit():
@@ -91,8 +95,12 @@ def test_selection_includes_final_eval():
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         # The final edit, measured only in final_eval/, is the best — must win.
+        # Fixture chosen so the answer doesn't collide with the buggy mapping
+        # that ignored final_eval: step_000 (-> baseline) scores highest among
+        # the step_* dirs, so a final_eval-blind selector would return
+        # "baseline", whereas the correct one returns post_step_001.
         run_dir = _make_run_dir(
-            tmp, {"step_000": 0.30, "step_001": 0.40, "final_eval": 0.95}
+            tmp, {"step_000": 0.90, "step_001": 0.40, "final_eval": 0.95}
         )
         best = _select_best_validation_checkpoint(run_dir, [(_Env("train"), _Env("val"))])
         assert best == "post_step_001"  # last edited step index is 1
@@ -145,6 +153,56 @@ def test_restore_checkpoint_reconstructs_selected_tree():
         _restore_checkpoint("baseline", target, run_dir)
         assert (target / "AGENT.md").read_text() == "baseline\n"
         assert not (target / "new.md").exists()
+
+
+def test_zero_edit_run_selects_and_restores_baseline():
+    """budget=0 produces only final_eval (no step_* dirs, no post_step snapshots).
+
+    The final eval measured the baseline tree, so selection must map to
+    ``baseline`` and restore must succeed — not resolve to a never-created
+    ``post_step_000`` that silently no-ops while the run reports success.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        target = tmp / "target"
+        target.mkdir()
+        run_dir = tmp / "run"
+        train_run = run_dir / "train"
+        ledger = train_run / "snapshots.git"
+        ledger.parent.mkdir(parents=True)
+
+        snaps = TargetSnapshots(target_dir=target, ledger_dir=ledger)
+        (target / "AGENT.md").write_text("baseline\n")
+        snaps.snapshot("baseline")  # the only snapshot a budget=0 run takes
+
+        # Only final_eval was scored (no edit step ran).
+        _write_summary(
+            train_run / "final_eval" / "val" / "run" / "evaluation_summary.json", 0.5
+        )
+
+        best = _select_best_validation_checkpoint(run_dir, [(_Env("train"), _Env("val"))])
+        assert best == "baseline"
+
+        # Restore must actually happen (return True), not silently fail.
+        (target / "AGENT.md").write_text("drift\n")
+        assert _restore_checkpoint(best, target, run_dir) is True
+        assert (target / "AGENT.md").read_text() == "baseline\n"
+
+
+def test_restore_reports_failure_for_unknown_checkpoint():
+    """A checkpoint that doesn't resolve must return False, not pretend success."""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = Path(tmp)
+        target = tmp / "target"
+        target.mkdir()
+        run_dir = tmp / "run"
+        ledger = run_dir / "train" / "snapshots.git"
+        ledger.parent.mkdir(parents=True)
+        snaps = TargetSnapshots(target_dir=target, ledger_dir=ledger)
+        (target / "AGENT.md").write_text("baseline\n")
+        snaps.snapshot("baseline")
+
+        assert _restore_checkpoint("post_step_000", target, run_dir) is False
 
 
 def test_early_stop_selection_resolves_to_an_existing_snapshot():

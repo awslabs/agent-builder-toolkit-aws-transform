@@ -50,10 +50,10 @@ How to work:
 
 6. **Prefer simplicity and avoid unnecessary complexity.**
 
-   a) **Complexity Budget**: Before adding new content, check current file size.
-      If AGENT.md or instruction file is >700 lines, STRONGLY prefer
-      consolidation, removal, or restructuring over adding new sections.
-      If adding >50 lines in one edit, question whether a simpler
+   a) **Complexity Budget**: Before adding new content, gauge how large the
+      instruction file you're editing already is. The longer it is, the more
+      STRONGLY you should prefer consolidation, removal, or restructuring over
+      adding new sections. For any sizable addition, question whether a simpler
       intervention (clarification, removal of ambiguity, better structure)
       would achieve the same outcome.
 
@@ -186,42 +186,32 @@ for checking generalization, not for finding new bugs to fix.
     else:
         validation_block = ""
 
-    # Complexity warning if file is large
-    agent_md = target_dir / "AGENT.md"
-    complexity_warning = ""
-    if agent_md.exists():
-        line_count = len(agent_md.read_text().splitlines())
-        if line_count > 700:
-            complexity_warning = f"""
-## ⚠️ COMPLEXITY WARNING
+    # Complexity-control reminder. Deliberately file-agnostic and
+    # threshold-free: harness_evolver is the generic core, so it can't assume the
+    # target's definition lives in a particular file (AGENT.md here, but could be
+    # AGENTS.md / CLAUDE.md / a prompt .txt / several files) or know what "too
+    # large" means for it. The guidance frames the budget as a principle the
+    # agent applies to whatever it is actually editing; concrete simplicity rules
+    # live in SYSTEM_PROMPT.
+    complexity_warning = """
+## Complexity budget
 
-AGENT.md is currently {line_count} lines (>700 line threshold).
-
-**BEFORE ADDING MORE:**
-1. Check if you can REMOVE unclear/contradictory sections
-2. Check if you can CONSOLIDATE redundant instructions
-3. Check if clarifying existing text would be sufficient
-4. Question whether this edit will generalize (check validation!)
-
-Growing the file further may harm validation performance.
-
-"""
-        elif line_count > 600:
-            complexity_warning = f"""
-## Complexity Note
-
-AGENT.md is currently {line_count} lines. Approaching the 700-line threshold.
-Prefer targeted fixes over large additions.
+Before growing any instruction file, weigh whether a simpler intervention —
+removing an unclear or contradictory section, consolidating redundant ones, or
+clarifying existing text — would address the mechanism as well as new content.
+Large additions that don't improve validation are usually overfitting; prefer
+the smallest, most general change.
 
 """
 
     # Evolution history section (if provided)
     history_section = ""
     if history_context:
-        # The evolver's toolset is Read/Glob/Grep/Write/Edit — deliberately no
-        # Bash (see evolver.py write-confinement), so it cannot run `git diff`
-        # against the snapshot SHAs. The history's snapshot references are for a
-        # human reading the run later, not an action the agent can take.
+        # The evolver's available tools are pinned to Read/Glob/Grep/Write/Edit
+        # (see evolver.py: ``tools=[...]`` plus the PreToolUse confinement hook) —
+        # no Bash, so it cannot run `git diff` against the snapshot SHAs. The
+        # history's snapshot references are for a human reading the run later, not
+        # an action the agent can take.
         snapshot_note = ""
 
         history_section = f"""## Evolution History (Cross-Step Context)

@@ -10,11 +10,10 @@ from pathlib import Path
 from claude_agent_sdk import (
     ClaudeAgentOptions,
     ClaudeSDKClient,
-    PermissionResultAllow,
-    PermissionResultDeny,
 )
 
 from harness_evolver.analyst import analyze
+from harness_evolver.confinement import confinement_hooks
 from harness_evolver.environment import Environment
 from harness_evolver.evolution_history import (
     EvaluationStats,
@@ -70,52 +69,11 @@ async def _run_env_and_evaluate(
     return env.name, report
 
 
-# Tools whose file_path argument we confine to target_dir.
-_WRITE_TOOLS = {"Write", "Edit", "MultiEdit"}
-
-
-def _make_confine_to_target(target_dir: Path):
-    """Build a can_use_tool callback that confines writes to target_dir.
-
-    ``cwd`` only sets the SDK's resolution base for *relative* paths; it does not
-    sandbox the filesystem, and ``permission_mode="acceptEdits"`` auto-approves
-    every Write/Edit. Since the edit ``file_path`` is LLM-driven over input that
-    ultimately derives from the agent-under-test's own transcripts (a prompt-
-    injection surface), an absolute or ``..`` path could write anywhere the
-    operator can. This callback rejects any write whose resolved path escapes
-    target_dir, closing that injection → arbitrary-file-write chain.
-    """
-    target_resolved = target_dir.resolve()
-
-    async def can_use_tool(tool_name: str, inp: dict, context):
-        if tool_name not in _WRITE_TOOLS:
-            return PermissionResultAllow()
-
-        raw = inp.get("file_path")
-        if not raw:
-            return PermissionResultDeny(
-                message=f"{tool_name} called without a file_path."
-            )
-
-        # Resolve relative paths against target_dir (the agent's cwd), mirroring
-        # the SDK, then require the result to stay inside target_dir.
-        candidate = Path(raw)
-        if not candidate.is_absolute():
-            candidate = target_resolved / candidate
-        resolved = candidate.resolve()
-
-        if resolved == target_resolved or target_resolved in resolved.parents:
-            return PermissionResultAllow()
-
-        return PermissionResultDeny(
-            message=(
-                f"Refusing {tool_name} to {raw!r}: path resolves to {resolved}, "
-                f"outside the editable target directory {target_resolved}. "
-                f"Only edit files inside the target directory."
-            )
-        )
-
-    return can_use_tool
+# Cap on the inner agent's conversation turns per evolution step. The --budget
+# flag bounds the *outer* evolution loop (number of steps); under acceptEdits a
+# single step would otherwise loop unbounded. One step is "read reports, make a
+# few edits, summarize" — generous but finite.
+_MAX_TURNS_PER_STEP = 60
 
 
 async def _run_evolver_step(
@@ -123,21 +81,31 @@ async def _run_evolver_step(
     edit_prompt: str,
     trace_path: Path,
 ) -> None:
-    """Invoke the evolver agent with full edit tools. Captures the stream."""
+    """Invoke the evolver agent with edit tools confined to target_dir.
+
+    Confinement is layered:
+      - ``tools`` pins the available tool set, so Bash/NotebookEdit are not even
+        exposed to the model (``allowed_tools`` only auto-approves; it does not
+        restrict availability).
+      - a ``PreToolUse`` hook gates every tool call and denies any write whose
+        path escapes target_dir (and default-denies unrecognized tools). The
+        hook — not ``can_use_tool`` — is used because ``acceptEdits``
+        auto-approves Write/Edit before ``can_use_tool`` would ever see them.
+    """
     options = ClaudeAgentOptions(
         cwd=str(target_dir),
+        tools=["Read", "Glob", "Grep", "Write", "Edit"],
         allowed_tools=["Read", "Glob", "Grep", "Write", "Edit"],
         permission_mode="acceptEdits",
         system_prompt=SYSTEM_PROMPT,
-        can_use_tool=_make_confine_to_target(target_dir),
+        hooks=confinement_hooks(target_dir),
+        max_turns=_MAX_TURNS_PER_STEP,
     )
 
-    # Use ClaudeSDKClient (not the one-shot query()) because can_use_tool sends
-    # its allow/deny verdict back to the CLI *over stdin*. query()'s streaming
-    # path calls end_input() as soon as the prompt iterator is exhausted, and it
-    # only keeps stdin open for sdk_mcp_servers/hooks — not a can_use_tool-only
-    # setup — so the permission response could fail to send. ClaudeSDKClient
-    # holds the session (and stdin) open until disconnect, so the callback works.
+    # Use ClaudeSDKClient (not the one-shot query()) because the PreToolUse hook
+    # sends its allow/deny verdict back to the CLI *over stdin*. ClaudeSDKClient
+    # holds the session (and stdin) open until disconnect, so the hook can
+    # respond throughout the turn.
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     with trace_path.open("w") as f:
         async with ClaudeSDKClient(options=options) as client:

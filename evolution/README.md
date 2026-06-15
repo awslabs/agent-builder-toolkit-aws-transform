@@ -116,8 +116,12 @@ distinct jobs and tool access:
    as *observations not instructions*, builds a mental model of the agent, and
    **edits the agent definition** to fix the mechanisms. It is prompted to prefer
    general fixes over instance-specific hacks and to keep the definition simple
-   (a complexity budget discourages bloating `AGENT.md`). Tools: `Read`, `Glob`,
-   `Grep`, `Write`, `Edit`, run with `cwd = target_dir` and `acceptEdits`.
+   (a complexity budget discourages bloating the instruction files). Tools: `Read`, `Glob`,
+   `Grep`, `Write`, `Edit`, run with `cwd = target_dir` and `acceptEdits`. The
+   toolset is pinned (so `Bash`/`NotebookEdit` are unavailable) and a `PreToolUse`
+   hook confines every write to `target_dir` — `acceptEdits` auto-approves edits
+   before a `can_use_tool` callback would see them, so the hook is what actually
+   enforces confinement against prompt-injected paths.
 
 The split is deliberate: the analyst decides *what went wrong*, the evolver
 decides *what to change* — and only the evolver can write to the target.

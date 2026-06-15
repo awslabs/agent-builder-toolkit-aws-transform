@@ -124,16 +124,12 @@ def main():
             "pattern": "c) **Remove Before Adding**:",
         },
         {
-            "name": "Complexity warning logic",
-            "pattern": "COMPLEXITY WARNING",
+            "name": "Complexity-budget reminder (file-agnostic)",
+            "pattern": "## Complexity budget",
         },
         {
             "name": "Enhanced validation framing",
             "pattern": "GENERALIZATION CHECK",
-        },
-        {
-            "name": "AGENT.md line count check",
-            "pattern": "agent_md = target_dir / \"AGENT.md\"",
         },
     ]
 

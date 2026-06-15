@@ -118,15 +118,17 @@ class Orchestrator:
         # Select best checkpoint based on metric
         if selection_metric == "validation":
             best_checkpoint = _select_best_validation_checkpoint(run_dir, env_pairs)
-            if best_checkpoint:
-                _restore_checkpoint(best_checkpoint, env_pairs[0][0].target_dir, run_dir)
+            if best_checkpoint and _restore_checkpoint(
+                best_checkpoint, env_pairs[0][0].target_dir, run_dir
+            ):
                 print(f"\n=== Model Selection: {best_checkpoint} (best validation) ===")
             else:
                 print("\n=== Model Selection: final (validation selection failed) ===")
         elif selection_metric == "train":
             best_checkpoint = _select_best_train_checkpoint(run_dir, env_pairs)
-            if best_checkpoint:
-                _restore_checkpoint(best_checkpoint, env_pairs[0][0].target_dir, run_dir)
+            if best_checkpoint and _restore_checkpoint(
+                best_checkpoint, env_pairs[0][0].target_dir, run_dir
+            ):
                 print(f"\n=== Model Selection: {best_checkpoint} (best training) ===")
             else:
                 print("\n=== Model Selection: final (training selection failed) ===")
@@ -154,12 +156,19 @@ def _checkpoint_for_measurement(measurement_dir_name: str, max_step: int) -> str
       - ``final_eval`` is the measurement-only pass after the last edit, so it
         measures ``post_step_{max_step}`` — the only post-edit tree no ``step_*``
         directory covers. Mapping it lets the final edit be selected.
+      - When no edit step ran (``max_step < 0``, e.g. ``budget=0``), ``final_eval``
+        measured the un-edited tree, so it maps to ``baseline``. Without this it
+        would map to a ``post_step_000`` snapshot that was never taken, and
+        restore would silently no-op while the run reported success.
     """
     m = re.search(r"step_(\d+)", measurement_dir_name)
     if m:
         step = int(m.group(1))
         return "baseline" if step == 0 else f"post_step_{step - 1:03d}"
-    # final_eval (or any non-step dir): the last edit's tree.
+    # final_eval (or any non-step dir): the last edit's tree, or baseline if no
+    # edit step ever ran.
+    if max_step < 0:
+        return "baseline"
     return f"post_step_{max_step:03d}"
 
 
@@ -186,13 +195,18 @@ def _iter_score_candidates(train_run_dir: Path, env_name: str):
 
 
 def _max_edited_step(train_run_dir: Path) -> int:
-    """Highest ``step_NNN`` index that ran an edit (i.e. has a ``post_step``)."""
+    """Highest ``step_NNN`` index that ran an edit (i.e. has a ``post_step``).
+
+    Returns ``-1`` when no edit step ran (e.g. ``budget=0`` produces only a
+    ``final_eval`` dir). ``_checkpoint_for_measurement`` reads that as "the final
+    eval measured the baseline tree", not a never-created ``post_step_000``.
+    """
     steps = [
         int(m.group(1))
         for d in train_run_dir.glob("step_*")
         if (m := re.search(r"step_(\d+)", d.name))
     ]
-    return max(steps) if steps else 0
+    return max(steps) if steps else -1
 
 
 def _select_best_validation_checkpoint(run_dir: Path, env_pairs: list[EnvPair]) -> str | None:
@@ -248,13 +262,17 @@ def _select_best_train_checkpoint(run_dir: Path, env_pairs: list[EnvPair]) -> st
     return best_ref
 
 
-def _restore_checkpoint(checkpoint_name: str, target_dir: Path, run_dir: Path) -> None:
+def _restore_checkpoint(checkpoint_name: str, target_dir: Path, run_dir: Path) -> bool:
     """Restore target_dir to a specific checkpoint snapshot.
 
     Delegates to ``TargetSnapshots.rollback`` (read-tree --reset + clean -fdx) so
     the work-tree ends up *byte-for-byte* equal to the snapshot. A manual
     ``git checkout <sha> -- .`` would only overwrite tracked paths and leave
     files a later step added behind, producing a tree no evaluation ever scored.
+
+    Returns ``True`` if the restore happened, ``False`` if the checkpoint could
+    not be found/resolved/applied. A ``False`` return means target_dir was left
+    untouched — callers must not report the restore as successful.
     """
     # Find the snapshots git ledger (each env's run dir owns one).
     snapshots_dir = None
@@ -268,7 +286,7 @@ def _restore_checkpoint(checkpoint_name: str, target_dir: Path, run_dir: Path) -
 
     if not snapshots_dir:
         print(f"  Warning: Could not find snapshots.git to restore {checkpoint_name}")
-        return
+        return False
 
     snapshots = TargetSnapshots(target_dir=target_dir, ledger_dir=snapshots_dir)
 
@@ -278,7 +296,7 @@ def _restore_checkpoint(checkpoint_name: str, target_dir: Path, run_dir: Path) -
     )
     if resolve.returncode != 0 or not resolve.stdout.strip():
         print(f"  Warning: Could not resolve checkpoint {checkpoint_name} to commit hash")
-        return
+        return False
 
     commit_hash = resolve.stdout.strip().split("\n")[0]
 
@@ -286,6 +304,7 @@ def _restore_checkpoint(checkpoint_name: str, target_dir: Path, run_dir: Path) -
         snapshots.rollback(commit_hash)
     except Exception as e:
         print(f"  Warning: Failed to restore checkpoint {checkpoint_name}: {e}")
-        return
+        return False
 
     print(f"  Restored target_dir to {checkpoint_name}")
+    return True

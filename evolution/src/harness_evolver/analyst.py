@@ -7,6 +7,8 @@ from pathlib import Path
 
 from claude_agent_sdk import ClaudeAgentOptions, query
 
+from harness_evolver.confinement import confinement_hooks
+
 log = logging.getLogger(__name__)
 
 
@@ -84,11 +86,19 @@ async def analyze(
         "report."
     )
 
+    # The analyst writes only into its output_dir (cwd); it reads the artifacts
+    # and target source (outside output_dir), which the confinement hook allows
+    # for read tools. Bash/NotebookEdit are kept off the available toolset, and
+    # the PreToolUse hook confines every Write to output_dir and default-denies
+    # anything unrecognized — the analyst processes the agent-under-test's
+    # transcripts, the same prompt-injection surface the evolver faces.
     options = ClaudeAgentOptions(
         cwd=str(output_dir),
+        tools=["Read", "Glob", "Grep", "Write"],
         allowed_tools=["Read", "Glob", "Grep", "Write"],
         permission_mode="acceptEdits",
         system_prompt=SYSTEM_PROMPT,
+        hooks=confinement_hooks(output_dir),
     )
 
     last_err: Exception | None = None
