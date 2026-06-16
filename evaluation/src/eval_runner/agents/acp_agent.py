@@ -92,6 +92,7 @@ class ACPAgent:
             output=output,
             tool_calls=tool_calls,
             duration_ms=int(result.duration_seconds * 1000),
+            turn_count=result.turn_count,
         )
 
     @staticmethod

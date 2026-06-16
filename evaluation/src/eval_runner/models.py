@@ -30,12 +30,21 @@ from typing import Any
 
 @dataclass(frozen=True)
 class ExecutionResult:
-    """Result of executing a single test case against an agent."""
+    """Result of executing a single test case against an agent.
+
+    ``turn_count`` is the number of conversation turns the run actually reached
+    (``None`` when the backend does not track it). Compared against the test
+    case's ``max_turns`` it tells whether a run ended on its own (completed)
+    or was truncated by the turn budget — the signal the ``completeness``
+    metric uses, since the ACP engine consumes its ``__DONE__`` sentinel before
+    it ever lands in the transcript.
+    """
 
     transcript: str
     output: str
     tool_calls: list[dict] = field(default_factory=list)
     duration_ms: int | None = None
+    turn_count: int | None = None
 
 
 @dataclass(frozen=True)

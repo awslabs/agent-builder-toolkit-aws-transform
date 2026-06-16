@@ -134,7 +134,7 @@ test and grades transcripts with an LLM judge.
 | Layer | Where | Responsibility |
 |-------|-------|----------------|
 | Execution | `eval_runner.execution` (`EvalOrchestrator`) | Run the agent/skill over ACP → transcript |
-| Scoring | `eval_runner` (`MetricRegistry`) | `assertion_pass_rate` (deterministic) + `llm_judge` (LLM-as-judge) |
+| Scoring | `eval_runner` (`MetricRegistry`) | `assertion_pass_rate`, `tool_usage`, `error_handling`, `completeness` (deterministic) + `llm_judge` (LLM-as-judge) |
 | Orchestration | `eval_runner.cli` + `execution/report.py` | Run many via `EvaluationEngine`, aggregate, HTML dashboard |
 
 `eval_runner.ACPAgent` is the bridge: it converts a `TestCase` to an engine
@@ -153,6 +153,39 @@ engine's judge via `EvalOrchestrator.grade_transcript()`.
 - Per-assertion pass/fail, pass rate, token usage
 - Test result reporting (JSON results + HTML dashboard)
 - CLI: `list` / `run` / `report` / `clean`
+
+**Built-in metrics** (resolve by name in `metrics: [...]`; each scores 0–10 and
+passes at ≥ 7.0, so they combine cleanly in one run):
+
+| Metric | LLM? | What it scores | Per-test config (`metadata`) |
+|--------|------|----------------|------------------------------|
+| `assertion_pass_rate` | no | Fraction of deterministic assertions (`transcript_contains`, `output_contains`, `tool_called`) that pass | — (reads `assertions`) |
+| `tool_usage` | no | Whether `expected_tools` were called and `forbidden_tools` were avoided | `expected_tools: [...]`, `forbidden_tools: [...]` |
+| `error_handling` | no | Whether the transcript is free of a surfaced framework error (default marker: `ERROR:`) — error *absence*, not recovery quality | `error_markers: [...]` (optional override; replaces the default) |
+| `completeness` | no | Whether the run reached its designed end (finished before exhausting `max_turns`) **and** the final output is non-empty | `completion_markers: [...]` (optional; requires an explicit substring instead of the turn-budget signal) |
+| `llm_judge` | yes (Bedrock) | LLM-as-judge verdict over `llm_judge` assertions | — (reads `assertions`) |
+
+`tool_usage` and `completeness` **abstain** (score 10.0 / pass) when they have no
+signal to act on — `tool_usage` without `expected_tools`/`forbidden_tools`,
+`completeness` without a tracked turn count or `completion_markers` — so they are
+safe to enable globally and only "activate" when there's something to grade.
+`error_handling` is always active (a transcript free of framework errors is the
+universal expectation). Note `completeness` keys off the turn budget, **not** the
+ACP engine's `__DONE__` sentinel, which the orchestrator consumes before it
+reaches the transcript. Example test-case metadata:
+
+```json
+"metadata": {
+  "expected_tools": ["keyword_search"],
+  "forbidden_tools": ["delete_agent"]
+}
+```
+
+**Custom metrics:** implement the `MetricInterface` (a `name` property and an
+`evaluate(execution, test_case) -> MetricResult`) and register it:
+`MetricRegistry().register("my_metric", MyMetric)`. See
+`src/eval_runner/metrics/tool_usage.py` for a deterministic reference
+implementation.
 
 **Wiring for this repo** (`src/run_eval.py` + `agent_under_test/`):
 
