@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="640" viewBox="0 0 1120 640" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#5f6b7a"/>
+    </marker>
+  </defs>
+  <style>
+    .ink    { fill: #16191f; }
+    .muted  { fill: #5f6b7a; }
+    .lbl    { fill: #16191f; font-size: 13px; }
+    .elabel { fill: #5f6b7a; font-size: 13px; }
+    .box    { rx: 7; }
+    .edge   { stroke: #5f6b7a; stroke-width: 1.5; fill: none; }
+  </style>
+
+  <!-- canvas -->
+  <rect x="0.5" y="0.5" width="1119" height="639" fill="#ffffff" stroke="#e9ebed"/>
+
+  <!-- ============ LEGEND ============ -->
+  <g transform="translate(40,40)" font-size="12.5">
+    <rect x="0" y="0" width="16" height="16" rx="3" fill="#ffffff" stroke="#aab7b8" stroke-width="1.4"/>
+    <text x="24" y="12" class="muted">Local development step</text>
+    <rect x="200" y="0" width="16" height="16" rx="3" fill="#cfe2f3" stroke="#9fc5e8" stroke-width="1.4"/>
+    <text x="224" y="12" class="muted">ATX Service / partner-account compute</text>
+    <rect x="470" y="0" width="16" height="16" rx="3" fill="#d4edda" stroke="#b7e0c0" stroke-width="1.4"/>
+    <text x="494" y="12" class="muted">ATX platform / registry</text>
+  </g>
+
+  <!-- ============ TOP ROW ============ -->
+  <!-- Partner stick figure -->
+  <g transform="translate(60,98)" stroke="#16191f" stroke-width="1.6" fill="none" stroke-linecap="round">
+    <circle cx="20" cy="10" r="9" fill="#ffffff"/>
+    <line x1="20" y1="19" x2="20" y2="44"/>
+    <line x1="4" y1="28" x2="36" y2="28"/>
+    <line x1="20" y1="44" x2="6" y2="62"/>
+    <line x1="20" y1="44" x2="34" y2="62"/>
+  </g>
+  <text x="80" y="182" class="ink" font-size="14" font-weight="600" text-anchor="middle">Partner</text>
+
+  <!-- BaseAgent Package (document shape) -->
+  <g transform="translate(260,108)">
+    <path d="M0 6 a6 6 0 0 1 6 -6 h70 l24 24 v60 a6 6 0 0 1 -6 6 h-88 a6 6 0 0 1 -6 -6 z"
+          fill="#ffffff" stroke="#aab7b8" stroke-width="1.5"/>
+    <path d="M76 0 v18 a6 6 0 0 0 6 6 h18" fill="none" stroke="#aab7b8" stroke-width="1.5"/>
+    <text x="50" y="44" class="ink" font-size="13.5" font-weight="600" text-anchor="middle">BaseAgent</text>
+    <text x="50" y="62" class="ink" font-size="13.5" font-weight="600" text-anchor="middle">Package</text>
+  </g>
+
+  <!-- Row 1 boxes -->
+  <!-- Setup development environment -->
+  <rect x="30" y="226" width="166" height="64" rx="7" fill="#ffffff" stroke="#aab7b8" stroke-width="1.5"/>
+  <text x="113" y="252" class="ink" font-size="13.5" text-anchor="middle">Setup development</text>
+  <text x="113" y="270" class="ink" font-size="13.5" text-anchor="middle">environment</text>
+
+  <!-- Agent coding -->
+  <rect x="246" y="226" width="166" height="64" rx="7" fill="#ffffff" stroke="#aab7b8" stroke-width="1.5"/>
+  <text x="329" y="262" class="ink" font-size="13.5" text-anchor="middle">Agent coding</text>
+
+  <!-- Agent Local build -->
+  <rect x="462" y="226" width="166" height="64" rx="7" fill="#ffffff" stroke="#aab7b8" stroke-width="1.5"/>
+  <text x="545" y="252" class="ink" font-size="13.5" text-anchor="middle">Agent</text>
+  <text x="545" y="270" class="ink" font-size="13.5" text-anchor="middle">Local build</text>
+
+  <!-- Agent DevTesting -->
+  <rect x="678" y="226" width="166" height="64" rx="7" fill="#ffffff" stroke="#aab7b8" stroke-width="1.5"/>
+  <text x="761" y="252" class="ink" font-size="13.5" text-anchor="middle">Agent</text>
+  <text x="761" y="270" class="ink" font-size="13.5" text-anchor="middle">DevTesting</text>
+
+  <!-- ============ MIDDLE ROW ============ -->
+  <!-- Agent ECR container repository (top, blue) -->
+  <rect x="462" y="368" width="166" height="64" rx="7" fill="#cfe2f3" stroke="#9fc5e8" stroke-width="1.5"/>
+  <text x="545" y="394" class="ink" font-size="13.5" text-anchor="middle">Agent ECR</text>
+  <text x="545" y="412" class="ink" font-size="13.5" text-anchor="middle">container repository</text>
+
+  <!-- ATX platform (green) -->
+  <rect x="678" y="368" width="166" height="64" rx="7" fill="#d4edda" stroke="#b7e0c0" stroke-width="1.5"/>
+  <text x="761" y="394" class="ink" font-size="13.5" text-anchor="middle">ATX</text>
+  <text x="761" y="412" class="ink" font-size="13.5" text-anchor="middle">platform</text>
+
+  <!-- ATX Agent monitoring (blue) -->
+  <rect x="30" y="368" width="166" height="64" rx="7" fill="#cfe2f3" stroke="#9fc5e8" stroke-width="1.5"/>
+  <text x="113" y="394" class="ink" font-size="13.5" text-anchor="middle">ATX</text>
+  <text x="113" y="412" class="ink" font-size="13.5" text-anchor="middle">Agent monitoring</text>
+
+  <!-- ============ BOTTOM ROW ============ -->
+  <!-- ATX Agent in production (blue) -->
+  <rect x="30" y="520" width="166" height="64" rx="7" fill="#cfe2f3" stroke="#9fc5e8" stroke-width="1.5"/>
+  <text x="113" y="546" class="ink" font-size="13.5" text-anchor="middle">ATX</text>
+  <text x="113" y="564" class="ink" font-size="13.5" text-anchor="middle">Agent in production</text>
+
+  <!-- ATX Agent registry (green) -->
+  <rect x="246" y="520" width="166" height="64" rx="7" fill="#d4edda" stroke="#b7e0c0" stroke-width="1.5"/>
+  <text x="329" y="546" class="ink" font-size="13.5" text-anchor="middle">ATX</text>
+  <text x="329" y="564" class="ink" font-size="13.5" text-anchor="middle">Agent registry</text>
+
+  <!-- Agent Core runtime (blue) -->
+  <rect x="462" y="520" width="166" height="64" rx="7" fill="#cfe2f3" stroke="#9fc5e8" stroke-width="1.5"/>
+  <text x="545" y="546" class="ink" font-size="13.5" text-anchor="middle">Agent Core</text>
+  <text x="545" y="564" class="ink" font-size="13.5" text-anchor="middle">runtime</text>
+
+  <!-- ============ EDGES (top row, horizontal) ============ -->
+  <!-- Partner -> Setup (Setup) : vertical down into Setup box -->
+  <line x1="80" y1="188" x2="80" y2="224" class="edge" marker-end="url(#arrow)"/>
+  <rect x="60" y="198" width="40" height="16" fill="#ffffff"/>
+  <text x="80" y="210" class="elabel" text-anchor="middle">Setup</text>
+
+  <!-- Setup -> Agent coding (Coding) -->
+  <line x1="196" y1="258" x2="244" y2="258" class="edge" marker-end="url(#arrow)"/>
+  <rect x="198" y="244" width="46" height="16" fill="#ffffff"/>
+  <text x="221" y="256" class="elabel" text-anchor="middle">Coding</text>
+
+  <!-- BaseAgent Package -> Agent coding (Use) -->
+  <line x1="329" y1="200" x2="329" y2="224" class="edge" marker-end="url(#arrow)"/>
+  <rect x="313" y="202" width="32" height="16" fill="#ffffff"/>
+  <text x="329" y="214" class="elabel" text-anchor="middle">Use</text>
+
+  <!-- Agent coding -> Agent Local build (Build) -->
+  <line x1="412" y1="258" x2="460" y2="258" class="edge" marker-end="url(#arrow)"/>
+  <rect x="412" y="244" width="48" height="16" fill="#ffffff"/>
+  <text x="436" y="256" class="elabel" text-anchor="middle">Build</text>
+
+  <!-- Agent Local build -> Agent DevTesting (Test) -->
+  <line x1="628" y1="258" x2="676" y2="258" class="edge" marker-end="url(#arrow)"/>
+  <rect x="630" y="244" width="44" height="16" fill="#ffffff"/>
+  <text x="652" y="256" class="elabel" text-anchor="middle">Test</text>
+
+  <!-- ============ VERTICAL EDGES (top -> middle) ============ -->
+  <!-- Agent Local build -> Agent ECR container repository (Upload) -->
+  <line x1="545" y1="290" x2="545" y2="366" class="edge" marker-end="url(#arrow)"/>
+  <rect x="515" y="320" width="60" height="16" fill="#ffffff"/>
+  <text x="545" y="332" class="elabel" text-anchor="middle">Upload</text>
+
+  <!-- Agent DevTesting -> ATX platform (API Key) :  arrow points UP into DevTesting -->
+  <line x1="761" y1="366" x2="761" y2="292" class="edge" marker-end="url(#arrow)"/>
+  <rect x="729" y="321" width="64" height="16" fill="#ffffff"/>
+  <text x="761" y="333" class="elabel" text-anchor="middle">API Key</text>
+
+  <!-- ============ MIDDLE -> BOTTOM vertical ============ -->
+  <!-- Agent ECR container repository -> Agent Core runtime (Create) -->
+  <line x1="545" y1="432" x2="545" y2="518" class="edge" marker-end="url(#arrow)"/>
+  <rect x="517" y="467" width="56" height="16" fill="#ffffff"/>
+  <text x="545" y="479" class="elabel" text-anchor="middle">Create</text>
+
+  <!-- ATX Agent monitoring -> ATX Agent in production (Monitoring & debugging) : arrow points UP -->
+  <line x1="113" y1="518" x2="113" y2="434" class="edge" marker-end="url(#arrow)"/>
+  <rect x="20" y="468" width="186" height="16" fill="#ffffff"/>
+  <text x="113" y="480" class="elabel" text-anchor="middle">Monitoring &amp; debugging</text>
+
+  <!-- ============ BOTTOM ROW (right to left) ============ -->
+  <!-- Agent Core runtime -> ATX Agent registry (Register) -->
+  <line x1="462" y1="552" x2="414" y2="552" class="edge" marker-end="url(#arrow)"/>
+  <rect x="412" y="538" width="52" height="16" fill="#ffffff"/>
+  <text x="438" y="550" class="elabel" text-anchor="middle">Register</text>
+
+  <!-- ATX Agent registry -> ATX Agent in production (Invoke) -->
+  <line x1="246" y1="552" x2="198" y2="552" class="edge" marker-end="url(#arrow)"/>
+  <rect x="198" y="538" width="48" height="16" fill="#ffffff"/>
+  <text x="222" y="550" class="elabel" text-anchor="middle">Invoke</text>
+</svg>

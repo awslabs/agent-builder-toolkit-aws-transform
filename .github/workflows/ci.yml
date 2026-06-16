@@ -44,6 +44,33 @@ jobs:
     uses: ./.github/workflows/_test-package.yml
     with:
       package-path: evolution
+  evaluation:
+    # The evaluation suite is fully offline: the ACP driver (kiro-cli) and the
+    # LLM (Bedrock) are mocked throughout, so these tests need no credentials,
+    # no model access, and no network. A live `agent-builder-eval run` is a
+    # separate, credentialed concern and is intentionally NOT run here.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install evaluation with test extras
+        run: |
+          pip install pytest
+          pip install -e "evaluation/[test]"
+
+      - name: Run tests
+        run: |
+          cd evaluation
+          python -m pytest tests/ -v --tb=short
 
   docs-freshness:
     runs-on: ubuntu-latest

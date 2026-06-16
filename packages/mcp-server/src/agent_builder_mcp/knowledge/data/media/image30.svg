@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1084" height="760" viewBox="0 0 1084 760" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <style>
+    .muted { fill: #5f6b7a; }
+    .ink   { fill: #16191f; }
+  </style>
+
+  <!-- panel -->
+  <rect x="0.5" y="0.5" width="1083" height="759" fill="#ffffff" stroke="#e9ebed"/>
+
+  <!-- title -->
+  <text x="40" y="58" class="ink" font-size="26" font-weight="700">Certificate Viewer: iad.prod.agenticapi.elastic-</text>
+  <text x="40" y="92" class="ink" font-size="26" font-weight="700">gumby.ai.aws.dev</text>
+  <!-- close -->
+  <path d="M1020 46 l22 22 M1042 46 l-22 22" stroke="#16191f" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- tabs -->
+  <g font-size="17">
+    <text x="42" y="170" class="ink" font-weight="700">General</text>
+    <rect x="20" y="185" width="130" height="3" fill="#0972d3"/>
+    <text x="175" y="170" class="muted">Details</text>
+  </g>
+  <line x1="0" y1="187" x2="1084" y2="187" stroke="#e9ebed"/>
+
+  <!-- Issued To -->
+  <text x="40" y="250" class="ink" font-size="19" font-weight="700">Issued To</text>
+  <g font-size="17">
+    <text x="80" y="300" class="ink">Common Name (CN)</text>
+    <text x="400" y="300" class="ink">iad.prod.agenticapi.elastic-gumby.ai.aws.dev</text>
+    <text x="80" y="334" class="ink">Organization (O)</text>
+    <text x="400" y="334" class="muted">&lt;Not Part Of Certificate&gt;</text>
+    <text x="80" y="368" class="ink">Organizational Unit (OU)</text>
+    <text x="400" y="368" class="muted">&lt;Not Part Of Certificate&gt;</text>
+  </g>
+
+  <!-- Issued By -->
+  <text x="40" y="446" class="ink" font-size="19" font-weight="700">Issued By</text>
+  <g font-size="17">
+    <text x="80" y="496" class="ink">Common Name (CN)</text>
+    <text x="400" y="496" class="ink">Amazon RSA 2048 M03</text>
+    <text x="80" y="530" class="ink">Organization (O)</text>
+    <text x="400" y="530" class="ink">Amazon</text>
+    <text x="80" y="564" class="ink">Organizational Unit (OU)</text>
+    <text x="400" y="564" class="muted">&lt;Not Part Of Certificate&gt;</text>
+  </g>
+
+  <!-- Validity Period -->
+  <text x="40" y="642" class="ink" font-size="19" font-weight="700">Validity Period</text>
+  <g font-size="17">
+    <text x="80" y="692" class="ink">Issued On</text>
+    <text x="400" y="692" class="ink">Sunday, August 31, 2025 at 5:00:00 PM</text>
+    <text x="80" y="726" class="ink">Expires On</text>
+    <text x="400" y="726" class="ink">Wednesday, September 30, 2026 at 4:59:59 PM</text>
+  </g>
+</svg>
