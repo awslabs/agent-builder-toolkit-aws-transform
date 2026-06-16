@@ -137,6 +137,24 @@ class TestMetricRegistry:
         registry = MetricRegistry()
         assert "assertion_pass_rate" in registry.list()
 
+    def test_has_builtin_generic_metrics(self):
+        """The generic metrics (task 2.3) are registered as zero-arg built-ins."""
+        from eval_runner.metrics import MetricRegistry
+
+        registry = MetricRegistry()
+        available = registry.list()
+        for name in ("tool_usage", "error_handling", "completeness"):
+            assert name in available
+
+    def test_resolve_generic_metrics_by_name(self):
+        """Each generic metric resolves to an instance whose name round-trips."""
+        from eval_runner.metrics import MetricRegistry
+
+        registry = MetricRegistry()
+        names = ["tool_usage", "error_handling", "completeness"]
+        resolved = registry.resolve(names)
+        assert [m.name for m in resolved] == names
+
     def test_resolve_from_config(self):
         from eval_runner.config import EvalConfig
         from eval_runner.metrics import MetricRegistry

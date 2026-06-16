@@ -30,8 +30,18 @@ class MetricRegistry:
 
     def _register_builtins(self) -> None:
         from eval_runner.metrics.assertion_pass_rate import AssertionPassRateMetric
+        from eval_runner.metrics.completeness import CompletenessMetric
+        from eval_runner.metrics.error_handling import ErrorHandlingMetric
+        from eval_runner.metrics.tool_usage import ToolUsageMetric
 
         self.register("assertion_pass_rate", AssertionPassRateMetric)
+        # Generic, deterministic, zero-arg metrics (no Bedrock). The first two
+        # abstain (score 10.0/pass) until a test case opts in via metadata, so
+        # they are safe to resolve by name without penalizing existing tests;
+        # error_handling is always active (a clean transcript is universal).
+        self.register("tool_usage", ToolUsageMetric)
+        self.register("error_handling", ErrorHandlingMetric)
+        self.register("completeness", CompletenessMetric)
 
     def register(self, name: str, cls: Type[MetricInterface]) -> None:
         """Register a zero-arg metric class, constructed fresh on each get()."""

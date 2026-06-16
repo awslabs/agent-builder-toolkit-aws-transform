@@ -190,6 +190,7 @@ class EvaluationEngine:
                 "output": result.execution.output,
                 "tool_calls": result.execution.tool_calls,
                 "duration_ms": result.execution.duration_ms,
+                "turn_count": result.execution.turn_count,
             },
             "metrics": [
                 {
