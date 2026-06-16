@@ -40,6 +40,10 @@ jobs:
       package-path: packages/sdk
       extra-deps: packages/types packages/mcp-client
 
+  evolution:
+    uses: ./.github/workflows/_test-package.yml
+    with:
+      package-path: evolution
   evaluation:
     # The evaluation suite is fully offline: the ACP driver (kiro-cli) and the
     # LLM (Bedrock) are mocked throughout, so these tests need no credentials,
