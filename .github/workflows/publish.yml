@@ -21,7 +21,7 @@ jobs:
       package-name: ${{ steps.resolve.outputs.package-name }}
       version: ${{ steps.resolve.outputs.version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Resolve package from tag
         id: resolve
@@ -85,7 +85,7 @@ jobs:
     outputs:
       package-path: ${{ needs.resolve-package.outputs.package-path }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -126,7 +126,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
