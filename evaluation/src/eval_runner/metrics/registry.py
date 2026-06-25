@@ -31,7 +31,9 @@ class MetricRegistry:
     def _register_builtins(self) -> None:
         from eval_runner.metrics.assertion_pass_rate import AssertionPassRateMetric
         from eval_runner.metrics.completeness import CompletenessMetric
+        from eval_runner.metrics.cost_budget import CostBudgetMetric
         from eval_runner.metrics.error_handling import ErrorHandlingMetric
+        from eval_runner.metrics.latency import LatencyMetric
         from eval_runner.metrics.tool_usage import ToolUsageMetric
 
         self.register("assertion_pass_rate", AssertionPassRateMetric)
@@ -42,6 +44,10 @@ class MetricRegistry:
         self.register("tool_usage", ToolUsageMetric)
         self.register("error_handling", ErrorHandlingMetric)
         self.register("completeness", CompletenessMetric)
+        # Resource-budget metrics; abstain (10.0/pass) until a test opts in via
+        # metadata (max_latency_ms / max_credits), same as the generic ones.
+        self.register("latency", LatencyMetric)
+        self.register("cost_budget", CostBudgetMetric)
 
     def register(self, name: str, cls: Type[MetricInterface]) -> None:
         """Register a zero-arg metric class, constructed fresh on each get()."""
