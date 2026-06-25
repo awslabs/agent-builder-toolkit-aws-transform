@@ -45,6 +45,9 @@ class ExecutionResult:
     tool_calls: list[dict] = field(default_factory=list)
     duration_ms: int | None = None
     turn_count: int | None = None
+    # Token/cost usage for the run, if the driver reported it. None when the
+    # execution backend doesn't surface usage. Defined later in this module.
+    token_usage: "TokenUsage | None" = None
 
 
 @dataclass(frozen=True)

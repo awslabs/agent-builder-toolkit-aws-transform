@@ -21,3 +21,26 @@ def coerce_str_list(value: object) -> list[str]:
     if not isinstance(value, (list, tuple)):
         return []
     return [s for v in value if isinstance(v, str) and (s := v.strip())]
+
+
+def coerce_positive_number(value: object) -> float | None:
+    """Coerce a metadata budget value into a positive float, or None.
+
+    Budgets like ``max_latency_ms`` / ``max_tokens`` come from free-form YAML
+    metadata, where a value can easily be authored as a quoted string ("1000").
+    Returns the number when ``value`` is a positive int/float or a numeric
+    string; returns None for anything else (missing, non-numeric, <= 0). Callers
+    treat None as "no budget set" and abstain, so a typo'd budget reads as
+    opt-out rather than a silent metric exception scored as a failure.
+    """
+    if isinstance(value, bool):  # bool is an int subclass; reject it explicitly
+        return None
+    if isinstance(value, (int, float)):
+        return float(value) if value > 0 else None
+    if isinstance(value, str):
+        try:
+            n = float(value.strip())
+        except ValueError:
+            return None
+        return n if n > 0 else None
+    return None
