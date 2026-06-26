@@ -319,7 +319,7 @@ class TestDeployAgentFullPipeline:
         # No Dockerfile - should fail
 
         result = json.loads(
-            deploy_agent_full_pipeline(agent_path=str(agent_dir), agent_name="test-agent")
+            deploy_agent_full_pipeline(agent_path=str(agent_dir), agent_name="test-agent", owner_contact_info="ops@example.com")
         )
 
         assert result["success"] is False
@@ -354,7 +354,7 @@ class TestDeployAgentFullPipeline:
 
                         result = json.loads(
                             deploy_agent_full_pipeline(
-                                agent_path=str(agent_dir), agent_name="test-agent"
+                                agent_path=str(agent_dir), agent_name="test-agent", owner_contact_info="ops@example.com"
                             )
                         )
 
@@ -408,7 +408,7 @@ class TestDeployAgentFullPipeline:
 
                                 result = json.loads(
                                     deploy_agent_full_pipeline(
-                                        agent_path=str(agent_dir), agent_name="test-agent"
+                                        agent_path=str(agent_dir), agent_name="test-agent", owner_contact_info="ops@example.com"
                                     )
                                 )
 
@@ -477,6 +477,7 @@ class TestDeployAgentFullPipeline:
                                         deploy_agent_full_pipeline(
                                             agent_path=str(agent_dir),
                                             agent_name="test-agent",
+                                            owner_contact_info="ops@example.com",
                                         )
                                     )
 
@@ -534,7 +535,7 @@ class TestDeployAgentFullPipeline:
 
                                 result = json.loads(
                                     deploy_agent_full_pipeline(
-                                        agent_path=str(agent_dir), agent_name="test-agent"
+                                        agent_path=str(agent_dir), agent_name="test-agent", owner_contact_info="ops@example.com"
                                     )
                                 )
 
@@ -577,6 +578,8 @@ class TestDeployAgentFullPipeline:
                             deploy_agent_full_pipeline(
                                 agent_path=str(agent_dir),
                                 agent_name="test-agent",
+                                # skip_registry bypasses the owner_contact_info requirement
+                                owner_contact_info="",
                                 skip_registry=True,
                             )
                         )
@@ -626,6 +629,7 @@ class TestDeployAgentFullPipeline:
                                     deploy_agent_full_pipeline(
                                         agent_path=str(agent_dir),
                                         agent_name="test-agent",
+                                        owner_contact_info="ops@example.com",
                                     )
                                 )
 
@@ -673,6 +677,7 @@ class TestRegisterWithAtx:
                     runtime_arn="arn:aws:bedrock-agentcore:us-east-1:123:runtime/test",
                     access_role_arn="arn:aws:iam::123:role/AccessRole",
                     registry_endpoint="https://test.endpoint",
+                    owner_contact_info="ops@example.com",
                 )
 
         assert result["success"] is True
@@ -700,6 +705,7 @@ class TestRegisterWithAtx:
                     runtime_arn="arn:aws:bedrock-agentcore:us-east-1:123:runtime/test",
                     access_role_arn="arn:aws:iam::123:role/AccessRole",
                     registry_endpoint="https://test.endpoint",
+                    owner_contact_info="ops@example.com",
                 )
 
         assert result["success"] is True
@@ -725,6 +731,7 @@ class TestRegisterWithAtx:
                     runtime_arn="arn:test",
                     access_role_arn="arn:test",
                     registry_endpoint="https://test",
+                    owner_contact_info="ops@example.com",
                 )
 
         assert result["success"] is True
@@ -750,6 +757,7 @@ class TestRegisterWithAtx:
                     job_orchestrator=True,
                     chat_ui_label="Test Orchestrator",
                     chat_agent_identifier="test-orch",
+                    owner_contact_info="ops@example.com",
                 )
 
         call_kwargs = mock_client.register_agent.call_args
@@ -775,6 +783,7 @@ class TestRegisterWithAtx:
                     runtime_arn="arn:test",
                     access_role_arn="arn:test",
                     registry_endpoint="https://test",
+                    owner_contact_info="ops@example.com",
                 )
 
         call_kwargs = mock_client.publish_agent_version.call_args
@@ -790,9 +799,71 @@ class TestRegisterWithAtx:
         assert provider["name"] == "Agent Provider"
         assert provider["params"]["accountId"] == "XXXXXXXXXXXX"
 
+        # contactInfo must be non-empty (registry rejects an empty list).
+        contact_info = provider["params"]["contactInfo"]
+        assert contact_info == [{"type": "email", "value": "ops@example.com"}]
+
         # All three required extensions present
         ext_names = [e["name"] for e in card["capabilities"]["extensions"]]
         assert ext_names == ["Agent Provider", "Agent Dependencies", "Agent Connectors"]
+
+    def test_blank_owner_contact_info_rejected(self):
+        """A blank owner_contact_info is rejected before any registry call is made."""
+        mock_client = MagicMock()
+        mock_client.exceptions.ConflictException = type("ConflictException", (Exception,), {})
+
+        with patch(f"{MODULE_PIPELINE}.registry_client", return_value=mock_client):
+            with patch(f"{MODULE_PIPELINE}.boto3") as mock_boto3:
+                mock_sts = MagicMock()
+                mock_sts.get_caller_identity.return_value = {"Account": "XXXXXXXXXXXX"}
+                mock_boto3.client.return_value = mock_sts
+
+                result = _register_with_atx(
+                    agent_name="test-agent",
+                    agent_version="1.0.0",
+                    runtime_arn="arn:test",
+                    access_role_arn="arn:test",
+                    registry_endpoint="https://test",
+                    owner_contact_info="   ",
+                )
+
+        assert result["success"] is False
+        assert result["error_type"] == "ValidationError"
+        mock_client.register_agent.assert_not_called()
+        mock_client.publish_agent_version.assert_not_called()
+
+    def test_owner_contact_info_threaded_into_metadata_and_card(self):
+        """owner_contact_info populates both metadata ownerContactInfo and the card contactInfo."""
+        mock_client = MagicMock()
+        mock_client.exceptions.ConflictException = type("ConflictException", (Exception,), {})
+
+        with patch(f"{MODULE_PIPELINE}.registry_client", return_value=mock_client):
+            with patch(f"{MODULE_PIPELINE}.boto3") as mock_boto3:
+                mock_sts = MagicMock()
+                mock_sts.get_caller_identity.return_value = {"Account": "XXXXXXXXXXXX"}
+                mock_boto3.client.return_value = mock_sts
+
+                _register_with_atx(
+                    agent_name="test-agent",
+                    agent_version="1.0.0",
+                    runtime_arn="arn:test",
+                    access_role_arn="arn:test",
+                    registry_endpoint="https://test",
+                    owner_contact_info="team@example.com",
+                )
+
+        # metadata ownerContactInfo uses the provided contact
+        register_kwargs = mock_client.register_agent.call_args
+        metadata = register_kwargs.kwargs.get("metadata") or register_kwargs[1].get("metadata")
+        assert metadata["ownerContactInfo"] == "team@example.com"
+
+        # card Agent Provider contactInfo uses the provided contact, typed as email
+        publish_kwargs = mock_client.publish_agent_version.call_args
+        config = publish_kwargs.kwargs.get("configuration") or publish_kwargs[1].get("configuration")
+        provider = config["agentCard"]["capabilities"]["extensions"][0]
+        assert provider["params"]["contactInfo"] == [
+            {"type": "email", "value": "team@example.com"}
+        ]
 
     def test_access_control_conflict_is_non_fatal(self):
         """Test that ConflictException on access control is non-fatal (already enabled)."""
@@ -813,6 +884,7 @@ class TestRegisterWithAtx:
                     runtime_arn="arn:test",
                     access_role_arn="arn:test",
                     registry_endpoint="https://test",
+                    owner_contact_info="ops@example.com",
                 )
 
         assert result["success"] is True
@@ -841,6 +913,7 @@ class TestRegisterWithAtx:
                     runtime_arn="arn:test",
                     access_role_arn="arn:test",
                     registry_endpoint="https://test",
+                    owner_contact_info="ops@example.com",
                 )
 
         assert result["success"] is False
@@ -863,6 +936,7 @@ class TestRegisterWithAtx:
                     runtime_arn="arn:aws:bedrock-agentcore:us-east-1:123:runtime/test",
                     access_role_arn="arn:aws:iam::123:role/AccessRole",
                     registry_endpoint="https://test",
+                    owner_contact_info="ops@example.com",
                 )
 
         call_kwargs = mock_client.publish_agent_version.call_args

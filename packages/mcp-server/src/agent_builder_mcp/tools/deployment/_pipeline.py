@@ -101,12 +101,32 @@ def _get_default_access_role_arn() -> str | None:
     return _get_default_role_arn("ATXAgentInvokeRole", "access role")
 
 
+def _build_provider_contact(owner_contact_info: str) -> list[dict]:
+    """
+    Build the Agent Provider contactInfo list from the owner contact.
+
+    The registry requires a non-empty ``contactInfo`` list on the Agent Provider
+    extension. The contact ``type`` is inferred as ``email`` when the value looks
+    like an email address, otherwise ``other`` — both are valid contact types
+    accepted by the registry.
+
+    Args:
+        owner_contact_info: Owner contact (email or other identifier)
+
+    Returns:
+        contactInfo list with a single contact entry
+    """
+    contact_type = "email" if "@" in owner_contact_info else "other"
+    return [{"type": contact_type, "value": owner_contact_info}]
+
+
 def _register_with_atx(
     agent_name: str,
     agent_version: str,
     runtime_arn: str,
     access_role_arn: str,
     registry_endpoint: str,
+    owner_contact_info: str,
     region: str = "us-east-1",
     job_orchestrator: bool = False,
     chat_ui_label: str | None = None,
@@ -131,11 +151,21 @@ def _register_with_atx(
         chat_ui_label: Display name for chat UI
         chat_agent_identifier: Agent identifier for chat
         a2a_supported: Enable agent-to-agent communication
+        owner_contact_info: Required owner contact (email or CTI) for agent
+            notifications. Used for both the agent metadata ownerContactInfo and
+            the Agent Provider extension contactInfo. Must be non-blank.
 
     Returns:
         Registration result dict
     """
     try:
+        if not owner_contact_info or not owner_contact_info.strip():
+            return {
+                "success": False,
+                "error": "owner_contact_info is required and must be a non-blank string",
+                "error_type": "ValidationError",
+            }
+
         client = registry_client(region=region, endpoint_url=registry_endpoint)
         sts = boto3.client("sts")
         account_id = sts.get_caller_identity()["Account"]
@@ -145,7 +175,7 @@ def _register_with_atx(
             "type": "ORCHESTRATOR_AGENT" if job_orchestrator else "SUB_AGENT",
             "description": f"ATX agent: {agent_name}",
             "ownerName": agent_name,
-            "ownerContactInfo": agent_name,
+            "ownerContactInfo": owner_contact_info,
             "ownerType": "DIRECT_AGENT",
             "customerConfigurationRequired": False,
             "jobOrchestrator": job_orchestrator,
@@ -208,7 +238,7 @@ def _register_with_atx(
                                 "name": agent_name,
                                 "accountId": account_id,
                                 "ownerType": "DIRECT_AGENT",
-                                "contactInfo": [],
+                                "contactInfo": _build_provider_contact(owner_contact_info),
                             },
                         },
                         {
@@ -275,6 +305,7 @@ def _register_with_atx(
 def deploy_agent_full_pipeline(
     agent_path: str,
     agent_name: str,
+    owner_contact_info: str,
     agent_version: str = "1.0.0",
     execution_role_arn: str | None = None,
     access_role_arn: str | None = None,
@@ -311,6 +342,10 @@ def deploy_agent_full_pipeline(
         chat_ui_label: Display name for chat UI (defaults to agent_name)
         chat_agent_identifier: Agent identifier for chat (defaults to agent_name)
         a2a_supported: Enable agent-to-agent communication (default: True)
+        owner_contact_info: Required owner contact (email or CTI) for agent
+            notifications. Populates agent metadata ownerContactInfo and the
+            Agent Provider extension contactInfo. Must be non-blank (only
+            enforced when registry registration runs, i.e. skip_registry=False).
 
     Returns:
         JSON string with pipeline result:
@@ -326,6 +361,18 @@ def deploy_agent_full_pipeline(
     """
     try:
         phases = {}
+
+        if not skip_registry and (not owner_contact_info or not owner_contact_info.strip()):
+            return json.dumps(
+                {
+                    "success": False,
+                    "phase": "validate",
+                    "error": "owner_contact_info is required and must be a non-blank string",
+                    "error_type": "ValidationError",
+                    "hint": "Pass owner_contact_info (email or CTI) so partners can be contacted.",
+                },
+                indent=2,
+            )
 
         # Phase 1: Build image
         logger.info("=" * 60)
@@ -455,6 +502,7 @@ def deploy_agent_full_pipeline(
                     chat_ui_label=chat_ui_label,
                     chat_agent_identifier=chat_agent_identifier,
                     a2a_supported=a2a_supported,
+                    owner_contact_info=owner_contact_info,
                 )
 
                 if register_result.get("success"):
