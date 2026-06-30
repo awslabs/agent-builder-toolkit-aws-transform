@@ -40,7 +40,7 @@ Restart your IDE/tool. It will now have access to the agent-builder tool set.
 Tools are grouped into six categories:
 
 - **Search** — retrieve documentation and examples from the bundled AWS Transform knowledge base (BM25 keyword search, no network calls, no embeddings).
-- **Agent registry** — look up, register, and version agents.
+- **Agent registry** — look up, register, update, deregister, and version agents.
 - **Skill operations** — manage the skills an agent exposes.
 - **Deployment** — package and deploy agents to AWS.
 - **Validation** — check agent manifests and configurations before deployment.

@@ -20,6 +20,7 @@ def register_agent_tools(mcp: FastMCP) -> None:
         publish_agent_version
     )
     mcp.tool(description="Update an agent's metadata")(update_agent)
+    mcp.tool(description="Deregister an agent from the ATX Agent Registry")(deregister_agent)
     mcp.tool(description="List all agents registered by the caller")(list_agents_by_publisher)
     mcp.tool(description="List AWS account IDs with access to a RESTRICTED agent")(
         list_agent_access_control
@@ -90,18 +91,63 @@ def publish_agent_version(
 
 def update_agent(
     name: str,
+    description: Optional[str] = None,
+    owner_name: Optional[str] = None,
     customer_configured_agent_dependencies: Optional[list[str]] = None,
+    workload_types: Optional[list[str]] = None,
     marketplace_metadata: Optional[dict[str, Any]] = None,
+    job_orchestrator: Optional[bool] = None,
+    job_orchestrator_metadata: Optional[dict[str, Any]] = None,
+    deprecated: Optional[bool] = None,
+    owner_contact_info: Optional[str] = None,
+    resource_deletion_notification_enabled: Optional[bool] = None,
 ) -> str:
     """Update an agent's metadata."""
     try:
         client = registry_client()
         kwargs: dict[str, Any] = {"name": name}
+        if description is not None:
+            kwargs["description"] = description
+        if owner_name is not None:
+            kwargs["ownerName"] = owner_name
         if customer_configured_agent_dependencies is not None:
             kwargs["customerConfiguredAgentDependencies"] = customer_configured_agent_dependencies
+        if workload_types is not None:
+            kwargs["workloadTypes"] = workload_types
         if marketplace_metadata is not None:
             kwargs["marketplaceMetadata"] = marketplace_metadata
+        if job_orchestrator is not None:
+            kwargs["jobOrchestrator"] = job_orchestrator
+        if job_orchestrator_metadata is not None:
+            kwargs["jobOrchestratorMetadata"] = job_orchestrator_metadata
+        if deprecated is not None:
+            kwargs["deprecated"] = deprecated
+        if owner_contact_info is not None:
+            kwargs["ownerContactInfo"] = owner_contact_info
+        if resource_deletion_notification_enabled is not None:
+            kwargs["resourceDeletionNotificationEnabled"] = resource_deletion_notification_enabled
         response = client.update_agent(**kwargs)
+        return json.dumps(response, indent=2, default=str)
+    except Exception as e:
+        return json.dumps({"error": str(e)})
+
+
+def deregister_agent(
+    name: str,
+    force: Optional[bool] = None,
+) -> str:
+    """Deregister an agent from the ATX Agent Registry.
+
+    When force is False (default), the call fails if active instances exist.
+    When force is True, running instances are stopped and associated jobs are
+    failed before the agent is removed.
+    """
+    try:
+        client = registry_client()
+        kwargs: dict[str, Any] = {"name": name}
+        if force is not None:
+            kwargs["force"] = force
+        response = client.deregister_agent(**kwargs)
         return json.dumps(response, indent=2, default=str)
     except Exception as e:
         return json.dumps({"error": str(e)})
