@@ -83,7 +83,7 @@ class TestUpdateAgent:
         mock_client.update_agent.return_value = {}
 
         with patch(f"{MODULE}.registry_client", return_value=mock_client):
-            result = json.loads(update_agent(name="test-agent", description="New description"))
+            update_agent(name="test-agent", description="New description")
 
         mock_client.update_agent.assert_called_once_with(
             name="test-agent", description="New description"
@@ -95,14 +95,12 @@ class TestUpdateAgent:
         mock_client.update_agent.return_value = {}
 
         with patch(f"{MODULE}.registry_client", return_value=mock_client):
-            result = json.loads(
-                update_agent(
-                    name="test-agent",
-                    description="Updated",
-                    owner_name="NewTeam",
-                    deprecated=True,
-                    owner_contact_info="team@amazon.com",
-                )
+            update_agent(
+                name="test-agent",
+                description="Updated",
+                owner_name="NewTeam",
+                deprecated=True,
+                owner_contact_info="team@amazon.com",
             )
 
         mock_client.update_agent.assert_called_once_with(
@@ -124,12 +122,10 @@ class TestUpdateAgent:
         }
 
         with patch(f"{MODULE}.registry_client", return_value=mock_client):
-            result = json.loads(
-                update_agent(
-                    name="test-agent",
-                    job_orchestrator=True,
-                    job_orchestrator_metadata=metadata,
-                )
+            update_agent(
+                name="test-agent",
+                job_orchestrator=True,
+                job_orchestrator_metadata=metadata,
             )
 
         mock_client.update_agent.assert_called_once_with(
@@ -144,7 +140,7 @@ class TestUpdateAgent:
         mock_client.update_agent.return_value = {}
 
         with patch(f"{MODULE}.registry_client", return_value=mock_client):
-            result = json.loads(update_agent(name="test-agent"))
+            update_agent(name="test-agent")
 
         mock_client.update_agent.assert_called_once_with(name="test-agent")
 
