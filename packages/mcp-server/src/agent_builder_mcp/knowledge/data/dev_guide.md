@@ -1227,6 +1227,8 @@ Before publishing an agent version, make sure to create a role(named: AWSTransfo
 
 Now create your agent version configuration. Example JSON `publish-agent-version.json`. Change the accountId in the `atxAccessRoleArn` and replace your own Bedrock AgentCore Runtime Arn.
 
+> **Note:** As of June 2026, the `agentCard` structure is validated in production when `PublishAgentVersion` is called. It must be a valid A2A-style card that includes the `Agent Provider`, `Agent Dependencies`, and `Agent Connectors` extensions, as shown below. Existing versions and already-running agents are unaffected.
+
 ```json
 {
   "name": "dynamic-showcase-agent-agentcore",
@@ -1261,7 +1263,44 @@ Now create your agent version configuration. Example JSON `publish-agent-version
     "monitoringType": "HEALTHCHECK",
     "notificationsEnabled": "ENABLED",
     "objectiveNegotiationPrompt": "<features>\\nWe can help test the new tools and capabilities in the platform orchestrator agent within AgentCore compute environment\\n</features>\\n\\n<supports_objective_negotiation>\\nNo.\\nThis agent does not allow changing the default objective.\\n</supports_objective_negotiation>\\n\\n<examples>\\n <valid>\\n Objective: Test the platform orchestrator agent\\n </valid>\\n\\n <valid>\\n Objective:Test new tools supported by platform orchestrator agent\\n </valid>\\n\\n <invalid>\\n Objective: Help me fix my bike.\\n Reason: Completely out of domain,\\n </invalid>\\n</examples>",
-    "agentCard": {}
+    "agentCard": {
+      "id": "dynamic-showcase-agent-agentcore",
+      "name": "Dynamic Showcase Agent",
+      "description": "Deep research Agent to perform general transformation.",
+      "version": "1.0.0",
+      "capabilities": {
+        "restartable": false,
+        "a2aSupported": true,
+        "legacyDashboard": false,
+        "legacyTaskLink": false,
+        "webAppV2": true,
+        "legacyRestartable": false,
+        "extensions": [
+          {
+            "name": "Agent Provider",
+            "description": "Agent owner information.",
+            "params": {
+              "name": "Example Partner Inc.",
+              "accountId": "<AwsAccountId>",
+              "ownerType": "DIRECT_AGENT",
+              "contactInfo": [
+                { "type": "email", "value": "agent-support@example.com" }
+              ]
+            }
+          },
+          {
+            "name": "Agent Dependencies",
+            "description": "Declares agent dependencies.",
+            "params": { "agentDependencies": [] }
+          },
+          {
+            "name": "Agent Connectors",
+            "description": "Connector types used by this agent.",
+            "params": { "connectors": [] }
+          }
+        ]
+      }
+    }
   }
 }
 ```
@@ -1383,7 +1422,44 @@ Expected response
     "visibility": "RESTRICTED",
     "configuration": {
         "shortDescription": "Deep research Agent to perform general transformation",
-        "agentCard": {},
+        "agentCard": {
+            "id": "dynamic-showcase-agent-agentcore",
+            "name": "Dynamic Showcase Agent",
+            "description": "Deep research Agent to perform general transformation.",
+            "version": "1.0.0",
+            "capabilities": {
+                "restartable": false,
+                "a2aSupported": true,
+                "legacyDashboard": false,
+                "legacyTaskLink": false,
+                "webAppV2": true,
+                "legacyRestartable": false,
+                "extensions": [
+                    {
+                        "name": "Agent Provider",
+                        "description": "Agent owner information.",
+                        "params": {
+                            "name": "linchenk",
+                            "accountId": "<Account-A>",
+                            "ownerType": "DIRECT_AGENT",
+                            "contactInfo": [
+                                { "type": "email", "value": "linchenk+test@amazon.com" }
+                            ]
+                        }
+                    },
+                    {
+                        "name": "Agent Dependencies",
+                        "description": "Declares agent dependencies.",
+                        "params": { "agentDependencies": [] }
+                    },
+                    {
+                        "name": "Agent Connectors",
+                        "description": "Connector types used by this agent.",
+                        "params": { "connectors": [] }
+                    }
+                ]
+            }
+        },
         "computeConfiguration": {
             "provisionedComputeConfiguration": {
                 "agentCoreConfiguration": {
@@ -2896,7 +2972,7 @@ Members:
 
 ```
 - shortDescription (String) - REQUIRED - Brief description of the agent
-- agentCard (Document) - REQUIRED - JSON containing A2A-style Card Data
+- agentCard (Document) - REQUIRED - JSON containing A2A-style Card Data. Validated on `PublishAgentVersion` (as of June 2026); must include the `Agent Provider`, `Agent Dependencies`, and `Agent Connectors` extensions. See the `publish-agent-version.json` example above.
 - computeConfiguration (ComputeConfiguration) - REQUIRED - Compute configuration settings
 - agentResiliencyConfiguration (AgentResiliencyConfiguration) - OPTIONAL - Resiliency settings
 - inputPayloadSchema (Document) - REQUIRED - Schema for input payload
