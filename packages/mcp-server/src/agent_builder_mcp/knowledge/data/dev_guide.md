@@ -1339,18 +1339,15 @@ When you publish an agent version with `PublishAgentVersion`, AWS Transform vali
   "description": "Example agent.",
   "version": "1.0.0",
   "url": "https://agent.example.com",
-  "defaultInputModes": ["text"],
-  "defaultOutputModes": ["text"],
   "capabilities": {
     "restartable": false,
-    "a2aSupported": false,
-    "legacyDashboard": false,
-    "legacyTaskLink": false,
-    "webAppV2": false,
-    "legacyRestartable": false,
+    "a2aSupported": true,
+    "legacyDashboard": true,
+    "legacyTaskLink": true,
+    "webAppV2": true,
+    "legacyRestartable": true,
     "extensions": [ /* ... */ ]
-  },
-  "skills": []
+  }
 }
 ```
 
@@ -1362,11 +1359,24 @@ When you publish an agent version with `PublishAgentVersion`, AWS Transform vali
 | `version` | Yes | Semantic versioning — `major.minor.patch` (e.g. `1.2.0`), optionally with a `-dev-<id>` suffix (e.g. `1.2.0-dev-abc123`). Other pre-release labels (`-beta`, `-rc1`) are **not** allowed. |
 | `capabilities` | Yes | Must contain all six boolean flags shown above (each a real `true`/`false`) plus a non-empty `extensions` list. Additional capability fields are accepted and preserved. |
 | `url` | No | String. |
-| `defaultInputModes` / `defaultOutputModes` | No | List of strings. |
+| `defaultInputModes` / `defaultOutputModes` | No | Optional. List of strings (e.g. `["text"]`). Omit entirely if not needed. |
 | `skills` | No | List. Validated only if present and non-empty. See [Skills](#agent-card-skills). |
 | `tags` | No | List of strings. |
 
 Any additional top-level fields you include are accepted and preserved.
+
+##### Capabilities Flags
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `a2aSupported` | `true` | Legacy flag. All new agents should set this to `true`. |
+| `legacyDashboard` | `true` | Legacy flag. All new agents should set this to `true`. |
+| `legacyTaskLink` | `true` | Legacy flag. All new agents should set this to `true`. |
+| `webAppV2` | `true` | Legacy flag. All new agents should set this to `true`. |
+| `legacyRestartable` | `true` | Legacy flag. All new agents should set this to `true`. |
+| `restartable` | `false` | Set to `true` only if your agent allows jobs to be restarted. |
+
+> **Note:** The flags `a2aSupported`, `legacyDashboard`, `legacyTaskLink`, `webAppV2`, and `legacyRestartable` are legacy flags that should be set to `true` for all new agents unless you have a specific requirement. Consult with the AWS Transform team before changing these defaults.
 
 #### Agent Card Extensions
 
@@ -1562,10 +1572,10 @@ A skill that declares a source uses `extensions.source`:
   "capabilities": {
     "restartable": false,
     "a2aSupported": true,
-    "legacyDashboard": false,
-    "legacyTaskLink": false,
+    "legacyDashboard": true,
+    "legacyTaskLink": true,
     "webAppV2": true,
-    "legacyRestartable": false,
+    "legacyRestartable": true,
     "extensions": [
       {
         "name": "Agent Provider",
@@ -1603,15 +1613,13 @@ A skill that declares a source uses `extensions.source`:
   "description": "Orchestrates multi-step migration workflows using specialized subagents.",
   "version": "2.1.0",
   "url": "https://migration.example.com",
-  "defaultInputModes": ["text"],
-  "defaultOutputModes": ["text"],
   "capabilities": {
     "restartable": true,
     "a2aSupported": true,
-    "legacyDashboard": false,
-    "legacyTaskLink": false,
+    "legacyDashboard": true,
+    "legacyTaskLink": true,
     "webAppV2": true,
-    "legacyRestartable": false,
+    "legacyRestartable": true,
     "extensions": [
       {
         "name": "Agent Provider",
@@ -1662,15 +1670,13 @@ A skill that declares a source uses `extensions.source`:
   "name": ".NET Migration Agent",
   "description": "Migrates .NET applications to modern frameworks.",
   "version": "1.3.0",
-  "defaultInputModes": ["text"],
-  "defaultOutputModes": ["text"],
   "capabilities": {
     "restartable": false,
     "a2aSupported": true,
-    "legacyDashboard": false,
-    "legacyTaskLink": false,
+    "legacyDashboard": true,
+    "legacyTaskLink": true,
     "webAppV2": true,
-    "legacyRestartable": false,
+    "legacyRestartable": true,
     "extensions": [
       {
         "name": "Agent Provider",
