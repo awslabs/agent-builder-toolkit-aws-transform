@@ -1324,6 +1324,431 @@ Expected response:
 }
 ```
 
+### Agent Card Specification
+
+When you publish an agent version with `PublishAgentVersion`, AWS Transform validates the structure of the agent card submitted in `AgentConfiguration.agentCard`. Invalid cards are rejected with a `ValidationException` naming the specific field and what was wrong.
+
+> **Note:** Agent card validation does not apply to `A2A_AGENT` agents.
+
+#### Agent Card Top-Level Fields
+
+```json
+{
+  "id": "example-partner-agent",
+  "name": "Example Partner Agent",
+  "description": "Example agent.",
+  "version": "1.0.0",
+  "url": "https://agent.example.com",
+  "capabilities": {
+    "restartable": false,
+    "a2aSupported": true,
+    "legacyDashboard": true,
+    "legacyTaskLink": true,
+    "webAppV2": true,
+    "legacyRestartable": true,
+    "extensions": [ /* ... */ ]
+  }
+}
+```
+
+| Field | Required | Rules |
+| --- | --- | --- |
+| `id` | Yes | Non-blank. May contain only letters, digits, hyphens, and underscores. Recommended: use your registered agent name. |
+| `name` | Yes | Non-blank. Human-readable name. |
+| `description` | Yes | Non-blank. |
+| `version` | Yes | Semantic versioning — `major.minor.patch` (e.g. `1.2.0`), optionally with a `-dev-<id>` suffix (e.g. `1.2.0-dev-abc123`). Other pre-release labels (`-beta`, `-rc1`) are **not** allowed. |
+| `capabilities` | Yes | Must contain all six boolean flags shown above (each a real `true`/`false`) plus a non-empty `extensions` list. Additional capability fields are accepted and preserved. |
+| `url` | No | String. |
+| `defaultInputModes` / `defaultOutputModes` | No | Optional. List of strings (e.g. `["text"]`). Omit entirely if not needed. |
+| `skills` | No | List. Validated only if present and non-empty. See [Skills](#agent-card-skills). |
+| `tags` | No | List of strings. |
+
+Any additional top-level fields you include are accepted and preserved.
+
+##### Capabilities Flags
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `a2aSupported` | `true` | Legacy flag. All new agents should set this to `true`. |
+| `legacyDashboard` | `true` | Legacy flag. All new agents should set this to `true`. |
+| `legacyTaskLink` | `true` | Legacy flag. All new agents should set this to `true`. |
+| `webAppV2` | `true` | Legacy flag. All new agents should set this to `true`. |
+| `legacyRestartable` | `true` | Legacy flag. All new agents should set this to `true`. |
+| `restartable` | `false` | Set to `true` only if your agent allows jobs to be restarted. |
+
+> **Note:** The flags `a2aSupported`, `legacyDashboard`, `legacyTaskLink`, `webAppV2`, and `legacyRestartable` are legacy flags that should be set to `true` for all new agents unless you have a specific requirement. Consult with the AWS Transform team before changing these defaults.
+
+#### Agent Card Extensions
+
+Every entry in `capabilities.extensions` has the same base shape:
+
+```json
+{
+  "name": "Extension Name",
+  "description": "Human-readable description of the extension.",
+  "params": { /* ... */ }
+}
+```
+
+- `name` — required, non-blank.
+- `description` — required, non-blank.
+- `params` — required, non-empty object.
+
+Three extensions are **required** by name: `Agent Provider`, `Agent Dependencies`, `Agent Connectors`. You may include additional custom extensions; each must still satisfy the rules above.
+
+##### Required Extension: Agent Provider
+
+```json
+{
+  "name": "Agent Provider",
+  "description": "Agent owner information.",
+  "params": {
+    "name": "Example Partner Inc.",
+    "accountId": "123456789012",
+    "ownerType": "DIRECT_AGENT",
+    "contactInfo": [
+      { "type": "email", "value": "agent-support@example.com" }
+    ]
+  }
+}
+```
+
+| Field | Required | Rules |
+| --- | --- | --- |
+| `name` | Yes | Non-blank. |
+| `accountId` | Yes | Your 12-digit AWS account ID. |
+| `ownerType` | Yes | One of `INTERNAL_AGENT`, `DIRECT_AGENT`, `MARKETPLACE_AGENT`. Partner agents use `DIRECT_AGENT`. |
+| `contactInfo` | Yes | Non-empty list of contact objects. |
+
+Each contact object:
+
+| Field | Required | Rules |
+| --- | --- | --- |
+| `type` | Yes | One of `email`, `phone`, `slack`, `cti`, `other`. |
+| `value` | Yes | Non-blank. For `cti` contacts this is an object with non-blank `category`, `type`, and `item`; for all other types it is the contact value itself (e.g. the email address or phone number). |
+
+> **Note:** If `ownerType` is `INTERNAL_AGENT`, at least one contact must be of type `cti`. This does not apply to `DIRECT_AGENT` or `MARKETPLACE_AGENT`.
+
+##### Required Extension: Agent Dependencies
+
+```json
+{
+  "name": "Agent Dependencies",
+  "description": "Declares agent dependencies.",
+  "params": {
+    "agentDependencies": [
+      {
+        "agentName": "my-analysis-agent",
+        "role": "Analyzes source artifacts",
+        "required": false
+      }
+    ]
+  }
+}
+```
+
+- `params` must be non-empty. List dependencies under `agentDependencies` (each with `agentName`, `role`, `required`).
+- Use `[]` if there are no dependencies.
+
+##### Required Extension: Agent Connectors
+
+```json
+{
+  "name": "Agent Connectors",
+  "description": "Connector types used by this agent.",
+  "params": {
+    "connectors": [
+      {
+        "connectorTypeId": "platform|s3|1",
+        "displayName": "S3 Source Code Connector",
+        "required": true,
+        "description": "S3 bucket for uploading and accessing application source code."
+      }
+    ]
+  }
+}
+```
+
+- `params.connectors` is optional. If the agent uses no connectors, use `"params": { "connectors": [] }`.
+- If present, every entry in the connectors list requires:
+
+| Field | Required | Rules |
+| --- | --- | --- |
+| `connectorTypeId` | Yes | String following `{owner}|{shortName}|{version}` format. |
+| `displayName` | Yes | Non-blank string. |
+| `description` | Yes | Non-blank string. |
+| `required` | Yes | Boolean. |
+
+##### Optional Extension: Agent Code Repo
+
+```json
+{
+  "name": "Agent Code Repo",
+  "description": "Source repository for this agent.",
+  "params": {
+    "codeUrl": "https://github.com/example/agent",
+    "branch": "main"
+  }
+}
+```
+
+- Validated only if included.
+- `codeUrl` — required. Up to 2048 characters. Must begin with `https://`.
+- `branch` — required. Up to 256 characters. Must start with a letter or digit, and may otherwise contain letters, digits, dots, underscores, slashes, and hyphens.
+
+##### Optional Extension: AgentCore Image
+
+```json
+{
+  "name": "AgentCore Image",
+  "description": "Container image for this agent.",
+  "params": {
+    "imageUri": "123456789012.dkr.ecr.us-east-1.amazonaws.com/my-agent:latest"
+  }
+}
+```
+
+- Validated only if included.
+- `imageUri` — required. Up to 512 characters. Must be a valid ECR image URI of the form `{accountId}.dkr.ecr.{region}.amazonaws.com/{repo}:{tag}`.
+
+#### Agent Card Skills
+
+The `skills` field is optional — omit it entirely if the agent has none. When present and non-empty, each skill is validated:
+
+```json
+{
+  "id": "example_skill",
+  "name": "Example Skill",
+  "description": "Does something useful.",
+  "tags": ["example"]
+}
+```
+
+| Field | Required | Rules |
+| --- | --- | --- |
+| `id` | Yes | Non-blank. |
+| `name` | Yes | Non-blank. Up to 100 characters. May contain only letters, digits, spaces, hyphens, and underscores. |
+| `description` | Yes | Non-blank. Up to 500 characters. |
+| `tags` | Yes | Non-empty list of strings. |
+| `extensions` | No | If present, see below. |
+
+A skill that declares a source uses `extensions.source`:
+
+```json
+{
+  "id": "registry_skill",
+  "name": "Registry Skill",
+  "description": "A skill backed by the skill registry.",
+  "tags": ["example"],
+  "extensions": {
+    "executionMode": "AUTOMATIC",
+    "source": {
+      "type": "SKILL_REGISTRY",
+      "details": { "skillName": "my-skill", "version": "1.0.0" }
+    }
+  }
+}
+```
+
+- `executionMode` — optional. One of `AUTOMATIC`, `INTERACTIVE`, `HYBRID`.
+- `source` — required when `extensions` is present.
+  - `source.type` — required. One of `SKILL_REGISTRY`, `TD_REGISTRY`, `OTHER`.
+  - `source.details` — required, non-empty map. Required keys depend on `type`:
+    - `SKILL_REGISTRY` requires `skillName` and `version`
+    - `TD_REGISTRY` requires `tdName` and `version`
+    - `OTHER` requires all values to be non-blank
+- For `SKILL_REGISTRY` sources, the referenced skill must exist and the caller must have access.
+
+#### Agent Card Examples
+
+##### Example 1: Minimal Orchestrator Agent (no dependencies, no connectors)
+
+```json
+{
+  "id": "my-orchestrator-agent",
+  "name": "My Orchestrator Agent",
+  "description": "Orchestrates transformation workflows.",
+  "version": "1.0.0",
+  "capabilities": {
+    "restartable": false,
+    "a2aSupported": true,
+    "legacyDashboard": true,
+    "legacyTaskLink": true,
+    "webAppV2": true,
+    "legacyRestartable": true,
+    "extensions": [
+      {
+        "name": "Agent Provider",
+        "description": "Agent owner information.",
+        "params": {
+          "name": "My Company",
+          "accountId": "123456789012",
+          "ownerType": "DIRECT_AGENT",
+          "contactInfo": [
+            { "type": "email", "value": "team@mycompany.com" }
+          ]
+        }
+      },
+      {
+        "name": "Agent Dependencies",
+        "description": "Declares agent dependencies.",
+        "params": { "agentDependencies": [] }
+      },
+      {
+        "name": "Agent Connectors",
+        "description": "Connector types used by this agent.",
+        "params": { "connectors": [] }
+      }
+    ]
+  }
+}
+```
+
+##### Example 2: Orchestrator Agent with Subagent Dependencies
+
+```json
+{
+  "id": "migration-orchestrator",
+  "name": "Migration Orchestrator",
+  "description": "Orchestrates multi-step migration workflows using specialized subagents.",
+  "version": "2.1.0",
+  "url": "https://migration.example.com",
+  "capabilities": {
+    "restartable": true,
+    "a2aSupported": true,
+    "legacyDashboard": true,
+    "legacyTaskLink": true,
+    "webAppV2": true,
+    "legacyRestartable": true,
+    "extensions": [
+      {
+        "name": "Agent Provider",
+        "description": "Agent owner information.",
+        "params": {
+          "name": "Migration Corp",
+          "accountId": "111222333444",
+          "ownerType": "DIRECT_AGENT",
+          "contactInfo": [
+            { "type": "email", "value": "migration-team@example.com" },
+            { "type": "slack", "value": "#migration-support" }
+          ]
+        }
+      },
+      {
+        "name": "Agent Dependencies",
+        "description": "Declares agent dependencies.",
+        "params": {
+          "agentDependencies": [
+            {
+              "agentName": "code-analysis-agent",
+              "role": "Analyzes source code for migration compatibility",
+              "required": true
+            },
+            {
+              "agentName": "testing-agent",
+              "role": "Runs validation tests after migration steps",
+              "required": false
+            }
+          ]
+        }
+      },
+      {
+        "name": "Agent Connectors",
+        "description": "Connector types used by this agent.",
+        "params": { "connectors": [] }
+      }
+    ]
+  }
+}
+```
+
+##### Example 3: Task Agent with Connectors and Skills
+
+```json
+{
+  "id": "dotnet-migration-agent",
+  "name": ".NET Migration Agent",
+  "description": "Migrates .NET applications to modern frameworks.",
+  "version": "1.3.0",
+  "capabilities": {
+    "restartable": false,
+    "a2aSupported": true,
+    "legacyDashboard": true,
+    "legacyTaskLink": true,
+    "webAppV2": true,
+    "legacyRestartable": true,
+    "extensions": [
+      {
+        "name": "Agent Provider",
+        "description": "Agent owner information.",
+        "params": {
+          "name": "Cloud Migration Partners",
+          "accountId": "555666777888",
+          "ownerType": "DIRECT_AGENT",
+          "contactInfo": [
+            { "type": "email", "value": "dotnet-team@cloudmigration.com" }
+          ]
+        }
+      },
+      {
+        "name": "Agent Dependencies",
+        "description": "Declares agent dependencies.",
+        "params": { "agentDependencies": [] }
+      },
+      {
+        "name": "Agent Connectors",
+        "description": "Connector types used by this agent.",
+        "params": {
+          "connectors": [
+            {
+              "connectorTypeId": "platform|s3|1",
+              "displayName": "S3 Source Code Connector",
+              "required": true,
+              "description": "S3 bucket for uploading and accessing .NET application source code."
+            },
+            {
+              "connectorTypeId": "platform|github|1",
+              "displayName": "GitHub Repository Connector",
+              "required": false,
+              "description": "GitHub repository for pulling source code and creating PRs."
+            }
+          ]
+        }
+      },
+      {
+        "name": "Agent Code Repo",
+        "description": "Source repository for this agent.",
+        "params": {
+          "codeUrl": "https://github.com/cloud-migration/dotnet-agent",
+          "branch": "main"
+        }
+      },
+      {
+        "name": "AgentCore Image",
+        "description": "Container image for this agent.",
+        "params": {
+          "imageUri": "555666777888.dkr.ecr.us-east-1.amazonaws.com/dotnet-migration-agent:1.3.0"
+        }
+      }
+    ]
+  },
+  "skills": [
+    {
+      "id": "framework_upgrade",
+      "name": "Framework Upgrade",
+      "description": "Upgrades .NET Framework applications to .NET 8.",
+      "tags": ["dotnet", "migration", "upgrade"]
+    },
+    {
+      "id": "dependency_analysis",
+      "name": "Dependency Analysis",
+      "description": "Analyzes NuGet dependencies for compatibility with target framework.",
+      "tags": ["dotnet", "analysis"]
+    }
+  ]
+}
+```
+
 ### Configure Access Control
 
 By default, agents are created with RESTRICTED visibility. update-publisher-access-control API allows to add authorized AWS accounts to use the agents.
