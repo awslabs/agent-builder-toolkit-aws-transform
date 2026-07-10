@@ -6,6 +6,7 @@ Checkpoint management for agent state/memory/conversation persistence.
 
 import asyncio
 import logging
+import threading
 from typing import Optional
 
 from agent_builder_sdk.checkpoint.checkpoint_repository import CheckpointRepository
@@ -26,43 +27,45 @@ class CheckpointManager:
         # Tracks whether we've already retried restore after an unverified startup,
         # so a persistently failing restore doesn't retry on every checkpoint tick.
         self._late_restore_attempted = False
+        self._checkpoint_lock = threading.Lock()
 
     def _execute_checkpoint(self) -> bool:
         """Execute checkpoint creation/update logic."""
-        # Guard against overwriting remote state when startup restore never succeeded.
-        # During container startup the initial restore can race the auth-credential
-        # update and fail; without this guard the next checkpoint would clobber the
-        # existing good remote checkpoint with empty local state. We retry restore
-        # once here, and refuse to write if it still hasn't been verified.
-        if not self.checkpoint_repository.is_restore_verified:
-            if not self._late_restore_attempted:
-                self._late_restore_attempted = True
-                try:
-                    self.checkpoint_repository.restore_if_available()
-                except Exception:
-                    logger.warning("Late restore attempt failed:", exc_info=True)
-                if not self.checkpoint_repository.is_restore_verified:
+        with self._checkpoint_lock:
+            # Guard against overwriting remote state when startup restore never succeeded.
+            # During container startup the initial restore can race the auth-credential
+            # update and fail; without this guard the next checkpoint would clobber the
+            # existing good remote checkpoint with empty local state. We retry restore
+            # once here, and refuse to write if it still hasn't been verified.
+            if not self.checkpoint_repository.is_restore_verified:
+                if not self._late_restore_attempted:
+                    self._late_restore_attempted = True
+                    try:
+                        self.checkpoint_repository.restore_if_available()
+                    except Exception:
+                        logger.warning("Late restore attempt failed:", exc_info=True)
+                    if not self.checkpoint_repository.is_restore_verified:
+                        logger.warning(
+                            "Skipping checkpoint: restore never verified, "
+                            "refusing to overwrite remote state"
+                        )
+                        return False
+                else:
                     logger.warning(
-                        "Skipping checkpoint: restore never verified, "
-                        "refusing to overwrite remote state"
+                        "Skipping checkpoint: restore never verified and "
+                        "late restore already attempted"
                     )
                     return False
-            else:
-                logger.warning(
-                    "Skipping checkpoint: restore never verified and "
-                    "late restore already attempted"
-                )
-                return False
 
-        checkpoints = self.checkpoint_repository.list_checkpoint()
-        if checkpoints:
-            success = self.checkpoint_repository.update_checkpoint(
-                existing_checkpoint=checkpoints[0]
-            )
-        else:
-            artifact_id = self.checkpoint_repository.create_checkpoint()
-            success = artifact_id is not None
-        return success
+            checkpoints = self.checkpoint_repository.list_checkpoint()
+            if checkpoints:
+                success = self.checkpoint_repository.update_checkpoint(
+                    existing_checkpoint=checkpoints[0]
+                )
+            else:
+                artifact_id = self.checkpoint_repository.create_checkpoint()
+                success = artifact_id is not None
+            return success
 
     def attempt_checkpoint(self) -> bool:
         """Attempt to create a checkpoint if trigger conditions are met."""
@@ -149,7 +152,7 @@ class BackgroundCheckpointer:
         """Background checkpoint loop."""
         while self.enabled:
             try:
-                self.manager.attempt_checkpoint()
+                await asyncio.to_thread(self.manager.attempt_checkpoint)
                 # sleep 30s
                 await asyncio.sleep(30)
             except asyncio.CancelledError:

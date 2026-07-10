@@ -104,7 +104,7 @@ class CheckpointService:
                 await asyncio.sleep(10)  # Check every 10 seconds
                 try:
                     if self.manager:
-                        self.manager.attempt_checkpoint()
+                        await asyncio.to_thread(self.manager.attempt_checkpoint)
                 except Exception:
                     logger.warning("Background checkpoint error:", exc_info=True)
 
@@ -128,7 +128,7 @@ class CheckpointService:
             # Create final checkpoint (force checkpoint regardless of trigger)
             if self.manager:
                 logger.info("Creating final checkpoint before shutdown...")
-                success = self.manager.force_checkpoint()
+                success = await asyncio.to_thread(self.manager.force_checkpoint)
                 if not success:
                     logger.warning("Final checkpoint failed")
 
