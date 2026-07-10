@@ -4,7 +4,7 @@
 Unit tests for checkpoint manager.
 """
 
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
@@ -331,3 +331,130 @@ class TestBackgroundCheckpointer:
 
         # Should not call increment_turn for time-based trigger
         assert not hasattr(time_trigger, "increment_turn") or not time_trigger.increment_turn.called
+
+
+class TestCheckpointManagerConcurrencyLock:
+    """Regression tests: _execute_checkpoint must serialize concurrent callers.
+
+    Once CheckpointService offloads via asyncio.to_thread, attempt_checkpoint
+    and force_checkpoint can run on different worker threads. The check-then-act
+    (list_checkpoint -> create/update) would otherwise race two workers into
+    duplicate create_checkpoint() calls.
+    """
+
+    def test_manager_has_threading_lock(self, manager):
+        """Manager must expose a threading.Lock (not asyncio.Lock)."""
+        import threading
+
+        # threading.Lock returns an instance of the private _thread.lock type;
+        # check via the acquire/release protocol + rejection of asyncio.Lock.
+        assert hasattr(manager, "_checkpoint_lock")
+        assert hasattr(manager._checkpoint_lock, "acquire")
+        assert hasattr(manager._checkpoint_lock, "release")
+        # Confirm it behaves like threading.Lock (context manager, non-async).
+        with manager._checkpoint_lock:
+            pass
+        # Sanity: a fresh threading.Lock has the same type.
+        assert type(manager._checkpoint_lock) is type(threading.Lock())
+
+    def test_execute_checkpoint_acquires_lock(self, manager, mock_checkpoint_repository):
+        """_execute_checkpoint must acquire the manager's lock."""
+        mock_checkpoint_repository.list_checkpoint.return_value = []
+        mock_checkpoint_repository.create_checkpoint.return_value = "artifact-123"
+
+        lock_spy = MagicMock(wraps=manager._checkpoint_lock)
+        manager._checkpoint_lock = lock_spy
+
+        result = manager._execute_checkpoint()
+
+        assert result is True
+        # Enter + exit the lock exactly once.
+        lock_spy.__enter__.assert_called_once()
+        lock_spy.__exit__.assert_called_once()
+
+    def test_execute_checkpoint_serializes_concurrent_threads(
+        self, manager, mock_checkpoint_repository
+    ):
+        """Two threads calling _execute_checkpoint must not both hit create_checkpoint.
+
+        Without the lock, both threads observe list_checkpoint == [] and both call
+        create_checkpoint, producing duplicate artifacts. With the lock, the second
+        thread waits, then sees the checkpoint the first one created.
+        """
+        import threading as _t
+
+        seen_empty = _t.Event()
+        allow_create = _t.Event()
+        state = {"checkpoints": []}
+
+        def list_side_effect():
+            snapshot = list(state["checkpoints"])
+            if not snapshot:
+                # First caller inside the lock — signal we saw empty, wait for
+                # the second thread to have queued up on the lock, then proceed.
+                seen_empty.set()
+                allow_create.wait(timeout=1.0)
+            return snapshot
+
+        def create_side_effect():
+            state["checkpoints"].append({"artifactId": "artifact-1"})
+            return "artifact-1"
+
+        mock_checkpoint_repository.list_checkpoint.side_effect = list_side_effect
+        mock_checkpoint_repository.create_checkpoint.side_effect = create_side_effect
+        mock_checkpoint_repository.update_checkpoint.return_value = True
+
+        results = []
+
+        def run():
+            results.append(manager._execute_checkpoint())
+
+        t1 = _t.Thread(target=run)
+        t2 = _t.Thread(target=run)
+        t1.start()
+        # Wait until t1 is inside the lock and past list_checkpoint == [].
+        assert seen_empty.wait(timeout=1.0)
+        t2.start()
+        # t2 is now blocked on the lock. Release t1.
+        allow_create.set()
+        t1.join(timeout=2.0)
+        t2.join(timeout=2.0)
+
+        # Exactly one create_checkpoint call; second thread saw the artifact
+        # and called update_checkpoint instead.
+        assert mock_checkpoint_repository.create_checkpoint.call_count == 1
+        assert mock_checkpoint_repository.update_checkpoint.call_count == 1
+        assert results == [True, True]
+
+
+class TestBackgroundCheckpointerEventLoopOffload:
+    """Regression: BackgroundCheckpointer._background_loop must offload via to_thread."""
+
+    @pytest.mark.asyncio
+    async def test_background_loop_dispatches_via_to_thread(self, manager):
+        """_background_loop must offload attempt_checkpoint via asyncio.to_thread."""
+        import asyncio as _asyncio
+        from unittest.mock import AsyncMock
+
+        bc = BackgroundCheckpointer(manager, check_interval=1)
+        bc.enabled = True
+
+        with patch(
+            "agent_builder_sdk.checkpoint.checkpoint_manager.asyncio.to_thread",
+            new_callable=AsyncMock,
+        ) as mock_to_thread, patch(
+            "agent_builder_sdk.checkpoint.checkpoint_manager.asyncio.sleep",
+            new_callable=AsyncMock,
+        ) as mock_sleep:
+            # Let one tick run then cancel.
+            mock_sleep.side_effect = [None, _asyncio.CancelledError()]
+
+            # attempt_checkpoint on the manager must not be called directly.
+            with patch.object(manager, "attempt_checkpoint") as direct_call:
+                try:
+                    await bc._background_loop()
+                except _asyncio.CancelledError:
+                    pass
+
+                mock_to_thread.assert_any_call(manager.attempt_checkpoint)
+                direct_call.assert_not_called()

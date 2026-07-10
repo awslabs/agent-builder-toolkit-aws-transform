@@ -319,3 +319,71 @@ class TestCheckpointServiceShutdown:
         checkpoint_service._background_task = mock_task
 
         await checkpoint_service.shutdown()  # Should not raise
+
+
+class TestCheckpointServiceEventLoopOffload:
+    """Regression tests: checkpoint I/O must be offloaded off the event loop.
+
+    attempt_checkpoint / force_checkpoint do a blocking ZIP + artifact upload;
+    running them directly on the loop starves /ping. Guard the to_thread hop.
+    """
+
+    @pytest.mark.asyncio
+    async def test_background_task_dispatches_via_to_thread(
+        self, checkpoint_service, mock_context
+    ):
+        """Background loop must offload attempt_checkpoint via asyncio.to_thread."""
+        with patch(
+            "agent_builder_sdk.checkpoint.checkpoint_service.create_checkpoint_repository"
+        ), patch(
+            "agent_builder_sdk.checkpoint.checkpoint_service.CheckpointManager"
+        ) as mock_manager_class, patch(
+            "agent_builder_sdk.checkpoint.checkpoint_service.ConversationTurnTrigger"
+        ), patch(
+            "agent_builder_sdk.checkpoint.checkpoint_service.asyncio.to_thread",
+            new_callable=AsyncMock,
+        ) as mock_to_thread, patch(
+            "agent_builder_sdk.checkpoint.checkpoint_service.asyncio.sleep",
+            new_callable=AsyncMock,
+        ) as mock_sleep:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+
+            checkpoint_service.initialize(mock_context)
+            await checkpoint_service.start_background_checkpointing()
+
+            # Let the loop tick once then cancel.
+            mock_sleep.side_effect = [None, asyncio.CancelledError()]
+            try:
+                await checkpoint_service._background_task
+            except asyncio.CancelledError:
+                pass
+
+            mock_to_thread.assert_any_call(mock_manager.attempt_checkpoint)
+            # Direct sync call would starve the loop — must NOT happen.
+            mock_manager.attempt_checkpoint.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_shutdown_dispatches_force_checkpoint_via_to_thread(
+        self, checkpoint_service, mock_context
+    ):
+        """Shutdown final checkpoint must offload force_checkpoint via asyncio.to_thread."""
+        with patch(
+            "agent_builder_sdk.checkpoint.checkpoint_service.create_checkpoint_repository"
+        ), patch(
+            "agent_builder_sdk.checkpoint.checkpoint_service.CheckpointManager"
+        ) as mock_manager_class, patch(
+            "agent_builder_sdk.checkpoint.checkpoint_service.ConversationTurnTrigger"
+        ), patch(
+            "agent_builder_sdk.checkpoint.checkpoint_service.asyncio.to_thread",
+            new_callable=AsyncMock,
+        ) as mock_to_thread:
+            mock_manager = Mock()
+            mock_manager_class.return_value = mock_manager
+            mock_to_thread.return_value = True
+
+            checkpoint_service.initialize(mock_context)
+            await checkpoint_service.shutdown()
+
+            mock_to_thread.assert_any_call(mock_manager.force_checkpoint)
+            mock_manager.force_checkpoint.assert_not_called()
