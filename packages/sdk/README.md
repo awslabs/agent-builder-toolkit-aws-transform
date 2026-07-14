@@ -154,6 +154,56 @@ if __name__ == "__main__":
 - The `agent-builder-agentic-mcp` binary on disk — see [agent-builder-agentic-mcp-aws-transform](https://pypi.org/project/agent-builder-agentic-mcp-aws-transform/)
 - **Calling other AWS Transform agents**: Your AWS account must be allowlisted for the [AWS Transform composability initiative](https://aws.amazon.com/transform/partners/). Contact your Partner Development Manager (PDM) or apply through AWS Partner Central.
 
+## Configuration
+
+### Agentic API Endpoint
+
+The SDK communicates with the AWS Transform Agentic API, which requires explicit endpoint routing. The `get_agentic_api_client()` factory reads the `QT_AGENTIC_API_ENDPOINT` environment variable.
+
+In managed compute (Bedrock AgentCore, MDE), this variable is injected automatically. For local development, set it explicitly:
+
+```bash
+export QT_AGENTIC_API_ENDPOINT=https://iad.prod.agenticapi.elastic-gumby.ai.aws.dev
+```
+
+| Stage | Region | Endpoint |
+|-------|--------|----------|
+| prod | us-east-1 | `https://iad.prod.agenticapi.elastic-gumby.ai.aws.dev` |
+| prod | eu-central-1 | `https://fra.prod.agenticapi.elastic-gumby.ai.aws.dev` |
+| gamma | us-east-1 | `https://iad.gamma.agenticapi.elastic-gumby.ai.aws.dev` |
+| gamma | us-west-2 | `https://pdx.gamma.agenticapi.elastic-gumby.ai.aws.dev` |
+
+### Development Flags
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `ATX_USE_MOCK_REGISTRY` | `false` | When `true`, `discover_subagents` returns fixture data without calling the API |
+
+## Registry Schema Reference
+
+When calling `PublishAgentVersion`, the configuration includes nested structures:
+
+```
+configuration
+├── computeConfiguration
+│   └── provisionedComputeConfiguration
+│       ├── mdeConfiguration { atxAccessRoleArn, bootstrapRoleArn, environmentRoleArn, storageSize, devfile, instanceType }
+│       └── agentCoreConfiguration { atxAccessRoleArn, runtimeArn, qualifier }
+├── agentResiliencyConfiguration
+│   ├── partnerControllerRetryWindowMinutes
+│   └── agentRecoveryConfiguration { recoveryWaitTimeSeconds }
+├── stopAgentConfiguration {}
+├── inputPayloadSchema (JSON Schema)
+├── outputPayloadSchema (JSON Schema)
+├── agentCard { name, description, version, url, skills[], capabilities{extensions[]}, provider{} }
+├── monitoringType (HEARTBEAT | HEALTHCHECK)
+├── notificationsEnabled (ENABLED | DISABLED)
+├── objectiveNegotiationPrompt
+└── shortDescription
+```
+
+All of these are represented by dataclasses in `agent_builder_sdk.custom_types.agent_registry_types`.
+
 ## License
 
 Apache-2.0. See [LICENSE](LICENSE.txt) and [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt).
