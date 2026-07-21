@@ -22,12 +22,12 @@ def register_agent_tools(mcp: FastMCP) -> None:
     mcp.tool(description="Update an agent's metadata")(update_agent)
     mcp.tool(description="Deregister an agent from the ATX Agent Registry")(deregister_agent)
     mcp.tool(description="List all agents registered by the caller")(list_agents_by_publisher)
-    mcp.tool(description="List AWS account IDs with access to a RESTRICTED agent")(
+    mcp.tool(description="List AWS account IDs with access to a RESTRICTED or AWS_PUBLIC agent")(
         list_agent_access_control
     )
-    mcp.tool(description="Enable or disable access for an AWS account to a RESTRICTED agent")(
-        update_publisher_access_control
-    )
+    mcp.tool(
+        description="Enable or disable access for an AWS account to a RESTRICTED or AWS_PUBLIC agent"
+    )(update_publisher_access_control)
 
 
 def get_agent(name: str) -> str:
@@ -101,6 +101,7 @@ def update_agent(
     deprecated: Optional[bool] = None,
     owner_contact_info: Optional[str] = None,
     resource_deletion_notification_enabled: Optional[bool] = None,
+    visibility: Optional[str] = None,
 ) -> str:
     """Update an agent's metadata."""
     try:
@@ -126,6 +127,8 @@ def update_agent(
             kwargs["ownerContactInfo"] = owner_contact_info
         if resource_deletion_notification_enabled is not None:
             kwargs["resourceDeletionNotificationEnabled"] = resource_deletion_notification_enabled
+        if visibility is not None:
+            kwargs["visibility"] = visibility
         response = client.update_agent(**kwargs)
         return json.dumps(response, indent=2, default=str)
     except Exception as e:
@@ -168,7 +171,7 @@ def list_agent_access_control(
     max_results: Optional[int] = None,
     next_token: Optional[str] = None,
 ) -> str:
-    """List AWS account IDs that have been granted access to a RESTRICTED agent."""
+    """List AWS account IDs that have been granted access to a RESTRICTED or AWS_PUBLIC agent."""
     try:
         client = registry_client()
         kwargs: dict[str, Any] = {"name": name}
@@ -187,7 +190,7 @@ def update_publisher_access_control(
     customer_account_id: str,
     access_control: str,
 ) -> str:
-    """Enable or disable access for an AWS account to a RESTRICTED agent."""
+    """Enable or disable access for an AWS account to a RESTRICTED or AWS_PUBLIC agent."""
     try:
         client = registry_client()
         response = client.update_publisher_access_control(
