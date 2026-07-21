@@ -144,6 +144,29 @@ class TestUpdateAgent:
 
         mock_client.update_agent.assert_called_once_with(name="test-agent")
 
+    def test_update_agent_visibility_aws_public(self):
+        """Test updating agent visibility to AWS_PUBLIC."""
+        mock_client = MagicMock()
+        mock_client.update_agent.return_value = {}
+
+        with patch(f"{MODULE}.registry_client", return_value=mock_client):
+            update_agent(name="test-agent", visibility="AWS_PUBLIC")
+
+        mock_client.update_agent.assert_called_once_with(
+            name="test-agent", visibility="AWS_PUBLIC"
+        )
+
+    def test_update_agent_visibility_not_sent_when_none(self):
+        """Test that visibility is not included in kwargs when not provided."""
+        mock_client = MagicMock()
+        mock_client.update_agent.return_value = {}
+
+        with patch(f"{MODULE}.registry_client", return_value=mock_client):
+            update_agent(name="test-agent", description="Updated")
+
+        call_kwargs = mock_client.update_agent.call_args[1]
+        assert "visibility" not in call_kwargs
+
     def test_update_agent_error(self):
         """Test update agent error handling."""
         mock_client = MagicMock()
