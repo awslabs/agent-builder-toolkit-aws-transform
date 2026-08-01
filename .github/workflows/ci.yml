@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Recurrence guard for breaking transitive dependencies (issue #77).
+  # The existing integration job catches these via `agent-builder-mcp --help`.
+  schedule:
+    - cron: "17 6 * * 1"
 
 permissions:
   contents: read
