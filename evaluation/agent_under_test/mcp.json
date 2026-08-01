@@ -5,6 +5,8 @@
       "args": [
         "--from",
         "agent-builder-mcp-aws-transform",
+        "--with",
+        "mcp>=1.0.0,<2.0.0",
         "agent-builder-mcp"
       ],
       "autoApprove": [

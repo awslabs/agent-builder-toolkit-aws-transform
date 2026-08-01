@@ -27,7 +27,7 @@ Add the server to your MCP configuration:
   "mcpServers": {
     "agent-builder": {
       "command": "uvx",
-      "args": ["agent-builder-mcp-aws-transform"]
+      "args": ["--from", "agent-builder-mcp-aws-transform", "--with", "mcp>=1.0.0,<2.0.0", "agent-builder-mcp"]
     }
   }
 }
