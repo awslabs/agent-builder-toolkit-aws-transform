@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-builder-mcp-client-aws-transform"
-version = "1.0.0"
+version = "1.0.1"
 description = "Python MCP client provided by the AWS Transform team"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,7 +20,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "mcp>=1.0",
+    # Pin to the mcp 1.x major the toolkit is tested against; mcp 2.0.0 is a
+    # breaking release (see issue #77). Widen once verified against 2.x.
+    "mcp>=1.0,<2.0",
     "anyio>=4.0",
     "trio>=0.20",
 ]

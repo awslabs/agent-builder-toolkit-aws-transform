@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-builder-sdk-aws-transform"
-version = "1.0.2"
+version = "1.0.3"
 description = "Base agent SDK for building orchestrator and subagents on AWS Transform"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -24,7 +24,9 @@ dependencies = [
     "boto3>=1.28",
     "botocore>=1.28",
     "fastapi>=0.100",
-    "mcp>=1.0",
+    # Pin to the mcp 1.x major the toolkit is tested against; mcp 2.0.0 is a
+    # breaking release (see issue #77). Widen once verified against 2.x.
+    "mcp>=1.0,<2.0",
     "strands-agents>=1.30.0",
     "strands-agents-tools>=0.2",
     "uvicorn>=0.20",
