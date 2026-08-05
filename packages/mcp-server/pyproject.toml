@@ -22,7 +22,7 @@ classifiers = [
 dependencies = [
     # mcp 2.0.0 removed mcp.server.fastmcp (this server's entry import); cap to 1.x
     # until the server is ported to the 2.x API. See issue #77.
-    "mcp>=1.0,<2.0",
+    "mcp>=1.0,<3.0",
     "anyio>=4.0",
     "rank-bm25>=0.2",
     "snowballstemmer>=2.0",
