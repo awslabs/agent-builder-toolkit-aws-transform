@@ -235,12 +235,10 @@ async def _wait_for(predicate, *, timeout=5.0):
 async def test_pretooluse_hook_denies_bash_via_real_sdk_dispatch(target):
     # Internal SDK pieces — imported here so the rest of the suite stays on the
     # public API. This is the one test that must exercise the dispatch machinery.
-    from claude_agent_sdk._internal.client import InternalClient
     from claude_agent_sdk._internal.query import Query
+    from claude_agent_sdk.types import _hooks_to_internal_format
 
-    internal_hooks = InternalClient()._convert_hooks_to_internal_format(
-        confinement_hooks(target)
-    )
+    internal_hooks = _hooks_to_internal_format(confinement_hooks(target))
     transport = _FakeCLITransport()
     query = Query(transport=transport, is_streaming_mode=True, hooks=internal_hooks)
 
@@ -316,12 +314,10 @@ async def test_pretooluse_hook_denies_bash_via_real_sdk_dispatch(target):
 
 
 async def test_pretooluse_hook_denies_escaping_write_via_real_sdk_dispatch(target):
-    from claude_agent_sdk._internal.client import InternalClient
     from claude_agent_sdk._internal.query import Query
+    from claude_agent_sdk.types import _hooks_to_internal_format
 
-    internal_hooks = InternalClient()._convert_hooks_to_internal_format(
-        confinement_hooks(target)
-    )
+    internal_hooks = _hooks_to_internal_format(confinement_hooks(target))
     transport = _FakeCLITransport()
     query = Query(transport=transport, is_streaming_mode=True, hooks=internal_hooks)
 
