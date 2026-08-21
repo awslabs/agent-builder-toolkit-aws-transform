@@ -42,7 +42,7 @@
       - [Get Agent Details](#get-agent-details)
   - [AWS Transform Prod WebApp testing](#aws-transform-prod-webapp-testing)
   - [External Agentic API support [To Be released]](#external-agentic-api-support-to-be-released)
-  - [Publish Agent to be consumed in customer account [WIP]](#publish-agent-to-be-consumed-in-customer-account-wip)
+  - [Publish Agent to be consumed in customer account](#publish-agent-to-be-consumed-in-customer-account)
 - [FAQ](#faq)
   - [AWS Transform Concepts FAQs](#aws-transform-concepts-faqs)
     - [What is job plan of an AWS Transform job?](#what-is-job-plan-of-an-aws-transform-job)
@@ -1324,6 +1324,20 @@ Expected response:
 }
 ```
 
+#### Publishing a customer-configurable agent (`customerConfigurationRequired = true`)
+
+The example above is for a **publisher-hosted** agent (`customerConfigurationRequired = false`), where you supply the `computeConfiguration` (your own Bedrock AgentCore runtime) at publish time.
+
+For an agent registered with `customerConfigurationRequired = true`, compute is supplied by each **customer** in their own account — not by you at publish time. Use the same `publish-agent-version.json`, but **omit the entire `computeConfiguration` block**. Every other field (`agentCard`, `inputPayloadSchema`, `outputPayloadSchema`, `monitoringType`, `notificationsEnabled`, `objectiveNegotiationPrompt`, `agentResiliencyConfiguration`) stays the same.
+
+If you include `computeConfiguration` for a customer-configurable agent, the publish is rejected with:
+
+> `Agent marked as customer configurable, compute configuration cannot be provided.`
+
+(Conversely, omitting `computeConfiguration` for a `customerConfigurationRequired = false` agent is rejected with `Agent marked as non customer configurable, compute configuration is required.`)
+
+`publish-agent-version` must be called with credentials for the agent's **owner account** (the account used in `register-agent`). Publishing from any other account is rejected with an access-denied error.
+
 ### Agent Card Specification
 
 When you publish an agent version with `PublishAgentVersion`, AWS Transform validates the structure of the agent card submitted in `AgentConfiguration.agentCard`. Invalid cards are rejected with a `ValidationException` naming the specific field and what was wrong.
@@ -1990,9 +2004,16 @@ Example screenshot:
 
 For current testing, you can set `USE_EXTERNAL_AGENTIC_API=false` if your testing account is allowlisted to use Internal Agentic API
 
-## Publish Agent to be consumed in customer account [WIP]
+## Publish Agent to be consumed in customer account
 
-If you have finished the development testing, you can now make agent available to run in customer account. Instructions would be added later.
+Once development testing is complete, you can make the agent available to run in a customer's account. Unlike the publisher-hosted flow, the agent runs on the **customer's** Bedrock AgentCore runtime, so the runtime is configured by the customer and is **not** baked into the published version.
+
+1. **Register** the agent with `customerConfigurationRequired = true` (see [Register Agent with AWS Transform](#register-agent-with-aws-transform)).
+2. **Publish a version without `computeConfiguration`** (see *Publishing a customer-configurable agent* under [Publish An Agent Version](#publish-an-agent-version)). This publishes the agent's contract — `agentCard`, input/output schemas, `objectiveNegotiationPrompt` — but no runtime.
+3. **Grant the customer access** with `UpdatePublisherAccessControl` (`accessControl = ENABLED`) for the customer's 12-digit AWS account ID (see [Configure Access Control](#configure-access-control)).
+4. **Customer configures the runtime**: in the AWS Transform console, the customer supplies their own Bedrock AgentCore `runtimeArn` and an `AWSTransformAgentInvokeRole` for the published agent version. This binding is per customer account and per version.
+
+At job creation, AWS Transform resolves the customer's configured runtime for the agent version and invokes it in the customer's account. If the published version does not exist, or the customer has not configured a runtime for that version, job creation fails — so make sure the version is published (step 2) **before** the customer runs a job.
 
 # FAQ
 
