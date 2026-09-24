@@ -57,7 +57,8 @@ class TestCase:
         Bridges the canonical eval_runner test model onto the ACP engine's
         scenario model so it can be run. The two schemas are near-identical; the
         only renames are ``user_message`` → ``prompt`` and ``metadata`` →
-        (dropped, the scenario model has no equivalent field).
+        (dropped, the scenario model has no equivalent field). ``complexity``
+        carries through so per-complexity aggregation works on the live path.
 
         Imported lazily so eval_runner's core stays importable without pulling in
         the ACP engine.
@@ -70,6 +71,7 @@ class TestCase:
             prompt=self.user_message,
             description=self.description,
             assertions=self.assertions,
+            complexity=self.complexity,
             tags=self.tags,
             max_turns=self.max_turns,
             timeout_seconds=self.timeout_seconds,

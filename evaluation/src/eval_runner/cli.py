@@ -25,6 +25,7 @@ Consuming packages provide an :class:`eval_runner.config.EvalConfig` (carrying a
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import time
@@ -171,6 +172,7 @@ def cmd_run(args: argparse.Namespace, config: EvalConfig) -> int:
             name=s.name,
             user_message=s.prompt,
             description=s.description,
+            complexity=s.complexity,
             tags=s.tags,
             max_turns=s.max_turns,
             timeout_seconds=s.timeout_seconds,
@@ -223,6 +225,61 @@ def cmd_run(args: argparse.Namespace, config: EvalConfig) -> int:
         if not grade.passed:
             all_passed = False
 
+    # --- Aggregation (WBP 2.5): per-complexity + per-tag breakdown ---
+    summary = engine.summarize(eval_results, test_cases)
+    for complexity, bucket in sorted(summary.get("per_complexity", {}).items()):
+        logger.info(
+            f"complexity[{complexity}]: pass_rate={bucket['pass_rate']:.2f}"
+            f" avg={bucket['average_score']:.1f}"
+        )
+    for tag, bucket in sorted(summary.get("per_tag", {}).items()):
+        logger.info(
+            f"tag[{tag}]: pass_rate={bucket['pass_rate']:.2f}"
+            f" avg={bucket['average_score']:.1f}"
+        )
+
+    # --- Regression vs baseline (WBP 5.3) ---
+    # Optional, best-effort: a missing or malformed baseline degrades to a notice
+    # and never crashes the run. Load the baseline BEFORE writing this run's
+    # summary.json below — the canonical baseline IS eval-results/summary.json
+    # (the prior run's output), so reading it after the write would compare the
+    # run against itself and mask every regression.
+    has_regression = False
+    baseline_path = getattr(args, "baseline", None)
+    if baseline_path:
+        from eval_runner.regression_report import compare_summaries, load_summary
+
+        try:
+            baseline_summary = load_summary(baseline_path)
+            comparison = compare_summaries(summary, baseline_summary)
+            has_regression = comparison["has_regression"]
+            if has_regression:
+                logger.warning(
+                    "Regression vs baseline %s: overall pass_rate %.2f -> %.2f"
+                    " (delta %.2f)",
+                    baseline_path,
+                    comparison["overall"]["baseline"],
+                    comparison["overall"]["current"],
+                    comparison["overall"]["delta"],
+                )
+                for key in comparison["regressions"]:
+                    logger.warning("  regressed bucket: %s", key)
+            else:
+                logger.info(f"No regression vs baseline {baseline_path}")
+        except FileNotFoundError:
+            logger.info(f"Baseline not found, skipping regression check: {baseline_path}")
+        except (ValueError, KeyError, json.JSONDecodeError) as e:
+            logger.info(f"Baseline malformed, skipping regression check: {e}")
+
+    # Persist this run's summary as the baseline artifact for the NEXT run's
+    # regression comparison (WBP 5.3). Reuse the same eval-results/ dir the
+    # per-scenario files land in. Written after the comparison above.
+    results_dir = Path.cwd() / "eval-results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = results_dir / "summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2))
+    logger.info(f"Summary saved: {summary_path}")
+
     if args.report:
         from eval_runner.execution.report import generate_dashboard
 
@@ -232,7 +289,9 @@ def cmd_run(args: argparse.Namespace, config: EvalConfig) -> int:
             logger.error(f"Dashboard generation failed: {e}")
 
     logger.info(f"{'ALL PASSED' if all_passed else 'SOME FAILED'} ({len(scenarios)} scenarios)")
-    return 0 if all_passed else 1
+    # A regression against the baseline is also a non-zero exit so CI can gate on
+    # it; existing assertion failures keep their semantics (OR keeps it minimal).
+    return 0 if (all_passed and not has_regression) else 1
 
 
 def main(config: EvalConfig) -> None:
@@ -255,6 +314,9 @@ def main(config: EvalConfig) -> None:
     p_run.add_argument("--cwd", default="/tmp", help="Working directory for bridge sessions")
     p_run.add_argument("--report", action="store_true", help="Generate HTML dashboard after run")
     p_run.add_argument("--clean", action="store_true", help="Remove eval-results/ before running")
+    p_run.add_argument(
+        "--baseline", help="Path to a baseline summary.json to compare against for regressions"
+    )
 
     p_report = sub.add_parser("report", help="Generate HTML dashboard from eval results")
     p_report.add_argument("--results-dir", help="Path to eval-results/ (default: ./eval-results/)")
