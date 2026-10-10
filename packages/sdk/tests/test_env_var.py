@@ -8,10 +8,13 @@ import pytest
 
 from agent_builder_sdk.agentic_framework.api_model import AgenticApiRequestContext
 from agent_builder_sdk.env_var import (
+    ENV_KEY_MAX_CHECKPOINTS,
+    MAX_ALLOWED_CHECKPOINTS,
     get_agent_context_from_env,
     get_agentic_api_request_context_with_current_token,
     get_bedrock_shared_capacity_role_arn,
     get_initial_agent_runtime_context_from_env,
+    get_max_checkpoints,
     is_external_agentic_api_enabled,
     retrieve_auth_token,
     set_runtime_env_vars,
@@ -441,3 +444,38 @@ class TestIsExternalAgenticApiEnabled:
     def test_disabled_when_env_var_missing(self):
         """Test function returns False when environment variable is missing."""
         assert is_external_agentic_api_enabled() is False
+
+
+class TestGetMaxCheckpoints:
+    """Tests for get_max_checkpoints function."""
+
+    def test_returns_none_when_unset(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            assert get_max_checkpoints() is None
+
+    def test_returns_value_when_greater_than_one(self):
+        with mock.patch.dict(os.environ, {"ATX_MAX_CHECKPOINTS": "5"}, clear=True):
+            assert get_max_checkpoints() == 5
+
+    def test_returns_none_when_one_or_less(self):
+        for value in ("1", "0", "-3"):
+            with mock.patch.dict(os.environ, {"ATX_MAX_CHECKPOINTS": value}, clear=True):
+                assert get_max_checkpoints() is None
+
+    def test_returns_none_on_non_integer(self):
+        with mock.patch.dict(os.environ, {"ATX_MAX_CHECKPOINTS": "abc"}, clear=True):
+            assert get_max_checkpoints() is None
+
+    def test_value_at_upper_bound_passthrough(self):
+        with mock.patch.dict(
+            os.environ, {ENV_KEY_MAX_CHECKPOINTS: str(MAX_ALLOWED_CHECKPOINTS)}, clear=True
+        ):
+            assert get_max_checkpoints() == MAX_ALLOWED_CHECKPOINTS
+
+    def test_value_above_upper_bound_is_clamped(self):
+        with mock.patch.dict(
+            os.environ,
+            {ENV_KEY_MAX_CHECKPOINTS: str(MAX_ALLOWED_CHECKPOINTS + 500)},
+            clear=True,
+        ):
+            assert get_max_checkpoints() == MAX_ALLOWED_CHECKPOINTS

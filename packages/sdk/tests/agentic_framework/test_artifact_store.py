@@ -82,6 +82,18 @@ class TestListArtifacts:
         assert call_args["artifactFilter"]["agentFilter"]["agentInstanceId"] == "test-agent-123"
         assert "category" not in call_args["artifactFilter"]["agentFilter"]
 
+    def test_list_artifacts_forwards_next_token(self, artifact_store):
+        """next_token is forwarded to the client; omitted when None."""
+        artifact_store.client.list_artifacts.return_value = {"artifacts": []}
+
+        artifact_store.list_artifacts("test-agent-123", CategoryType.STATE, next_token="tok")
+
+        assert artifact_store.client.list_artifacts.call_args[1]["nextToken"] == "tok"
+
+        artifact_store.list_artifacts("test-agent-123", CategoryType.STATE)
+
+        assert "nextToken" not in artifact_store.client.list_artifacts.call_args[1]
+
     def test_list_artifacts_client_error(self, artifact_store):
         """Test listing artifacts with client error."""
         artifact_store.client.list_artifacts.side_effect = ClientError(

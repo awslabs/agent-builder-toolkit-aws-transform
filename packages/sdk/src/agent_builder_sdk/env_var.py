@@ -31,6 +31,11 @@ ENV_KEY_DISABLE_MCP_USAGE_FLAG = "DISABLE_MCP_USAGE"
 # Constants for token file format
 ATX_AUTH_TOKEN_KEY = "ATX_AUTHZ_TOKEN"
 
+# Opt-in multi-checkpoint retention. Unset keeps single-checkpoint (overwrite) behavior.
+ENV_KEY_MAX_CHECKPOINTS = "ATX_MAX_CHECKPOINTS"
+# Cap on retained checkpoints so the newest N fetch stays within one list page.
+MAX_ALLOWED_CHECKPOINTS = 100
+
 
 def should_use_prod_bedrock_capacity() -> bool:
     """
@@ -253,3 +258,27 @@ def is_external_agentic_api_enabled() -> bool:
         logger.info("Using external agentic api")
         return True
     return False
+
+
+def get_max_checkpoints() -> Optional[int]:
+    """Max retained checkpoints, or None for single checkpoint mode.
+
+    None when unset, non integer, or not above 1. Values above the cap are clamped.
+    """
+    raw = os.getenv(ENV_KEY_MAX_CHECKPOINTS)
+    if not raw:
+        return None
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning(f"Ignoring non-integer {ENV_KEY_MAX_CHECKPOINTS}: {raw!r}")
+        return None
+    if value <= 1:
+        return None
+    if value > MAX_ALLOWED_CHECKPOINTS:
+        logger.warning(
+            f"{ENV_KEY_MAX_CHECKPOINTS}={value} exceeds the maximum of "
+            f"{MAX_ALLOWED_CHECKPOINTS}; clamping to {MAX_ALLOWED_CHECKPOINTS}"
+        )
+        return MAX_ALLOWED_CHECKPOINTS
+    return value
