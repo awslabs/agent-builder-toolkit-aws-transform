@@ -1,0 +1,38 @@
+name: Internal Reference Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  internal-ref-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check for internal references
+        run: |
+          # Internal hostnames, tooling names, package names, and credential
+          # patterns that must never appear in this public repository.
+          # Vendored artifacts are excluded: botocore service models and the
+          # mcp-server knowledge data snapshots are generated upstream.
+          pattern='code\.amazon\.com|git\.amazon\.com|w\.amazon\.com|t\.corp\.amazon\.com|quip-amazon\.com|issues\.amazon\.com|sim\.amazon\.com|sage\.amazon\.dev|broadcast\.amazon\.com|eg_platform_base_agent|ElasticGumbyPlatformPartnerBaseAgent|[Mm]idway|[Ii]sengard|AKIA[0-9A-Z]{16}'
+
+          hits=$(git grep -nE "$pattern" -- . \
+            ':(exclude).github/workflows/internal-ref-check.yml' \
+            ':(exclude)packages/sdk/src/agent_builder_sdk/botocore_models' \
+            ':(exclude)packages/mcp-server/src/agent_builder_mcp/knowledge/data' \
+            || true)
+
+          if [[ -n "$hits" ]]; then
+            echo "::error::Internal references found. Remove them before merging:"
+            echo "$hits"
+            exit 1
+          fi
+
+          echo "No internal references found."
