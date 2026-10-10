@@ -1801,6 +1801,15 @@
     "description": ""
   },
   {
+    "name": "AuthTokenUnavailableError",
+    "kind": "class",
+    "file": "agent_builder_sdk/errors.py",
+    "module": "agent_builder_sdk.errors",
+    "docstring": "The agent auth token could not be read from the credentials file.\n\nMay be transient: the token is written by a separate refresh process, so a read that\nfinds the file unreadable or without the token key can succeed on a later attempt, and\nretrieve_auth_token re-reads a bounded number of times before raising this. A missing\nenv var or missing file is treated as configuration and is not retried.\nAlso subclasses ValueError, which this used to be raised as, so existing callers that\ncatch ValueError keep working.",
+    "signature": "AuthTokenUnavailableError()",
+    "description": "Extends: InternalBaseAgentError, ValueError"
+  },
+  {
     "name": "BaseAgentError",
     "kind": "class",
     "file": "agent_builder_sdk/errors.py",
