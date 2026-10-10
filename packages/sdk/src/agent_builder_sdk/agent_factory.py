@@ -59,6 +59,8 @@ def _create_default_orchestrator(
     enable_skills: bool = False,
     skills_dir: Optional[str] = None,
     enable_code_execution: bool = False,
+    enable_shell: bool = False,
+    enable_code_interpreter: bool = False,
 ) -> OrchestratorT:
     logger.info("Creating default orchestrator with full feature set")
 
@@ -98,6 +100,22 @@ def _create_default_orchestrator(
 
         custom_tools.append(python_repl)
         logger.info("Added experimental python_repl tool to orchestrator")
+
+    # Add experimental shell execution tool if enabled
+    if enable_shell:
+        from agent_builder_sdk.experimental.shell_execution import execute_shell
+
+        custom_tools.append(execute_shell)
+        logger.info("Added experimental execute_shell tool to orchestrator")
+
+    # Add the AgentCore Code Interpreter sandbox tools if enabled
+    if enable_code_interpreter:
+        from agent_builder_sdk.experimental.code_interpreter import (
+            create_code_interpreter_tool,
+        )
+
+        custom_tools.extend(create_code_interpreter_tool())
+        logger.info("Added AgentCore code interpreter tools to orchestrator")
 
     # Add any additional custom tools provided by caller
     if additional_custom_tools:
@@ -306,6 +324,8 @@ def create_default_async_orchestrator_with_subagent(
     enable_skills: bool = False,
     skills_dir: Optional[str] = None,
     enable_code_execution: bool = False,
+    enable_shell: bool = False,
+    enable_code_interpreter: bool = False,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.
 
@@ -336,6 +356,18 @@ def create_default_async_orchestrator_with_subagent(
             or defaults to ./skills
         enable_code_execution: Enable experimental local Python code execution tool.
             WARNING: Code executes locally without sandboxing. Use with caution.
+            For sandboxed execution, use enable_code_interpreter instead.
+        enable_shell: Enable the experimental command-allowlisted execute_shell tool.
+            Off by default. Runs allowlisted commands (and, unless
+            ATX_SHELL_ALLOW_PYTHON=false, python/python3) in a subprocess with an enforced
+            timeout and a sanitized environment (AWS_PROFILE dropped so scripts use the
+            runtime execution role). Leave this off unless you need in-container script
+            execution.
+        enable_code_interpreter: Enable the experimental AgentCore Code Interpreter sandbox
+            tools (code_interpreter + stage_file_to_sandbox). Off by default. Runs
+            computation in a managed, network-isolated Python sandbox with
+            pyarrow/pandas/numpy preinstalled; data moves in via stage_file_to_sandbox.
+            Requires the bedrock-agentcore dependency.
             For sandboxed execution, AgentCore Code Interpreter integration is planned.
 
     Returns:
@@ -370,6 +402,8 @@ def create_default_async_orchestrator_with_subagent(
         enable_skills=enable_skills,
         skills_dir=skills_dir,
         enable_code_execution=enable_code_execution,
+        enable_shell=enable_shell,
+        enable_code_interpreter=enable_code_interpreter,
     )
 
 
