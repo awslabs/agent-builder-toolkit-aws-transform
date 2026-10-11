@@ -37,7 +37,8 @@ def create_agentic_api_client(
     region: Optional[str] = None,
     endpoint_url: Optional[str] = None,
     max_retries: int = 3,
-    timeout: int = 30,
+    connect_timeout: int = 5,
+    read_timeout: int = 30,
 ) -> BaseClient:
     """
     Create boto3 client for AWS Transform Agentic API.
@@ -47,7 +48,8 @@ def create_agentic_api_client(
         region: AWS region (defaults to env var)
         endpoint_url: Direct endpoint URL (overrides stage/region)
         max_retries: Maximum retries for API calls
-        timeout: Timeout in seconds
+        connect_timeout: TCP connect timeout in seconds (default: 5)
+        read_timeout: Read timeout in seconds (default: 30)
 
     Returns:
         Configured boto3 client
@@ -62,8 +64,8 @@ def create_agentic_api_client(
 
     boto_config = BotocoreConfig(
         retries={"max_attempts": max_retries, "mode": "standard"},
-        connect_timeout=timeout,
-        read_timeout=timeout,
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
     )
 
     if is_external_agentic_api_enabled():

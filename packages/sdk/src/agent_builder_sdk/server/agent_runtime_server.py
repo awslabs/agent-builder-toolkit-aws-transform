@@ -12,9 +12,17 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, Optional, Protocol, Sequence, cast
 
 import uvicorn
+from botocore.exceptions import ClientError
 from fastapi import FastAPI
 from strands.tools.mcp import MCPClient
-from tenacity import before_sleep_log, retry, retry_if_result, stop_after_attempt, wait_exponential
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception,
+    retry_if_result,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from agent_builder_sdk._auth_token_refresher import (
     AuthTokenRefresher,
@@ -63,6 +71,11 @@ if TYPE_CHECKING:
     from multiprocessing.synchronize import Event as EventType
 
 logger = logging.getLogger(__name__)
+
+# ClientError codes that indicate a permanent failure — do not retry.
+_NON_RETRYABLE_ERROR_CODES = frozenset(
+    {"ValidationException", "AccessDeniedException", "ResourceNotFoundException"}
+)
 
 
 class AgentRuntimeServer(BaseServer):
@@ -270,33 +283,92 @@ class AgentRuntimeServer(BaseServer):
                 logger.info("Initialization already in progress, skipping")
                 return
 
-            # 3. check agent status
-            try:
-                agent_status = get_agent_status(
-                    self.context.workspace_id, self.context.job_id, self.context.agent_instance_id
+            # 3. check agent status (with retry for transient network errors)
+            agent_status = await self._get_agent_status_with_retry()
+            if agent_status is None:
+                logger.error("Failed to get agent status after retries, agent will not initialize")
+                return
+
+            if agent_status == "INVOKING":
+                # Platform is still processing the InvokeAgent call (setting up
+                # resources, writing metadata). Wait in the background until the
+                # status transitions to INVOKED, then complete initialization.
+                self._initialization_task = asyncio.create_task(
+                    self._background_finalize(self._wait_for_non_invoking_and_initialize())
                 )
-                if agent_status == "INVOKING":
-                    self._initialization_task = asyncio.create_task(
-                        self._background_finalize(self._wait_for_non_invoking_and_initialize())
-                    )
-                    return
-                elif agent_status == "RUNNING":
-                    # Container rotation case: agent already RUNNING on the platform side,
-                    # but this container is a fresh process and needs to rebuild local state
-                    # (checkpoint restore, MCP client, agent factory). Run in the background
-                    # so health checks return fast; real requests wait on agent_ready_event
-                    # via _get_ready_agent() in the message processor.
-                    logger.info(f"Agent status is {agent_status}, starting background finalize")
-                    self._initialization_task = asyncio.create_task(
-                        self._background_finalize(self._finalize_agent_setup(agent_status))
-                    )
-                    return
-                else:
-                    logger.info(f"Agent status is {agent_status}, finalizing agent setup")
+                return
+            elif agent_status == "RUNNING":
+                # Container rotation case: agent already RUNNING on the platform side,
+                # but this container is a fresh process and needs to rebuild local state
+                # (checkpoint restore, MCP client, agent factory). Run in the background
+                # so health checks return fast; real requests wait on agent_ready_event
+                # via _get_ready_agent() in the message processor.
+                logger.info(f"Agent status is {agent_status}, starting background finalize")
+                self._initialization_task = asyncio.create_task(
+                    self._background_finalize(self._finalize_agent_setup(agent_status))
+                )
+                return
+            else:
+                logger.info(f"Agent status is {agent_status}, finalizing agent setup")
+                try:
                     await self._finalize_agent_setup(agent_status)
-                    return
-            except Exception as e:
-                logger.warning(f"Cannot initialize agent with exception: {e}")
+                except Exception as e:
+                    logger.warning(f"Cannot finalize agent setup with exception: {e}")
+                return
+
+    async def _get_agent_status_with_retry(self) -> Optional[str]:
+        """Get agent status with retry for transient network errors.
+
+        Retries up to 3 times with exponential backoff (2s, 4s)
+        for connection timeouts and endpoint connectivity failures.
+
+        Runs in a thread executor so the exponential backoff sleeps do not
+        block the asyncio event loop (health checks must keep responding).
+
+        Returns:
+            Agent status string, or None if all retries are exhausted.
+        """
+        assert self.context
+        context = self.context
+
+        def _is_retryable(exception: BaseException) -> bool:
+            """Retry all exceptions except permanent client errors."""
+            if isinstance(exception, ClientError):
+                error_code = exception.response.get("Error", {}).get("Code", "")
+                if error_code in _NON_RETRYABLE_ERROR_CODES:
+                    return False
+            return True
+
+        @retry(
+            retry=retry_if_exception(_is_retryable),
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=2, min=2, max=8),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            reraise=True,
+        )
+        def _get_status():
+            return get_agent_status(
+                context.workspace_id, context.job_id, context.agent_instance_id
+            )
+
+        try:
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, _get_status)
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code", "")
+            if error_code in _NON_RETRYABLE_ERROR_CODES:
+                logger.error(
+                    f"Non-retryable error during agent initialization: {error_code} - {e}"
+                )
+            else:
+                logger.error(f"Failed to get agent status after retries: {error_code} - {e}")
+            return None
+        except Exception:
+            logger.error(
+                "Failed to get agent status after retries during agent initialization",
+                exc_info=True,
+            )
+            return None
 
     async def _background_finalize(self, coro: Coroutine) -> None:
         """Run an initialization coroutine in the background with error handling.

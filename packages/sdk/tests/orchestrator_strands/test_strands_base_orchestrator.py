@@ -290,6 +290,7 @@ def test_orchestrator_bedrock_model_creation(mock_model):
             region_name="us-west-2",
             guardrail_id=None,
             guardrail_version=None,
+            boto_client_config=None,
         )
         assert orchestrator.model == mock_model
 
@@ -309,6 +310,7 @@ def test_initialize_bedrock_model_default_credentials(mock_factory, mock_model):
         region_name="us-east-1",
         guardrail_id=None,
         guardrail_version=None,
+            boto_client_config=None,
     )
     assert orchestrator.model == mock_model
 

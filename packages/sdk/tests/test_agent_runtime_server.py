@@ -2072,3 +2072,212 @@ class TestAgentRuntimeServer:
                         call_args = mock_factory.call_args[0][0]
                         assert call_args["binaryLocation"] == "/tmp/test_binary"
                         assert server.initialized is True
+
+    # Retry on transient network errors during initialization
+    @pytest.mark.asyncio
+    async def test_get_agent_status_with_retry_succeeds_after_transient_failure(
+        self, mock_agent_factory
+    ):
+        """Test that _get_agent_status_with_retry retries on ConnectTimeoutError and succeeds."""
+        from botocore.exceptions import ConnectTimeoutError
+
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                server = AgentRuntimeServer(
+                    agent_factory=mock_agent_factory,
+                    binary_location="/tmp/test_binary",
+                    storage_dir="/tmp/test_storage",
+                )
+
+        server.context = AgentRuntimeContext(
+            workspace_id="test-workspace",
+            job_id="test-job",
+            agent_instance_id="test-agent",
+            initial_auth_token="test-token",
+        )
+
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
+            side_effect=[
+                ConnectTimeoutError(endpoint_url="https://test.endpoint"),
+                ConnectTimeoutError(endpoint_url="https://test.endpoint"),
+                "INVOKED",
+            ],
+        ) as mock_get_status:
+            result = await server._get_agent_status_with_retry()
+
+            assert result == "INVOKED"
+            assert mock_get_status.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_get_agent_status_with_retry_exhausts_retries(self, mock_agent_factory):
+        """Test that _get_agent_status_with_retry returns None after exhausting retries."""
+        from botocore.exceptions import ConnectTimeoutError
+
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                server = AgentRuntimeServer(
+                    agent_factory=mock_agent_factory,
+                    binary_location="/tmp/test_binary",
+                    storage_dir="/tmp/test_storage",
+                )
+
+        server.context = AgentRuntimeContext(
+            workspace_id="test-workspace",
+            job_id="test-job",
+            agent_instance_id="test-agent",
+            initial_auth_token="test-token",
+        )
+
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
+            side_effect=ConnectTimeoutError(endpoint_url="https://test.endpoint"),
+        ) as mock_get_status:
+            result = await server._get_agent_status_with_retry()
+
+            assert result is None
+            assert mock_get_status.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_get_agent_status_with_retry_no_retry_on_validation_exception(
+        self, mock_agent_factory
+    ):
+        """Test that _get_agent_status_with_retry does not retry on ValidationException."""
+        from botocore.exceptions import ClientError
+
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                server = AgentRuntimeServer(
+                    agent_factory=mock_agent_factory,
+                    binary_location="/tmp/test_binary",
+                    storage_dir="/tmp/test_storage",
+                )
+
+        server.context = AgentRuntimeContext(
+            workspace_id="test-workspace",
+            job_id="test-job",
+            agent_instance_id="test-agent",
+            initial_auth_token="test-token",
+        )
+
+        validation_error = ClientError(
+            {"Error": {"Code": "ValidationException", "Message": "Invalid input"}},
+            "GetAgentInstance",
+        )
+
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
+            side_effect=validation_error,
+        ) as mock_get_status:
+            result = await server._get_agent_status_with_retry()
+
+            assert result is None
+            # Should NOT retry — permanent client error
+            assert mock_get_status.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_get_agent_status_with_retry_no_retry_on_access_denied(self, mock_agent_factory):
+        """Test that _get_agent_status_with_retry does not retry on AccessDeniedException."""
+        from botocore.exceptions import ClientError
+
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                server = AgentRuntimeServer(
+                    agent_factory=mock_agent_factory,
+                    binary_location="/tmp/test_binary",
+                    storage_dir="/tmp/test_storage",
+                )
+
+        server.context = AgentRuntimeContext(
+            workspace_id="test-workspace",
+            job_id="test-job",
+            agent_instance_id="test-agent",
+            initial_auth_token="test-token",
+        )
+
+        access_denied_error = ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "Not authorized"}},
+            "GetAgentInstance",
+        )
+
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
+            side_effect=access_denied_error,
+        ) as mock_get_status:
+            result = await server._get_agent_status_with_retry()
+
+            assert result is None
+            # Should NOT retry — permanent client error
+            assert mock_get_status.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_initialize_agent_retries_on_connect_timeout(self, mock_agent_factory):
+        """Test full initialize_agent flow retries on ConnectTimeoutError."""
+        from botocore.exceptions import ConnectTimeoutError
+
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                server = AgentRuntimeServer(
+                    agent_factory=mock_agent_factory,
+                    binary_location="/tmp/test_binary",
+                    storage_dir="/tmp/test_storage",
+                )
+
+        server.context = AgentRuntimeContext(
+            workspace_id="test-workspace",
+            job_id="test-job",
+            agent_instance_id="test-agent",
+            initial_auth_token="test-token",
+        )
+
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
+            side_effect=ConnectTimeoutError(endpoint_url="https://test.endpoint"),
+        ) as mock_get_status:
+            with mock.patch(
+                "agent_builder_sdk.server.agent_runtime_server.setup_initial_auth_token"
+            ):
+                await server.initialize_agent(auth_token="test-token")
+
+                # Should have retried 3 times then given up
+                assert mock_get_status.call_count == 3
+                assert server.initialized is False
+                assert server.agent is None
+
+    @pytest.mark.asyncio
+    async def test_get_agent_status_with_retry_no_retry_on_resource_not_found(
+        self, mock_agent_factory
+    ):
+        """Test that _get_agent_status_with_retry does not retry on ResourceNotFoundException."""
+        from botocore.exceptions import ClientError
+
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                server = AgentRuntimeServer(
+                    agent_factory=mock_agent_factory,
+                    binary_location="/tmp/test_binary",
+                    storage_dir="/tmp/test_storage",
+                )
+
+        server.context = AgentRuntimeContext(
+            workspace_id="test-workspace",
+            job_id="test-job",
+            agent_instance_id="test-agent",
+            initial_auth_token="test-token",
+        )
+
+        rnf_error = ClientError(
+            {"Error": {"Code": "ResourceNotFoundException", "Message": "Agent instance not found"}},
+            "GetAgentInstance",
+        )
+
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
+            side_effect=rnf_error,
+        ) as mock_get_status:
+            result = await server._get_agent_status_with_retry()
+
+            assert result is None
+            # Should NOT retry — permanent client error
+            assert mock_get_status.call_count == 1
+
