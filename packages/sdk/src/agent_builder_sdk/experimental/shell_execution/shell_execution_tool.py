@@ -433,6 +433,7 @@ def execute_shell(
             try:
                 os.killpg(proc.pid, signal.SIGKILL)
             except ProcessLookupError:
+                # The process exited on its own between the timeout and the kill; nothing left to reap.
                 pass
             # Bound the reap: a descendant that escaped the group (setsid/double-fork)
             # could hold the pipe open and hang communicate() forever, reintroducing
@@ -440,7 +441,9 @@ def execute_shell(
             try:
                 proc.communicate(timeout=5)
             except subprocess.TimeoutExpired:
-                pass
+                # The reap wait also timed out; the primary timeout failure is already
+                # being reported, so don't block the caller any longer.
+                logger.debug("post-timeout reap timed out; continuing")
             logger.error(
                 "execute_shell timed out after %ds (command_length=%d)", timeout, len(command)
             )
