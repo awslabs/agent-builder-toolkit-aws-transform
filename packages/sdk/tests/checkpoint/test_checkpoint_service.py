@@ -312,6 +312,8 @@ class TestCheckpointServiceBackgroundTask:
             try:
                 await checkpoint_service._background_task
             except asyncio.CancelledError:
+                # The test stops the loop by raising CancelledError from the mocked
+                # sleep; reaching here is the expected shutdown path, nothing to assert.
                 pass
 
             mock_manager.attempt_checkpoint.assert_called_once()
