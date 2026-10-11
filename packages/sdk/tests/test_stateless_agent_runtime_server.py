@@ -753,3 +753,26 @@ class TestStatelessAgentRuntimeServer:
                             # Verify set_agent_running was NOT called for RUNNING status
                             mock_set_running.assert_not_called()
                             assert stateless_agent_runtime_server.initialized is True
+
+@pytest.mark.asyncio
+async def test_lifespan_stops_heartbeat_on_shutdown(stateless_agent_runtime_server):
+    """Test that lifespan stops heartbeat service during shutdown."""
+    mock_heartbeat = mock.AsyncMock()
+    stateless_agent_runtime_server.heartbeat_service = mock_heartbeat
+
+    with mock.patch.object(
+        stateless_agent_runtime_server, "_startup", new_callable=mock.AsyncMock
+    ):
+        async with stateless_agent_runtime_server._lifespan(stateless_agent_runtime_server.app):
+            pass  # simulate server running
+
+    mock_heartbeat.stop.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_lifespan_no_error_without_heartbeat(stateless_agent_runtime_server):
+    """Test that lifespan shutdown works when heartbeat was never started."""
+    with mock.patch.object(
+        stateless_agent_runtime_server, "_startup", new_callable=mock.AsyncMock
+    ):
+        async with stateless_agent_runtime_server._lifespan(stateless_agent_runtime_server.app):
+            pass  # should not raise

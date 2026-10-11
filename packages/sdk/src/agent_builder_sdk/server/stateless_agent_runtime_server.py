@@ -26,6 +26,7 @@ from agent_builder_sdk.agentic_framework.agent_lifecycle import (
 from agent_builder_sdk.agentic_framework.client_factory import get_agentic_api_client
 from agent_builder_sdk.agentic_framework.job_manager import JobManager
 from agent_builder_sdk.env_var import has_mde_environment, set_runtime_env_vars
+from agent_builder_sdk.heartbeat import HeartbeatService
 from agent_builder_sdk.interfaces import AnyBaseAgent
 from agent_builder_sdk.mcp_client_factory import MCPClientFactory
 from agent_builder_sdk.messages.message_handler import MessageHandler
@@ -92,6 +93,7 @@ class StatelessAgentRuntimeServer(BaseServer):
         self.message_handler: Optional[MessageHandler] = None
 
         # Create FastAPI app with lifespan
+        self.heartbeat_service: Optional[HeartbeatService] = None
         self.app = FastAPI(
             title="ATX AgentCore Compatible Stateless Agent Server", lifespan=self._lifespan
         )
@@ -223,6 +225,10 @@ class StatelessAgentRuntimeServer(BaseServer):
                 set_agent_running(
                     self.context.workspace_id, self.context.job_id, self.context.agent_instance_id
                 )
+
+            # Start heartbeat service (opt-in based on agent's MonitoringType)
+            self.heartbeat_service = HeartbeatService(self.context)
+            await self.heartbeat_service.start()
             self.initialized = True
             logger.info("Agent initialization completed successfully")
 
@@ -236,9 +242,11 @@ class StatelessAgentRuntimeServer(BaseServer):
 
     @asynccontextmanager
     async def _lifespan(self, app: FastAPI):
-        """FastAPI lifespan for graceful startup (no cleanup needed for stateless)."""
+        """FastAPI lifespan for graceful startup and shutdown."""
         await self._startup()
         yield
+        if self.heartbeat_service:
+            await self.heartbeat_service.stop()
 
     async def _startup(self) -> None:
         """Unified startup logic."""
