@@ -165,6 +165,7 @@ class TestHeartbeatLoop:
             try:
                 await service._task
             except asyncio.CancelledError:
+                # The test cancels the loop task itself; cancellation here is the expected exit.
                 pass
 
         assert call_count >= 2

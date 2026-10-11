@@ -50,6 +50,7 @@ class HeartbeatService:
             try:
                 await self._task
             except asyncio.CancelledError:
+                # Cancellation is the expected shutdown path for the heartbeat task; nothing to clean up.
                 pass
             logger.info("Heartbeat service stopped")
 
