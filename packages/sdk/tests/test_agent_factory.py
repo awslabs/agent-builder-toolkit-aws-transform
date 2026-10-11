@@ -8,6 +8,7 @@ import os
 from unittest import mock
 
 from agent_builder_sdk.agent_factory import (
+    create_default_async_orchestrator_with_subagent,
     create_default_async_subagent,
     create_default_orchestrator,
     create_default_orchestrator_with_subagent,
@@ -651,3 +652,55 @@ class TestAgentFactory:
         mock_async_subagent.assert_called_once()
         call_kwargs = mock_async_subagent.call_args.kwargs
         assert call_kwargs["region_name"] == "us-west-2"
+
+
+class TestPlatformKnowledge:
+    """enable_platform_skills loads the platform skills and appends the platform contract;
+    with it off (the default for every 1.0 consumer) neither happens."""
+
+    @mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
+    @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
+    def test_platform_skills_on_loads_skills_and_appends_contract(self, *mocks):
+        mock_orchestrator = mocks[-1]
+        mock_orchestrator.return_value = mock.Mock()
+
+        with mock.patch("strands.vended_plugins.skills.AgentSkills") as mock_skills, mock.patch(
+            "agent_builder_sdk.agent_factory.get_platform_skills_contract_prompt",
+            return_value="CONTRACT",
+        ):
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt", enable_platform_skills=True
+            )
+
+        sources = mock_skills.call_args.kwargs["skills"]
+        assert any(str(s).endswith("platform_skills") for s in sources)
+        prompt = mock_orchestrator.call_args.kwargs["system_prompt"]
+        assert prompt == "task prompt\n\nCONTRACT"
+
+    @mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
+    @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
+    def test_platform_skills_off_leaves_prompt_and_plugins_untouched(self, *mocks):
+        mock_orchestrator = mocks[-1]
+        mock_orchestrator.return_value = mock.Mock()
+
+        create_default_async_orchestrator_with_subagent(system_prompt="task prompt")
+
+        call_kwargs = mock_orchestrator.call_args.kwargs
+        assert call_kwargs["system_prompt"] == "task prompt"
+        assert call_kwargs["plugins"] is None

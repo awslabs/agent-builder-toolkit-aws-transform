@@ -47,7 +47,12 @@ test = ["pytest", "pytest-asyncio"]
 agent-builder-sdk = "agent_builder_sdk.cli:run_main"
 
 [tool.setuptools.package-data]
-agent_builder_sdk = ["prompts/*.md", "botocore_models/**/*.json"]
+agent_builder_sdk = [
+    "prompts/*.md",
+    "botocore_models/**/*.json",
+    "platform_skills/*/SKILL.md",
+    "platform_skills/*/references/*.md",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

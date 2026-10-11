@@ -34,7 +34,11 @@ from agent_builder_sdk.orchestrator_strands.tools.send_message_tools import Send
 from agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools import (
     SubagentRegistryTools,
 )
-from agent_builder_sdk.utils import get_base_guardrail_prompt, get_prompt_with_name
+from agent_builder_sdk.utils import (
+    get_base_guardrail_prompt,
+    get_platform_skills_contract_prompt,
+    get_prompt_with_name,
+)
 
 OrchestratorT = TypeVar("OrchestratorT", BaseOrchestrator, AsyncBaseOrchestrator)
 SubagentT = TypeVar("SubagentT", BaseSubagent, AsyncBaseSubagent)
@@ -58,6 +62,7 @@ def _create_default_orchestrator(
     metrics_config: Optional[MetricsConfig] = None,
     enable_skills: bool = False,
     skills_dir: Optional[str] = None,
+    enable_platform_skills: bool = False,
     enable_code_execution: bool = False,
 ) -> OrchestratorT:
     logger.info("Creating default orchestrator with full feature set")
@@ -83,14 +88,22 @@ def _create_default_orchestrator(
         send_message_tools = SendMessageTools()
         custom_tools.append(send_message_tools.send_message_to_subagent)
 
-    # Build skills plugin if enabled
-    skills_plugin = None
+    # Build the skills plugin from whichever sources are turned on. The packaged platform skills
+    # (HITL protocol, job plan, artifact I/O, ...) teach an agent the platform; a team's
+    # own skills_dir layers on top. Both are opt-in, so with neither flag set no plugin is built
+    # and behavior is unchanged.
+    skills_sources: list[Any] = []
+    if enable_platform_skills:
+        skills_sources.append(os.path.join(os.path.dirname(__file__), "platform_skills"))
     if enable_skills:
+        skills_sources.append(skills_dir or os.environ.get("STRANDS_SKILLS_DIR") or "./skills")
+
+    skills_plugin = None
+    if skills_sources:
         from strands.vended_plugins.skills import AgentSkills
 
-        skills_source = skills_dir or os.environ.get("STRANDS_SKILLS_DIR") or "./skills"
-        skills_plugin = AgentSkills(skills=[skills_source])
-        logger.info("Created AgentSkills plugin for orchestrator")
+        skills_plugin = AgentSkills(skills=skills_sources)
+        logger.info(f"Created AgentSkills plugin for orchestrator: {skills_sources}")
 
     # Add experimental code execution tool if enabled
     if enable_code_execution:
@@ -120,6 +133,14 @@ def _create_default_orchestrator(
     if with_base_guardrails:
         guardrail_prompt = get_base_guardrail_prompt()
         system_prompt += "\n" + guardrail_prompt
+
+    # A platform-skills agent must obey the platform contract (plan-first, HITL approval before
+    # mutations, artifacts as the durable sink, connectors for customer resources) whatever its
+    # task prompt says, so it is appended rather than left to the caller's system_prompt.
+    if enable_platform_skills:
+        contract_prompt = get_platform_skills_contract_prompt()
+        if contract_prompt:
+            system_prompt += "\n\n" + contract_prompt
 
     # Create orchestrator with explicit hooks
     orchestrator = agent_class(
@@ -305,6 +326,7 @@ def create_default_async_orchestrator_with_subagent(
     metrics_config: Optional[MetricsConfig] = None,
     enable_skills: bool = False,
     skills_dir: Optional[str] = None,
+    enable_platform_skills: bool = False,
     enable_code_execution: bool = False,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.
@@ -334,6 +356,11 @@ def create_default_async_orchestrator_with_subagent(
             and auto-injects skill metadata into the system prompt.
         skills_dir: Directory containing skills. If None, uses STRANDS_SKILLS_DIR env var
             or defaults to ./skills
+        enable_platform_skills: Load the packaged platform-knowledge skills and append the
+            platform-skills contract to the system prompt. For agents running inside an
+            AWS Transform job; off by default.
+            USE WITH CAUTION: this also rewrites the system prompt (the contract is appended to
+            whatever system_prompt you pass).
         enable_code_execution: Enable experimental local Python code execution tool.
             WARNING: Code executes locally without sandboxing. Use with caution.
             For sandboxed execution, AgentCore Code Interpreter integration is planned.
@@ -369,6 +396,7 @@ def create_default_async_orchestrator_with_subagent(
         metrics_config=metrics_config,
         enable_skills=enable_skills,
         skills_dir=skills_dir,
+        enable_platform_skills=enable_platform_skills,
         enable_code_execution=enable_code_execution,
     )
 
