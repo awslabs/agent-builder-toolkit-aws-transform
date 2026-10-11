@@ -56,6 +56,7 @@ def _create_default_orchestrator(
     trace_attributes: Optional[dict[str, Any]] = None,
     excluded_mcp_tool_names: Optional[Set[str]] = None,
     metrics_config: Optional[MetricsConfig] = None,
+    locale: Optional[str] = None,
     enable_skills: bool = False,
     skills_dir: Optional[str] = None,
     enable_code_execution: bool = False,
@@ -133,6 +134,7 @@ def _create_default_orchestrator(
         trace_attributes=trace_attributes,
         excluded_mcp_tool_names=excluded_mcp_tool_names,
         metrics_config=metrics_config,
+        locale=locale,
         plugins=[skills_plugin] if skills_plugin else None,
     )
 
@@ -150,6 +152,7 @@ def create_default_orchestrator(
     with_base_guardrails: bool = False,
     trace_attributes: Optional[dict[str, Any]] = None,
     metrics_config: Optional[MetricsConfig] = None,
+    locale: Optional[str] = None,
 ) -> BaseOrchestrator:
     """
     Create a BaseOrchestrator instance with full memory and conversation support.
@@ -190,6 +193,7 @@ def create_default_orchestrator(
         with_base_guardrails=with_base_guardrails,
         trace_attributes=trace_attributes,
         metrics_config=metrics_config,
+        locale=locale,
     )
 
 
@@ -202,6 +206,7 @@ def create_default_async_orchestrator(
     model: Union[Model, str, None] = None,
     with_base_guardrails: bool = False,
     metrics_config: Optional[MetricsConfig] = None,
+    locale: Optional[str] = None,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support.
 
@@ -237,6 +242,7 @@ def create_default_async_orchestrator(
         model=model,
         with_base_guardrails=with_base_guardrails,
         metrics_config=metrics_config,
+        locale=locale,
     )
 
 
@@ -249,6 +255,7 @@ def create_default_orchestrator_with_subagent(
     model: Union[Model, str, None] = None,
     with_base_guardrails: bool = False,
     metrics_config: Optional[MetricsConfig] = None,
+    locale: Optional[str] = None,
 ) -> BaseOrchestrator:
     """Create a BaseOrchestrator instance with full memory and conversation support and subagent tools.
 
@@ -289,6 +296,7 @@ def create_default_orchestrator_with_subagent(
         model=model,
         with_base_guardrails=with_base_guardrails,
         metrics_config=metrics_config,
+        locale=locale,
     )
 
 
@@ -303,6 +311,7 @@ def create_default_async_orchestrator_with_subagent(
     trace_attributes: Optional[dict[str, Any]] = None,
     excluded_mcp_tool_names: Optional[Set[str]] = None,
     metrics_config: Optional[MetricsConfig] = None,
+    locale: Optional[str] = None,
     enable_skills: bool = False,
     skills_dir: Optional[str] = None,
     enable_code_execution: bool = False,
@@ -367,6 +376,7 @@ def create_default_async_orchestrator_with_subagent(
         trace_attributes=trace_attributes,
         excluded_mcp_tool_names=excluded_mcp_tool_names,
         metrics_config=metrics_config,
+        locale=locale,
         enable_skills=enable_skills,
         skills_dir=skills_dir,
         enable_code_execution=enable_code_execution,

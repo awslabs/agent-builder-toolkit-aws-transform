@@ -26,6 +26,7 @@ from strands.types.content import Messages
 from agent_builder_sdk.bedrock_model_factory import BedrockModelFactory
 from agent_builder_sdk.custom_types.orchestrator_agent_types import ProcessMessageRequest
 from agent_builder_sdk.interfaces import AsyncBaseAgent, BaseAgent
+from agent_builder_sdk.locale_utils import get_locale_instruction
 from agent_builder_sdk.metrics.metrics_config import MetricsConfig
 from agent_builder_sdk.orchestrator_strands.conversation.constants import (
     CURRENT_SOURCE_ID_KEY,
@@ -70,6 +71,7 @@ class _BaseOrchestrator(StrandsAgent):
         model: Union[Model, str, None] = None,
         evaluation_card: Optional[EvaluationCard] = None,
         metrics_config: Optional[MetricsConfig] = None,
+        locale: Optional[str] = None,
         **kwargs,
     ):
         """
@@ -88,7 +90,20 @@ class _BaseOrchestrator(StrandsAgent):
             model_id: Bedrock model identifier (ignored if model is provided)
             model: Optional Strands Model instance or model ID string (takes precedence over model_id)
             metrics_config: Optional metrics configuration (default: disabled with standard settings)
+            locale: Optional user locale (e.g. "ja", "pt-BR"). When set, a localization
+                instruction is appended to the system prompt so the agent responds in the
+                user's language. Sourced from AgentRuntimeContext.locale, which is populated
+                from the invoke/restore payload (AgentCore) or the
+                INVOCATION_USER_CURRENT_LOCALE environment variable.
         """
+        # Append locale instruction to the system prompt when a locale is present.
+        # get_locale_instruction returns "" for English/None/unknown, so non-localized
+        # sessions are unchanged.
+        if locale:
+            locale_instruction = get_locale_instruction(locale)
+            if locale_instruction:
+                system_prompt = f"{system_prompt}\n{locale_instruction}"
+
         # Store configuration
         self.excluded_tool_names = excluded_tool_names
         self.excluded_mcp_tool_names = excluded_mcp_tool_names

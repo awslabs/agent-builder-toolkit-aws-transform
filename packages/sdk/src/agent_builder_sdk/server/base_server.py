@@ -163,6 +163,13 @@ class BaseServer(ABC):
                 init_request.get("agentInstanceId"),
             ]
         ):
+            # Locale arrives on the invoke/restore payload in invocationContext.userMetadata
+            invocation_context = params.get("invocationContext", {})
+            user_metadata = invocation_context.get("userMetadata", {})
+            locale = user_metadata.get("invocationUserCurrentLocale")
+            if locale:
+                logger.info("Locale configured: %s", locale)
+
             # Set context in class
             self.context = AgentRuntimeContext(
                 workspace_id=init_request["workspaceId"],
@@ -172,6 +179,7 @@ class BaseServer(ABC):
                 agent_version=init_request.get("agentVersion"),
                 tenant_account_id=init_request.get("tenantAccountId"),
                 initial_auth_token=init_request.get("authorizationToken"),
+                locale=locale,
             )
 
             # Initialize with token
