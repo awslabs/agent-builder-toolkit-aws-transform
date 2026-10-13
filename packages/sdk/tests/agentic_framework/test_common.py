@@ -1,12 +1,18 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 import re
+import socket
+import threading
+import time
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 import pytest
 import requests
 from botocore.exceptions import ClientError
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from agent_builder_sdk.agentic_framework import common
 from agent_builder_sdk.errors import InternalBaseAgentError, UserBaseAgentError
@@ -99,8 +105,12 @@ def test_upload_from_presigned_url_success(session, response, upload_response):
 
     expected_headers = {"Content-Type": "application/octet-stream"}
     session.put.assert_called_once_with(
-        "https://test-url.com", data=content, headers=expected_headers
+        "https://test-url.com",
+        data=mock.ANY,
+        headers=expected_headers,
+        timeout=common._PRESIGNED_UPLOAD_TIMEOUT,
     )
+    assert session.put.call_args.kwargs["data"].read() == content  # streamed, not bytes
 
 
 def test_upload_from_presigned_url_failure(session, response, upload_response):
@@ -121,6 +131,196 @@ def test_upload_from_presigned_url_connection_error(session, upload_response):
 
     with pytest.raises(InternalBaseAgentError):
         common.upload_from_presigned_url(upload_response, content)
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        requests.exceptions.ReadTimeout("read timed out"),
+        requests.exceptions.ConnectTimeout("connect timed out"),
+        requests.exceptions.ConnectionError("connection failed"),
+    ],
+)
+def test_upload_from_presigned_url_wraps_every_transport_error(exc, session, upload_response):
+    """ReadTimeout does not subclass ConnectionError, so it needs catching explicitly.
+
+    Without it the timeout this function now passes would escape as an unhandled
+    ReadTimeout -- the very failure the timeout exists to contain.
+    """
+    session.put.side_effect = exc
+
+    with pytest.raises(InternalBaseAgentError):
+        common.upload_from_presigned_url(upload_response, b"test content")
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        requests.exceptions.ReadTimeout("read timed out"),
+        requests.exceptions.ConnectTimeout("connect timed out"),
+        requests.exceptions.ConnectionError("connection failed"),
+    ],
+)
+def test_download_from_presigned_url_wraps_every_transport_error(
+    exc, session, download_response, tmp_path
+):
+    """Same timeout handling on the download path."""
+    session.get.side_effect = exc
+
+    with pytest.raises(InternalBaseAgentError):
+        common.download_from_presigned_url(download_response, str(tmp_path / "file.zip"))
+
+
+def test_upload_read_timeout_is_looser_than_download():
+    """An upload waits on S3 to acknowledge the PUT, which outlasts any single read
+    while streaming a download, so a shared 60s bound would fail large uploads that
+    succeed today."""
+    assert common._PRESIGNED_UPLOAD_TIMEOUT[1] > common._PRESIGNED_DOWNLOAD_TIMEOUT[1]
+    assert common._PRESIGNED_UPLOAD_TIMEOUT[0] == common._PRESIGNED_DOWNLOAD_TIMEOUT[0]
+
+
+@pytest.mark.parametrize("method", ["PUT", "GET"])
+@pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
+def test_presigned_url_retry_retries_throttles_and_server_errors(method, status):
+    """A 503 SlowDown must be retried; the previous bare max_retries=3 never retried one."""
+    assert common._PRESIGNED_URL_RETRY.is_retry(method, status) is True
+    assert not Retry.from_int(3).is_retry(method, status)
+
+
+def test_presigned_url_retry_returns_exhausted_response_instead_of_raising():
+    """raise_on_status=False keeps S3 error classification working after retries run out.
+
+    With the urllib3 default (True) an exhausted 503 raises RetryError, which is neither
+    caught as a ConnectionError nor passed to raise_for_s3_error_response, so callers
+    would lose the formatted S3 error they get today.
+    """
+    assert common._PRESIGNED_URL_RETRY.raise_on_status is False
+    assert common._PRESIGNED_URL_RETRY.total == 3
+    assert common._PRESIGNED_URL_RETRY.backoff_factor > 0
+
+
+def test_upload_from_presigned_url_mounts_retry_policy(session, response, upload_response):
+    """The retry policy, not a bare int, is what gets mounted for https."""
+    response.status_code = 200
+    session.put.return_value = response
+
+    common.upload_from_presigned_url(upload_response, b"test content")
+
+    prefix, adapter = session.mount.call_args.args
+    assert prefix == "https://"
+    assert isinstance(adapter, HTTPAdapter)
+    assert adapter.max_retries is common._PRESIGNED_URL_RETRY
+
+
+def test_download_from_presigned_url_mounts_retry_policy(
+    session, response, download_response, tmp_path
+):
+    """The download path shares the upload path's retry policy."""
+    response.content = b"downloaded content"
+    response.status_code = 200
+    session.get.return_value = response
+
+    common.download_from_presigned_url(download_response, str(tmp_path / "file.zip"))
+
+    prefix, adapter = session.mount.call_args.args
+    assert prefix == "https://"
+    assert adapter.max_retries is common._PRESIGNED_URL_RETRY
+
+
+# The tests below send real requests through requests/urllib3 to a local HTTP server, so
+# retries, body rewinds and timeouts run for real rather than against a mocked Session.
+
+_SLOW_DOWN = (
+    503,
+    b"<Error><Code>SlowDown</Code><Message>Please reduce your request rate.</Message>"
+    b"<RequestId>1</RequestId></Error>",
+)
+
+
+class _FakeS3Handler(BaseHTTPRequestHandler):
+    """Answers each complete request with the next (status, body) in server.responses and
+    records the (Content-Length header, body) it received in server.received."""
+
+    def do_PUT(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = bytearray()
+        while chunk := self.rfile.read1(min(1 << 16, length - len(body))):
+            body += chunk
+            time.sleep(self.server.drain_delay)
+        if len(body) < length:  # the client gave up mid-body; its retry is a new request
+            return
+        self.server.received.append((self.headers.get("Content-Length"), bytes(body)))
+        status, payload = self.server.responses.pop(0)
+        self.send_response(status)
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    do_GET = do_PUT
+
+    def log_message(self, format, *args):
+        pass
+
+
+@pytest.fixture
+def fake_s3(monkeypatch):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _FakeS3Handler, bind_and_activate=False)
+    # A small receive buffer, so the kernel cannot soak up the slow-drain test's body.
+    server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 16)
+    server.server_bind()
+    server.server_activate()
+    server.responses, server.received, server.drain_delay = [], [], 0
+    server.presigned = {
+        "s3preSignedUrl": f"http://127.0.0.1:{server.server_port}/artifact",
+        "requestHeaders": {},
+    }
+    threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
+    ).start()
+    # Presigned URLs are https, so the code mounts its retry adapter for https:// only.
+    # Send this plain-http server's traffic through that same adapter.
+    monkeypatch.setattr(
+        requests.Session, "get_adapter", lambda self, url: self.adapters["https://"]
+    )
+    yield server
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.mark.parametrize("content", [b"artifact bytes", b""], ids=["body", "empty"])
+def test_upload_retries_slow_down_and_resends_whole_body(fake_s3, content):
+    """A 503 SlowDown is retried, and the retry rewinds and resends the whole body. Every
+    attempt carries Content-Length, as S3 requires, including for an empty body."""
+    fake_s3.responses = [_SLOW_DOWN, (200, b"")]
+
+    common.upload_from_presigned_url(fake_s3.presigned, content)
+
+    assert fake_s3.received == [(str(len(content)), content)] * 2
+
+
+def test_download_retries_slow_down(fake_s3, tmp_path):
+    fake_s3.responses = [_SLOW_DOWN, (200, b"artifact bytes")]
+    destination = tmp_path / "artifact.zip"
+
+    common.download_from_presigned_url(fake_s3.presigned, str(destination))
+
+    assert destination.read_bytes() == b"artifact bytes"
+    assert len(fake_s3.received) == 2
+
+
+def test_upload_connect_timeout_bounds_each_write_not_the_whole_body(fake_s3, monkeypatch):
+    """urllib3 sends the request under the connect timeout. The server drains this body too
+    slowly for one write of all of it to finish within that timeout, but each small write of
+    the streamed body does."""
+    monkeypatch.setattr(common, "_PRESIGNED_UPLOAD_TIMEOUT", (0.1, 5))
+    fake_s3.drain_delay = 0.001  # at most 64 KiB per millisecond
+    fake_s3.responses = [(200, b"")]
+    content = bytes(range(256)) * (12 << 12)  # 12 MiB
+
+    common.upload_from_presigned_url(fake_s3.presigned, content)
+
+    intact = fake_s3.received == [(str(len(content)), content)]  # no 12 MiB diff on failure
+    assert intact
 
 
 def test_handle_boto_error():
@@ -145,7 +345,11 @@ def test_download_from_presigned_url_success(session, response, download_respons
     common.download_from_presigned_url(download_response, str(destination_path))
 
     expected_headers = {"Content-Type": "application/octet-stream"}
-    session.get.assert_called_once_with("https://test-download-url.com", headers=expected_headers)
+    session.get.assert_called_once_with(
+        "https://test-download-url.com",
+        headers=expected_headers,
+        timeout=common._PRESIGNED_DOWNLOAD_TIMEOUT,
+    )
     assert destination_path.read_bytes() == b"downloaded content"
 
 
@@ -188,7 +392,9 @@ def test_download_from_presigned_url_capital_p_key(session, response, tmp_path):
     common.download_from_presigned_url(download_response, str(destination_path))
 
     session.get.assert_called_once_with(
-        "https://skill-download-url.com", headers={"host": "s3.amazonaws.com"}
+        "https://skill-download-url.com",
+        headers={"host": "s3.amazonaws.com"},
+        timeout=common._PRESIGNED_DOWNLOAD_TIMEOUT,
     )
     assert destination_path.read_bytes() == b"skill content"
 
