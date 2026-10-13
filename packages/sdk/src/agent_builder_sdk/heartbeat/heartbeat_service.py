@@ -48,7 +48,8 @@ class HeartbeatService:
         If the monitoring type can't be looked up yet, the loop starts anyway and
         re-checks it on each tick until it resolves.
         """
-        # API calls run in a worker thread so /ping and requests keep being served.
+        # A worker thread keeps the event loop (and /ping) responsive; agent setup still
+        # waits for this lookup before the server reports ready.
         enabled = await asyncio.to_thread(self._should_enable)
         if enabled is False:
             return

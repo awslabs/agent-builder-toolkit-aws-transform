@@ -298,22 +298,35 @@ class TestHeartbeatLoop:
         mock_send.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_slow_send_does_not_block_event_loop(self, context):
+    async def test_api_calls_do_not_block_event_loop(self, context):
+        """start()'s lookup, the loop's re-check and the send all run in worker threads."""
         service = HeartbeatService(context, interval_minutes=0)
-        in_flight = threading.Event()
+        lookups = iter([None, True])  # unknown at start, HEARTBEAT on the first re-check
+        sent = threading.Event()
+
+        def slow_lookup():
+            time.sleep(0.3)
+            return next(lookups)
 
         def slow_send():
-            in_flight.set()
-            time.sleep(0.5)
+            time.sleep(0.3)
+            sent.set()
 
-        with patch.object(service, "_should_enable", return_value=True), patch.object(
+        gaps = []
+
+        async def ticker():  # a concurrent coroutine; a call on the loop thread stalls it
+            while not sent.is_set():
+                started = time.monotonic()
+                await asyncio.sleep(0.01)
+                gaps.append(time.monotonic() - started)
+
+        with patch.object(service, "_should_enable", side_effect=slow_lookup), patch.object(
             service, "_send_heartbeat", side_effect=slow_send
         ):
+            ticking = asyncio.create_task(ticker())
+            await asyncio.sleep(0)  # let the ticker start before start() does its lookup
             await service.start()
-            await _wait_until(in_flight.is_set)
-            started = time.monotonic()
-            await asyncio.sleep(0.05)  # a concurrent coroutine must still get scheduled
-            elapsed = time.monotonic() - started
+            await asyncio.wait_for(ticking, timeout=5)  # ends after the first send
             await service.stop()
 
-        assert elapsed < 0.3
+        assert max(gaps) < 0.2  # each call takes 0.3s
