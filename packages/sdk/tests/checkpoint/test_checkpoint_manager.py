@@ -4,6 +4,8 @@
 Unit tests for checkpoint manager.
 """
 
+import threading
+import time
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -21,7 +23,10 @@ from agent_builder_sdk.checkpoint.checkpoint_triggers import (
 @pytest.fixture
 def mock_checkpoint_repository():
     """Mock CheckpointRepository for testing."""
-    return Mock()
+    repo = Mock()
+    repo.multi_checkpoint_enabled = False
+    repo._select_checkpoint.side_effect = lambda checkpoints: checkpoints[0]
+    return repo
 
 
 @pytest.fixture
@@ -149,6 +154,40 @@ class TestCheckpointManager:
         assert result is False
 
 
+class TestCheckpointManagerMultiCheckpoint:
+    """Test routing to the multi-checkpoint save path."""
+
+    def test_routes_to_save_multi_checkpoint_when_enabled(self):
+        repo = Mock()
+        repo.is_restore_verified = True
+        repo.multi_checkpoint_enabled = True
+        repo.save_multi_checkpoint.return_value = True
+
+        manager = CheckpointManager(repo, Mock())
+
+        result = manager._execute_checkpoint()
+
+        assert result is True
+        repo.save_multi_checkpoint.assert_called_once()
+        repo.update_checkpoint.assert_not_called()
+        repo.create_checkpoint.assert_not_called()
+
+    def test_single_path_when_multi_disabled(self):
+        repo = Mock()
+        repo.is_restore_verified = True
+        repo.multi_checkpoint_enabled = False
+        repo.list_checkpoint.return_value = []
+        repo.create_checkpoint.return_value = "artifact-123"
+
+        manager = CheckpointManager(repo, Mock())
+
+        result = manager._execute_checkpoint()
+
+        assert result is True
+        repo.save_multi_checkpoint.assert_not_called()
+        repo.create_checkpoint.assert_called_once()
+
+
 class TestCheckpointManagerRestoreVerification:
     """Test restore verification guard in CheckpointManager."""
 
@@ -156,6 +195,7 @@ class TestCheckpointManagerRestoreVerification:
         """Blocks writes when restore not verified, attempts late restore."""
         repo = Mock()
         repo.is_restore_verified = False
+        repo.multi_checkpoint_enabled = False
         trigger = Mock()
         manager = CheckpointManager(repo, trigger)
 
@@ -177,6 +217,7 @@ class TestCheckpointManagerRestoreVerification:
         """Proceeds with checkpoint after successful late restore."""
         repo = Mock()
         repo.is_restore_verified = False
+        repo.multi_checkpoint_enabled = False
         trigger = Mock()
         manager = CheckpointManager(repo, trigger)
 
@@ -187,6 +228,7 @@ class TestCheckpointManagerRestoreVerification:
         repo.restore_if_available.side_effect = restore_side_effect
         existing_checkpoint = {"artifactId": "existing-123"}
         repo.list_checkpoint.return_value = [existing_checkpoint]
+        repo._select_checkpoint.side_effect = lambda checkpoints: checkpoints[0]
         repo.update_checkpoint.return_value = True
 
         result = manager._execute_checkpoint()
@@ -198,6 +240,7 @@ class TestCheckpointManagerRestoreVerification:
         """Skips without retrying on subsequent calls after failed late restore."""
         repo = Mock()
         repo.is_restore_verified = False
+        repo.multi_checkpoint_enabled = False
         trigger = Mock()
         manager = CheckpointManager(repo, trigger)
 
@@ -219,6 +262,7 @@ class TestCheckpointManagerRestoreVerification:
         """Works normally when restore is already verified."""
         repo = Mock()
         repo.is_restore_verified = True
+        repo.multi_checkpoint_enabled = False
         trigger = Mock()
         manager = CheckpointManager(repo, trigger)
 
@@ -234,6 +278,7 @@ class TestCheckpointManagerRestoreVerification:
         """force_checkpoint() also respects the restore verification guard."""
         repo = Mock()
         repo.is_restore_verified = False
+        repo.multi_checkpoint_enabled = False
         trigger = Mock()
         manager = CheckpointManager(repo, trigger)
 
@@ -249,6 +294,7 @@ class TestCheckpointManagerRestoreVerification:
         """Exceptions during late restore are caught gracefully."""
         repo = Mock()
         repo.is_restore_verified = False
+        repo.multi_checkpoint_enabled = False
         trigger = Mock()
         manager = CheckpointManager(repo, trigger)
 
@@ -258,6 +304,89 @@ class TestCheckpointManagerRestoreVerification:
 
         assert result is False
         repo.restore_if_available.assert_called_once()
+
+
+class TestCheckpointManagerConcurrency:
+    """Test that _execute_checkpoint serializes concurrent callers.
+
+    Since attempt_checkpoint() runs on a worker thread (asyncio.to_thread) and
+    force_checkpoint() can run from other callers (for example at shutdown), two callers
+    could otherwise both observe an empty list_checkpoint() and each create a
+    checkpoint, producing duplicate artifacts.
+    """
+
+    def test_concurrent_execute_does_not_create_duplicate(self):
+        """Overlapping attempt + force must not both call create_checkpoint()."""
+        repo = Mock()
+        repo.is_restore_verified = True
+        repo.multi_checkpoint_enabled = False
+
+        created = []
+
+        def list_checkpoint(limit=None):
+            # Simulate remote list latency so the second thread would race in
+            # without the lock; return whatever has been created so far.
+            time.sleep(0.05)
+            return list(created)
+
+        def create_checkpoint():
+            # Simulate CPU-bound zip + upload.
+            time.sleep(0.1)
+            artifact_id = f"artifact-{len(created) + 1}"
+            created.append({"artifactId": artifact_id})
+            return artifact_id
+
+        repo.list_checkpoint.side_effect = list_checkpoint
+        repo.create_checkpoint.side_effect = create_checkpoint
+        repo.update_checkpoint.return_value = True
+
+        manager = CheckpointManager(repo, Mock())
+
+        threads = [
+            threading.Thread(target=manager.force_checkpoint),
+            threading.Thread(target=manager.force_checkpoint),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        # Lock serializes: first creates, second sees it and updates instead.
+        assert repo.create_checkpoint.call_count == 1
+        assert len(created) == 1
+
+    def test_lock_is_held_while_repository_runs(self):
+        """The lock must be held for the duration of the repository work.
+
+        Probes the lock from inside the repository call. threading.Lock is
+        non-reentrant, so if _execute_checkpoint holds it while calling the
+        repository, a probe (even from the owning thread) cannot re-acquire it.
+        Fails if _execute_checkpoint stops wrapping the work in the lock.
+        """
+        repo = Mock()
+        repo.is_restore_verified = True
+        repo.multi_checkpoint_enabled = False
+        repo.list_checkpoint.return_value = []
+
+        manager = CheckpointManager(repo, Mock())
+
+        lock_acquirable_during_execution = []
+
+        def create_checkpoint():
+            acquired = manager._checkpoint_lock.acquire(blocking=False)
+            lock_acquirable_during_execution.append(acquired)
+            if acquired:
+                manager._checkpoint_lock.release()
+            return "artifact-1"
+
+        repo.create_checkpoint.side_effect = create_checkpoint
+
+        assert manager._execute_checkpoint() is True
+        # Lock was held while create_checkpoint ran -> could not be re-acquired.
+        assert lock_acquirable_during_execution == [False]
+        # Lock released after execution.
+        assert manager._checkpoint_lock.acquire(blocking=False)
+        manager._checkpoint_lock.release()
 
 
 class TestBackgroundCheckpointer:
@@ -387,7 +516,7 @@ class TestCheckpointManagerConcurrencyLock:
         allow_create = _t.Event()
         state = {"checkpoints": []}
 
-        def list_side_effect():
+        def list_side_effect(limit=None):
             snapshot = list(state["checkpoints"])
             if not snapshot:
                 # First caller inside the lock — signal we saw empty, wait for

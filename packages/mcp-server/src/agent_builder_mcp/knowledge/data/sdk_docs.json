@@ -520,7 +520,7 @@
     "module": "agent_builder_sdk.agentic_framework.artifact_store",
     "docstring": "Manages artifact storage operations.",
     "signature": "ArtifactStore()",
-    "description": "Extends: AgenticApiHelper\n\nMethods:\n  list_artifacts(agent_instance_id: str, category: CategoryType | None = None) -> abt.ListArtifactsResponseTypeDef\n  upload_artifact(content: bytes, digest: str, artifact_id: str | None = None, category_type: CategoryTypeType | None = None, file_type: FileTypeType | None = None, plan_step_id: str | None = None, label: str | None = None) -> str\n  download_artifact(artifact_id: str, destination_file_path: str) -> None"
+    "description": "Extends: AgenticApiHelper\n\nMethods:\n  list_artifacts(agent_instance_id: str, category: CategoryType | None = None, next_token: str | None = None, max_results: int | None = None) -> abt.ListArtifactsResponseTypeDef\n  upload_artifact(content: bytes, digest: str, artifact_id: str | None = None, category_type: CategoryTypeType | None = None, file_type: FileTypeType | None = None, plan_step_id: str | None = None, label: str | None = None) -> str\n  download_artifact(artifact_id: str, destination_file_path: str) -> None"
   },
   {
     "name": "ArtifactStore.download_artifact",
@@ -535,8 +535,8 @@
     "kind": "method",
     "file": "agent_builder_sdk/agentic_framework/artifact_store.py",
     "module": "agent_builder_sdk.agentic_framework.artifact_store",
-    "docstring": "List artifacts by agent instance ID and category type.",
-    "signature": "list_artifacts(agent_instance_id: str, category: CategoryType | None = None) -> abt.ListArtifactsResponseTypeDef"
+    "docstring": "List artifacts for an agent, newest first, optionally capped at max_results.",
+    "signature": "list_artifacts(agent_instance_id: str, category: CategoryType | None = None, next_token: str | None = None, max_results: int | None = None) -> abt.ListArtifactsResponseTypeDef"
   },
   {
     "name": "ArtifactStore.upload_artifact",
@@ -840,8 +840,8 @@
     "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
     "docstring": "Manages agent checkpointing operations.",
-    "signature": "CheckpointRepository(workspace_id: str, job_id: str, agent_instance_id: str, checkpoint_location: Optional[str] = None, client=None, auto_check_state_object: Optional[bool] = False)",
-    "description": "Parameters:\n  workspace_id: str (required)\n  job_id: str (required)\n  agent_instance_id: str (required)\n  checkpoint_location: Optional[str] (default=None)\n  client (default=None)\n  auto_check_state_object: Optional[bool] (default=False)\n\nMethods:\n  is_restore_verified() -> bool\n  create_checkpoint(location: Optional[str] = None, agent_state: Optional[IAgentState] = None) -> Optional[str]\n  update_checkpoint(existing_checkpoint: ArtifactTypeDef | None = None, location: Optional[str] = None) -> bool\n  retrieve_checkpoint(destination_path: str) -> None\n  list_checkpoint() -> list[ArtifactTypeDef]\n  restore_if_available() -> bool"
+    "signature": "CheckpointRepository(workspace_id: str, job_id: str, agent_instance_id: str, checkpoint_location: Optional[str] = None, client=None, auto_check_state_object: Optional[bool] = False, max_checkpoints: Optional[int] = None)",
+    "description": "Parameters:\n  workspace_id: str (required)\n  job_id: str (required)\n  agent_instance_id: str (required)\n  checkpoint_location: Optional[str] (default=None)\n  client (default=None)\n  auto_check_state_object: Optional[bool] (default=False)\n  max_checkpoints: Optional[int] (default=None)\n\nMethods:\n  is_restore_verified() -> bool\n  create_checkpoint(location: Optional[str] = None, agent_state: Optional[IAgentState] = None) -> Optional[str]\n  update_checkpoint(existing_checkpoint: ArtifactTypeDef | None = None, location: Optional[str] = None) -> bool\n  retrieve_checkpoint(destination_path: str, artifact_id: Optional[str] = None) -> None\n  save_multi_checkpoint() -> bool\n  list_restorable_checkpoints() -> list[ArtifactTypeDef]\n  list_checkpoint(limit: Optional[int] = None) -> list[ArtifactTypeDef]\n  restore_if_available() -> bool"
   },
   {
     "name": "CheckpointRepository.create_checkpoint",
@@ -864,8 +864,16 @@
     "kind": "method",
     "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
-    "docstring": "List available checkpoints for this agent (should be 0 or 1).",
-    "signature": "list_checkpoint() -> list[ArtifactTypeDef]"
+    "docstring": "STATE checkpoint artifacts for this agent, newest first.\n\nA page may hold fewer items than requested even when more exist, so this\nkeeps paging until limit is met or there is no nextToken.",
+    "signature": "list_checkpoint(limit: Optional[int] = None) -> list[ArtifactTypeDef]"
+  },
+  {
+    "name": "CheckpointRepository.list_restorable_checkpoints",
+    "kind": "method",
+    "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
+    "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
+    "docstring": "Newest checkpoints first, capped at max_checkpoints.\n\nCheckpoints that share a created timestamp are ordered by the write time\nrecorded in their label, then by artifactId.",
+    "signature": "list_restorable_checkpoints() -> list[ArtifactTypeDef]"
   },
   {
     "name": "CheckpointRepository.restore_if_available",
@@ -881,7 +889,15 @@
     "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
     "docstring": "Download and extract checkpoint.",
-    "signature": "retrieve_checkpoint(destination_path: str) -> None"
+    "signature": "retrieve_checkpoint(destination_path: str, artifact_id: Optional[str] = None) -> None"
+  },
+  {
+    "name": "CheckpointRepository.save_multi_checkpoint",
+    "kind": "method",
+    "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
+    "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
+    "docstring": "Append a new checkpoint rather than overwriting the previous one.",
+    "signature": "save_multi_checkpoint() -> bool"
   },
   {
     "name": "CheckpointRepository.update_checkpoint",
@@ -907,7 +923,7 @@
     "module": "agent_builder_sdk.checkpoint.checkpoint_service",
     "docstring": "Manages checkpoint lifecycle for agent runtime.",
     "signature": "CheckpointService(storage_dir: str, strategy: Optional[CheckpointStrategy] = None, interval: int = 30)",
-    "description": "Parameters:\n  storage_dir: str (required) - Base directory for checkpoint storage\n  strategy: Optional[CheckpointStrategy] (default=None) - Checkpoint strategy enum (optional)\n  interval: int (default=30) - Checkpoint interval - turns or minutes (default: 30)\n\nMethods:\n  initialize(context: AgentRuntimeContext) -> None\n  create_callback() -> Optional[Callable]\n  async start_background_checkpointing() -> None\n  async shutdown() -> None"
+    "description": "Parameters:\n  storage_dir: str (required) - Base directory for checkpoint storage\n  strategy: Optional[CheckpointStrategy] (default=None) - Checkpoint strategy enum (optional)\n  interval: int (default=30) - Checkpoint interval in turns or minutes\n\nMethods:\n  initialize(context: AgentRuntimeContext) -> None\n  create_callback() -> Optional[Callable]\n  async start_background_checkpointing() -> None\n  async shutdown() -> None"
   },
   {
     "name": "CheckpointService.create_callback",
@@ -1744,6 +1760,15 @@
     "module": "agent_builder_sdk.env_var",
     "docstring": "Get initial agent context from environment variables (including initial auth token).",
     "signature": "get_initial_agent_runtime_context_from_env() -> AgentRuntimeContext",
+    "description": ""
+  },
+  {
+    "name": "get_max_checkpoints",
+    "kind": "function",
+    "file": "agent_builder_sdk/env_var.py",
+    "module": "agent_builder_sdk.env_var",
+    "docstring": "Max retained checkpoints, or None for single checkpoint mode.\n\nNone when unset, non integer, or not above 1. Values above the cap are clamped.",
+    "signature": "get_max_checkpoints() -> Optional[int]",
     "description": ""
   },
   {
