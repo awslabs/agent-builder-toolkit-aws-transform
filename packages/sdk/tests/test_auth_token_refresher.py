@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import datetime
 import os
+import signal
 from multiprocessing import Event as MPEvent
 from pathlib import Path
 from unittest import mock
@@ -14,6 +15,7 @@ from agent_builder_sdk._auth_token_refresher import (
     MAX_SESSION_DURATION,
     MIN_SESSION_DURATION,
     MIN_SLEEP_SECONDS,
+    SAFETY_FACTOR,
     TOKEN_REFRESH_BUFFER_SECONDS,
     AuthTokenRefresher,
     get_auth_token_refresher,
@@ -80,7 +82,15 @@ def test_auth_token_refresher_shutdown_no_process():
     refresher.shutdown()
 
 
-def test_auth_process_main_exception(caplog):
+@pytest.fixture
+def restore_sigterm():
+    """_auth_process_main resets SIGTERM in the calling process; put the runner's back."""
+    saved = signal.getsignal(signal.SIGTERM)
+    yield
+    signal.signal(signal.SIGTERM, saved)
+
+
+def test_auth_process_main_exception(caplog, restore_sigterm):
     """Test _auth_process_main handles general exceptions with proper logging."""
     refresher = AuthTokenRefresher(
         workspace_id="test-workspace",
@@ -89,14 +99,32 @@ def test_auth_process_main_exception(caplog):
         first_token="test-token",
     )
 
-    # Mock _refresh_token to raise an exception
-    refresher._refresh_token = mock.Mock(side_effect=Exception("Test error"))
+    # Mock _refresh_token to raise an exception first, then KeyboardInterrupt to exit
+    refresher._refresh_token = mock.Mock(side_effect=[Exception("Test error"), KeyboardInterrupt])
 
-    # Should handle exception gracefully and not raise
-    refresher._auth_process_main()
+    with mock.patch("agent_builder_sdk._auth_token_refresher.time.sleep"):
+        with mock.patch("agent_builder_sdk._auth_token_refresher.logging.basicConfig"):
+            # Should handle exception, retry, then exit on KeyboardInterrupt
+            refresher._auth_process_main()
 
-    # Verify proper error logging with exc_info
-    assert "Token refresh process error:" in caplog.text
+    # Verify the loop continued after the exception (called twice)
+    assert refresher._refresh_token.call_count == 2
+    assert "Token refresh process error, retrying:" in caplog.text
+
+
+def test_auth_process_main_resets_inherited_sigterm_handler(
+    mock_auth_dependencies, restore_sigterm
+):
+    """The child drops the parent's SIGTERM handler, so terminate() stops it right away."""
+    refresher = AuthTokenRefresher(first_token="test-token")
+    refresher._refresh_token = mock.Mock(side_effect=KeyboardInterrupt)
+    # Stand-in for a server's graceful-shutdown handler that the fork would inherit.
+    signal.signal(signal.SIGTERM, lambda signum, frame: None)
+
+    with mock.patch("agent_builder_sdk._auth_token_refresher.logging.basicConfig"):
+        refresher._auth_process_main()
+
+    assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
 
 
 @pytest.fixture
@@ -120,6 +148,7 @@ class TestConstants:
         assert MAX_SESSION_DURATION == 43200
         assert DEFAULT_SESSION_DURATION == 43200
         assert TOKEN_REFRESH_BUFFER_SECONDS == 40
+        assert SAFETY_FACTOR == 0.5
         assert MIN_SLEEP_SECONDS == 60
         assert ERROR_RETRY_SECONDS == 60
 
@@ -324,7 +353,7 @@ class TestAuthTokenRefresherApiCalls:
     """Tests for API interaction methods"""
 
     @mock.patch.object(AuthTokenRefresher, "start_child_process_for_token_refresh")
-    @mock.patch("agent_builder_sdk._auth_token_refresher.get_agentic_api_client")
+    @mock.patch("agent_builder_sdk._auth_token_refresher.create_agentic_api_client")
     @mock.patch("agent_builder_sdk._auth_token_refresher.get_agent_context_from_env")
     def test_refresh_auth_token_from_agentic_api_success(
         self, mock_get_context, mock_get_client, mock_start_child_process
@@ -361,7 +390,7 @@ class TestAuthTokenRefresherApiCalls:
 
                 # Assert
                 assert result == mock_response
-                # Verify that get_agentic_api_client was called lazily during the API call
+                # Verify that create_agentic_api_client was called lazily during the API call
                 mock_get_client.assert_called_once()
                 mock_client.refresh_auth_token.assert_called_once_with(
                     requestContext={
@@ -374,7 +403,7 @@ class TestAuthTokenRefresherApiCalls:
                 )
 
     @mock.patch.object(AuthTokenRefresher, "start_child_process_for_token_refresh")
-    @mock.patch("agent_builder_sdk._auth_token_refresher.get_agentic_api_client")
+    @mock.patch("agent_builder_sdk._auth_token_refresher.create_agentic_api_client")
     def test_refresh_auth_token_client_creation_error(
         self, mock_get_client, mock_start_child_process, caplog
     ):
@@ -392,6 +421,76 @@ class TestAuthTokenRefresherApiCalls:
         # Act & Assert
         with pytest.raises(Exception, match="Client creation failed"):
             refresher._refresh_auth_token_from_agentic_api()
+
+    @mock.patch.object(AuthTokenRefresher, "start_child_process_for_token_refresh")
+    @mock.patch("agent_builder_sdk._auth_token_refresher.get_agent_context_from_env")
+    def test_refresh_uses_uncached_factory_not_parent_cached_client(
+        self, mock_get_context, mock_start_child_process
+    ):
+        """Regression: child must build its own client, not reuse the parent lru_cache.
+
+        boto3 clients are not fork-safe. If the refresher reverts to
+        get_agentic_api_client(), the child would get whichever client the
+        parent already cached before the fork — the exact bug this test guards against.
+        We prime the cached factory with a sentinel that fails on use, then
+        assert the refresh path calls create_agentic_api_client and never
+        touches the cached one.
+        """
+        # Arrange: poison the parent-side cached factory. If the refresher
+        # ever calls it, refresh_auth_token will blow up with our sentinel.
+        from agent_builder_sdk.agentic_framework import client_factory
+
+        parent_client = mock.Mock()
+        parent_client.refresh_auth_token.side_effect = AssertionError(
+            "child must not reuse parent's cached boto3 client"
+        )
+        client_factory.get_agentic_api_client.cache_clear()
+        try:
+            with mock.patch.object(
+                client_factory, "create_agentic_api_client", return_value=parent_client
+            ):
+                # Populate the lru_cache as the parent process would.
+                assert client_factory.get_agentic_api_client() is parent_client
+
+            child_client = mock.Mock()
+            child_client.refresh_auth_token.return_value = {
+                "authorizationToken": "child-token",
+                "authorizationExpiration": datetime.datetime.now(datetime.timezone.utc),
+            }
+
+            mock_context = mock.Mock()
+            mock_context.to_dict.return_value = {
+                "JOB_ID": "j",
+                "WORKSPACE_ID": "w",
+                "AGENT_INSTANCE_ID": "a",
+                "AUTHORIZATION_TOKEN": "t",
+            }
+            mock_get_context.return_value = mock_context
+
+            with mock.patch(
+                "agent_builder_sdk._auth_token_refresher.create_agentic_api_client",
+                return_value=child_client,
+            ) as mock_child_factory:
+                with mock.patch(
+                    "agent_builder_sdk._auth_token_refresher.get_default_auth_token_file_path",
+                    return_value="/test/regression/path",
+                ):
+                    with mock.patch(
+                        "agent_builder_sdk._auth_token_refresher.write_content_to_file"
+                    ):
+                        refresher = AuthTokenRefresher()
+
+                    # Act
+                    result = refresher._refresh_auth_token_from_agentic_api()
+
+                # Assert: child built its own client via the uncached factory,
+                # and the parent's cached client was never invoked.
+                mock_child_factory.assert_called_once()
+                child_client.refresh_auth_token.assert_called_once()
+                parent_client.refresh_auth_token.assert_not_called()
+                assert result["authorizationToken"] == "child-token"
+        finally:
+            client_factory.get_agentic_api_client.cache_clear()
 
 
 class TestAuthTokenRefresherTokenRefresh:
@@ -434,8 +533,13 @@ class TestAuthTokenRefresherTokenRefresh:
                 sleep_time = refresher._refresh_token()
 
                 # Assert
-                # Expected: (2 hours * 3600 seconds) - TOKEN_REFRESH_BUFFER_SECONDS = 7160 seconds
-                expected_sleep_time = (2 * 3600) - TOKEN_REFRESH_BUFFER_SECONDS
+                # Expected: min(7200 * 0.5, 7200 - 40) = min(3600, 7160) = 3600 seconds
+                expected_sleep_time = int(
+                    min(
+                        (2 * 3600) * SAFETY_FACTOR,
+                        (2 * 3600) - TOKEN_REFRESH_BUFFER_SECONDS,
+                    )
+                )
                 assert sleep_time == expected_sleep_time
                 mock_write.assert_called_once_with("refreshed-token")
 

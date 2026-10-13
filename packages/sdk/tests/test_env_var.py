@@ -18,6 +18,7 @@ from agent_builder_sdk.env_var import (
     should_use_prod_bedrock_capacity,
     validate_required_env_vars,
 )
+from agent_builder_sdk.errors import AuthTokenUnavailableError, BaseAgentError
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 
 
@@ -217,6 +218,31 @@ class TestRetrieveAuthToken:
                     error_message = str(exc_info.value)
                     assert "Failed to read auth token from file" in error_message
                     assert "Permission denied" in error_message
+        finally:
+            os.unlink(temp_file_path)
+
+    def test_retrieve_auth_token_raises_typed_error_consumers_can_catch(self):
+        """The failure is a BaseAgentError, so consumers can tell it from a code bug.
+
+        It stays a ValueError as well, because that is what it used to be raised as and
+        downstream partner agents catch it.
+        """
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(AuthTokenUnavailableError) as exc_info:
+                retrieve_auth_token()
+
+        assert isinstance(exc_info.value, BaseAgentError)
+        assert isinstance(exc_info.value, ValueError)
+
+    def test_retrieve_auth_token_ignores_key_that_only_shares_a_prefix(self):
+        """ATX_AUTHZ_TOKEN_EXPIRY must not be parsed as the token."""
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
+            temp_file.write("ATX_AUTHZ_TOKEN_EXPIRY=2026-09-09T00:00:00Z\nATX_AUTHZ_TOKEN=real\n")
+            temp_file_path = temp_file.name
+
+        try:
+            with mock.patch.dict(os.environ, {"AUTH_TOKEN_FILE": temp_file_path}, clear=True):
+                assert retrieve_auth_token() == "real"
         finally:
             os.unlink(temp_file_path)
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from agent_builder_sdk.agentic_framework.api_model import AgenticApiRequestContext
+from agent_builder_sdk.errors import AuthTokenUnavailableError
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 
 logger = logging.getLogger(__name__)
@@ -80,24 +81,29 @@ def get_bedrock_shared_capacity_role_arn(region: str) -> Optional[str]:
 def retrieve_auth_token() -> str:
     auth_token_file_path = os.getenv(ENV_KEY_AUTH_TOKEN_FILE)
     if auth_token_file_path is None or not Path(auth_token_file_path).exists():
-        raise ValueError(
+        raise AuthTokenUnavailableError(
             f"{ENV_KEY_AUTH_TOKEN_FILE} env-var is not set or auth-token file is not found"
         )
 
-    # Read auth token from file if env-var is set and file exists
+    # Read auth token from file if env-var is set and file exists. Match the key plus "=" so
+    # a longer key sharing the prefix (e.g. ATX_AUTHZ_TOKEN_EXPIRY) is not read as the token.
     auth_token = None
     try:
         with open(auth_token_file_path, "r") as file:
             for line in file:
                 line = line.strip()
-                if line.startswith(ATX_AUTH_TOKEN_KEY):
+                if line.startswith(f"{ATX_AUTH_TOKEN_KEY}="):
                     auth_token = line.split("=", 1)[1]
                     break
     except IOError as e:
-        raise ValueError(f"Failed to read auth token from file {auth_token_file_path}: {e}")
+        raise AuthTokenUnavailableError(
+            f"Failed to read auth token from file {auth_token_file_path}: {e}"
+        )
 
     if not auth_token:
-        raise ValueError(f"ATX_AUTHZ_TOKEN not found in credentials file {auth_token_file_path}")
+        raise AuthTokenUnavailableError(
+            f"{ATX_AUTH_TOKEN_KEY} not found in credentials file {auth_token_file_path}"
+        )
 
     logger.info(f"Successfully read auth token from file: {auth_token_file_path}")
     return auth_token
