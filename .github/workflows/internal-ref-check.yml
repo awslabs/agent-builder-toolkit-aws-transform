@@ -20,7 +20,9 @@ jobs:
           # -a scans binary files as text, so their hits are listed too.
           # amazon.com / amazon.dev hosts other than the public aws.amazon.com
           # sites, and aws.dev hosts other than the product API endpoints.
-          hosts=$(git grep -anoiE '[a-z0-9.-]*[a-z0-9]([.-]amazon\.(com|dev)|\.aws\.dev)' \
+          # '}' and '>' also catch hosts whose leading label is a template
+          # placeholder, as in {stage} or <host> followed by the domain.
+          hosts=$(git grep -anoiE '[a-z0-9.-]*[a-z0-9}>]([.-]amazon\.(com|dev)|\.aws\.dev)' \
             | grep -viE '[:.]([a-z0-9-]+\.)*(aws\.amazon\.com|elastic-gumby\.ai\.aws\.dev)$' || true)
           # amazon.com / amazon.dev email addresses other than the public
           # code-of-conduct contact.
