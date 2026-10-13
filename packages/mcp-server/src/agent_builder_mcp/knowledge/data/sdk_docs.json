@@ -1733,9 +1733,9 @@
     "kind": "function",
     "file": "agent_builder_sdk/env_var.py",
     "module": "agent_builder_sdk.env_var",
-    "docstring": "Get the appropriate BedrockSharedCapacityRole ARN based on region.\n\nArgs:\n    region: AWS region name\n\nReturns:\n    Role ARN if available, None otherwise",
+    "docstring": "Get the BedrockSharedCapacityRole ARN from the environment.\n\nArgs:\n    region: AWS region name (used only in the log message)\n\nReturns:\n    Value of BEDROCK_SHARED_CAPACITY_ROLE_ARN if set, None otherwise",
     "signature": "get_bedrock_shared_capacity_role_arn(region: str) -> Optional[str]",
-    "description": "Parameters:\n  region: str (required) - AWS region name"
+    "description": "Parameters:\n  region: str (required) - AWS region name (used only in the log message)"
   },
   {
     "name": "get_initial_agent_runtime_context_from_env",
