@@ -126,6 +126,8 @@ Upload as soon as results are final — don't wait to be asked, and don't treat 
 
 ## References
 
+Read these with `read_platform_skill_file(skill_name="artifact-io", path=...)`:
+
 - `references/upload-recovery.md` — expired URLs, download failures, and `copy_artifact`'s async
   behavior.
 - `references/finding-artifacts.md` — `list_artifacts` filter shapes (the tool description's field

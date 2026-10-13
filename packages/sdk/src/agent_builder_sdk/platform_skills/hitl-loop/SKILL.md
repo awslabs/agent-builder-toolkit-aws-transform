@@ -122,6 +122,8 @@ after you have the answer** — closing a task the human is mid-form on destroys
 
 ## References
 
+Read these with `read_platform_skill_file(skill_name="hitl-loop", path=...)`:
+
 - `references/recovery.md` — when a call fails or you suspect a duplicate task: failed starts,
   retry rules, duplicate cleanup, closure corrections, and why the plan step is not a health signal.
 - `references/task-shapes.md` — per-variant behavior: chaining, reading output by

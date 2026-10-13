@@ -147,5 +147,7 @@ happened: rebuild your label→id map from the listing and tell the user what wa
 
 ## References
 
+Read these with `read_platform_skill_file(skill_name="job-plan", path=...)`:
+
 - `references/plan-shape.md` — step placement, nesting, and deletion order.
 - `references/plan-recovery.md` — timeouts, conflicts, duplicate steps, and re-deriving lost ids.

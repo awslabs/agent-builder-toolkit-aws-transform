@@ -997,8 +997,7 @@ class TestWriteContentToFile:
 
 
 def test_get_platform_skills_contract_prompt_ships():
-    # Reads the real packaged prompt (no mock), so this also proves platform_skills_contract.md
-    # is shipped via package_data and reachable through importlib.resources.
+    # Reads the real prompt file (no mock) through importlib.resources.
     contract = get_platform_skills_contract_prompt()
     assert "Orient, then plan" in contract
     assert "plan step id" in contract

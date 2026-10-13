@@ -6,9 +6,11 @@ Agent factory functions for creating orchestrator instances.
 
 import logging
 import os
+from pathlib import Path
 from typing import Any, Optional, Set, TypeVar, Union
 
 from strands.models.model import Model
+from strands.tools import tool
 from strands.tools.mcp.mcp_client import MCPClient
 
 from agent_builder_sdk.base_subagent.base_subagent import AsyncBaseSubagent, BaseSubagent
@@ -44,6 +46,32 @@ OrchestratorT = TypeVar("OrchestratorT", BaseOrchestrator, AsyncBaseOrchestrator
 SubagentT = TypeVar("SubagentT", BaseSubagent, AsyncBaseSubagent)
 
 logger = logging.getLogger(__name__)
+
+_PLATFORM_SKILLS_DIR = Path(__file__).parent / "platform_skills"
+_MAX_PLATFORM_SKILL_FILE_BYTES = 64 * 1024
+
+
+@tool
+def read_platform_skill_file(skill_name: str, path: str) -> str:
+    """Read a file that ships with a platform skill, such as one listed under its References.
+
+    Args:
+        skill_name: Name of the platform skill, e.g. "hitl-loop".
+        path: File path inside that skill, e.g. "references/recovery.md".
+
+    Returns:
+        The file's text, or an error message.
+    """
+    relative = Path(skill_name, path)
+    if relative.is_absolute() or ".." in relative.parts:
+        return f"Error: '{relative}' must be a relative path without '..'"
+    root = _PLATFORM_SKILLS_DIR.resolve()
+    target = (root / relative).resolve()
+    if not target.is_relative_to(root) or not target.is_file():
+        return f"Error: no platform skill file '{relative}'"
+    if target.stat().st_size > _MAX_PLATFORM_SKILL_FILE_BYTES:
+        return f"Error: '{relative}' is larger than {_MAX_PLATFORM_SKILL_FILE_BYTES} bytes"
+    return target.read_text(encoding="utf-8")
 
 
 def _create_default_orchestrator(
@@ -94,7 +122,9 @@ def _create_default_orchestrator(
     # and behavior is unchanged.
     skills_sources: list[Any] = []
     if enable_platform_skills:
-        skills_sources.append(os.path.join(os.path.dirname(__file__), "platform_skills"))
+        skills_sources.append(str(_PLATFORM_SKILLS_DIR))
+        # The skills tool only lists a skill's reference files; this tool reads them.
+        custom_tools.append(read_platform_skill_file)
     if enable_skills:
         skills_sources.append(skills_dir or os.environ.get("STRANDS_SKILLS_DIR") or "./skills")
 
@@ -326,8 +356,8 @@ def create_default_async_orchestrator_with_subagent(
     metrics_config: Optional[MetricsConfig] = None,
     enable_skills: bool = False,
     skills_dir: Optional[str] = None,
-    enable_platform_skills: bool = False,
     enable_code_execution: bool = False,
+    enable_platform_skills: bool = False,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.
 
@@ -356,14 +386,15 @@ def create_default_async_orchestrator_with_subagent(
             and auto-injects skill metadata into the system prompt.
         skills_dir: Directory containing skills. If None, uses STRANDS_SKILLS_DIR env var
             or defaults to ./skills
-        enable_platform_skills: Load the packaged platform-knowledge skills and append the
+        enable_code_execution: Enable experimental local Python code execution tool.
+            WARNING: Code executes locally without sandboxing. Use with caution.
+            For sandboxed execution, AgentCore Code Interpreter integration is planned.
+        enable_platform_skills: Load the packaged platform-knowledge skills, add the
+            read_platform_skill_file tool for their reference files, and append the
             platform-skills contract to the system prompt. For agents running inside an
             AWS Transform job; off by default.
             USE WITH CAUTION: this also rewrites the system prompt (the contract is appended to
             whatever system_prompt you pass).
-        enable_code_execution: Enable experimental local Python code execution tool.
-            WARNING: Code executes locally without sandboxing. Use with caution.
-            For sandboxed execution, AgentCore Code Interpreter integration is planned.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
