@@ -1,7 +1,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 import re
+import socket
+import threading
+import time
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest import mock
 
 import pytest
@@ -102,10 +106,11 @@ def test_upload_from_presigned_url_success(session, response, upload_response):
     expected_headers = {"Content-Type": "application/octet-stream"}
     session.put.assert_called_once_with(
         "https://test-url.com",
-        data=content,
+        data=mock.ANY,
         headers=expected_headers,
         timeout=common._PRESIGNED_UPLOAD_TIMEOUT,
     )
+    assert session.put.call_args.kwargs["data"].read() == content  # streamed, not bytes
 
 
 def test_upload_from_presigned_url_failure(session, response, upload_response):
@@ -220,6 +225,102 @@ def test_download_from_presigned_url_mounts_retry_policy(
     prefix, adapter = session.mount.call_args.args
     assert prefix == "https://"
     assert adapter.max_retries is common._PRESIGNED_URL_RETRY
+
+
+# The tests below send real requests through requests/urllib3 to a local HTTP server, so
+# retries, body rewinds and timeouts run for real rather than against a mocked Session.
+
+_SLOW_DOWN = (
+    503,
+    b"<Error><Code>SlowDown</Code><Message>Please reduce your request rate.</Message>"
+    b"<RequestId>1</RequestId></Error>",
+)
+
+
+class _FakeS3Handler(BaseHTTPRequestHandler):
+    """Answers each complete request with the next (status, body) in server.responses and
+    records the (Content-Length header, body) it received in server.received."""
+
+    def do_PUT(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = bytearray()
+        while chunk := self.rfile.read1(min(1 << 16, length - len(body))):
+            body += chunk
+            time.sleep(self.server.drain_delay)
+        if len(body) < length:  # the client gave up mid-body; its retry is a new request
+            return
+        self.server.received.append((self.headers.get("Content-Length"), bytes(body)))
+        status, payload = self.server.responses.pop(0)
+        self.send_response(status)
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    do_GET = do_PUT
+
+    def log_message(self, format, *args):
+        pass
+
+
+@pytest.fixture
+def fake_s3(monkeypatch):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _FakeS3Handler, bind_and_activate=False)
+    # A small receive buffer, so the kernel cannot soak up the slow-drain test's body.
+    server.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 16)
+    server.server_bind()
+    server.server_activate()
+    server.responses, server.received, server.drain_delay = [], [], 0
+    server.presigned = {
+        "s3preSignedUrl": f"http://127.0.0.1:{server.server_port}/artifact",
+        "requestHeaders": {},
+    }
+    threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True
+    ).start()
+    # Presigned URLs are https, so the code mounts its retry adapter for https:// only.
+    # Send this plain-http server's traffic through that same adapter.
+    monkeypatch.setattr(
+        requests.Session, "get_adapter", lambda self, url: self.adapters["https://"]
+    )
+    yield server
+    server.shutdown()
+    server.server_close()
+
+
+@pytest.mark.parametrize("content", [b"artifact bytes", b""], ids=["body", "empty"])
+def test_upload_retries_slow_down_and_resends_whole_body(fake_s3, content):
+    """A 503 SlowDown is retried, and the retry rewinds and resends the whole body. Every
+    attempt carries Content-Length, as S3 requires, including for an empty body."""
+    fake_s3.responses = [_SLOW_DOWN, (200, b"")]
+
+    common.upload_from_presigned_url(fake_s3.presigned, content)
+
+    assert fake_s3.received == [(str(len(content)), content)] * 2
+
+
+def test_download_retries_slow_down(fake_s3, tmp_path):
+    fake_s3.responses = [_SLOW_DOWN, (200, b"artifact bytes")]
+    destination = tmp_path / "artifact.zip"
+
+    common.download_from_presigned_url(fake_s3.presigned, str(destination))
+
+    assert destination.read_bytes() == b"artifact bytes"
+    assert len(fake_s3.received) == 2
+
+
+def test_upload_connect_timeout_bounds_each_write_not_the_whole_body(fake_s3, monkeypatch):
+    """urllib3 sends the request under the connect timeout. The server drains this body too
+    slowly for one write of all of it to finish within that timeout, but each small write of
+    the streamed body does."""
+    monkeypatch.setattr(common, "_PRESIGNED_UPLOAD_TIMEOUT", (0.1, 5))
+    fake_s3.drain_delay = 0.001  # at most 64 KiB per millisecond
+    fake_s3.responses = [(200, b"")]
+    content = bytes(range(256)) * (12 << 12)  # 12 MiB
+
+    common.upload_from_presigned_url(fake_s3.presigned, content)
+
+    intact = fake_s3.received == [(str(len(content)), content)]  # no 12 MiB diff on failure
+    assert intact
 
 
 def test_handle_boto_error():

@@ -6,6 +6,7 @@ Common utilities for agentic framework.
 
 import base64
 import hashlib
+import io
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,9 +41,12 @@ _PRESIGNED_URL_RETRY = Retry(
 )
 
 # (connect, read) seconds. requests applies no timeout by default, so a wedged socket
-# would otherwise block the caller forever. The upload read timeout is the wait for S3 to
-# acknowledge a PUT after the body has been sent, which for a large artifact runs longer
-# than any single read while streaming a download, so it is not held to the same bound.
+# would otherwise block the caller forever. urllib3 applies the connect value to every
+# socket write while it sends the request, not only to connecting, which is why the
+# upload body is streamed (see upload_from_presigned_url). The upload read timeout is the
+# wait for S3 to acknowledge the PUT after the body has been sent, which for a large
+# artifact runs longer than any single read while streaming a download, so it is not held
+# to the same bound.
 _PRESIGNED_UPLOAD_TIMEOUT = (5, 300)
 _PRESIGNED_DOWNLOAD_TIMEOUT = (5, 60)
 
@@ -89,7 +93,11 @@ def upload_from_presigned_url(
             session.mount("https://", HTTPAdapter(max_retries=_PRESIGNED_URL_RETRY))
             response = session.put(
                 presigned_url_string,
-                data=content,
+                # Streamed, so the connect timeout bounds each small write rather than one
+                # write of the whole body; urllib3 rewinds the stream for a retry. An empty
+                # body stays bytes: requests sends an empty stream chunked, which S3 rejects,
+                # but empty bytes with Content-Length: 0.
+                data=io.BytesIO(content) if content else content,
                 headers=headers,
                 timeout=_PRESIGNED_UPLOAD_TIMEOUT,
             )
