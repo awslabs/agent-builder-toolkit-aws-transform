@@ -25,19 +25,6 @@ If the re-request returns `FileAlreadyExistsException` or `ConflictException`, s
 object is already stored. Call `get_artifact_metadata`, confirm `isS3ObjectPresent`, and just
 complete.
 
-## "The user can't download it but my own download works"
-
-Check `get_artifact_metadata`'s **`scanStatus` before touching visibility or re-uploading.** The
-malware-scan gate is applied on the user-facing path but not on the agent's, so an artifact can be
-readable by you and blocked for them:
-
-| `scanStatus` | Meaning | Action |
-|---|---|---|
-| `CLEAN` | scan passed | the problem really is visibility — see `copy_artifact` below |
-| `PENDING` | still scanning | wait and re-check; don't re-upload |
-| `QUARANTINED` | permanently blocked | re-uploading the same bytes will be blocked again — regenerate the file or explain to the user |
-| `FAILED` | unservable | report it; do not retry |
-
 ## `copy_artifact` is async and returns no new id
 
 It returns only `{"copyStatus": ...}` — `IN_PROGRESS` or `COMPLETED` — and the public copy keeps
@@ -50,13 +37,7 @@ the **same artifact id**.
    `visibility="EXTERNAL"`** — the default is `INTERNAL`, which reads the artifact-store copy and
    keeps succeeding even when the public copy is missing.
 
-## Download failures: which call failed matters
-
-**`create_artifact_download_url` raises.** Branch on the exception type, never the HTTP status:
-
-- `ArtifactScanInProgressException` — transient. Wait its `retryAfterSeconds`, retry the same call.
-- `ArtifactScanFailedException` — terminal despite also being a 409. Stop; report unavailable.
-- `ArtifactQuarantinedException` — permanent (403). Never retry; tell the user the file was blocked.
+## Download failures
 
 **`download_artifact` returns** `{"success": false, "status_code": ...}` for transfer failures. A
 403 there usually means the presigned URL expired — re-call `create_artifact_download_url` for a

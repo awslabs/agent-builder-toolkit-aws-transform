@@ -16,16 +16,14 @@ Recover by reconciling:
 
 ## "Job plan updates cannot be made while existing updates are in progress"
 
-Two plan writes overlapped. While a put is in flight the job carries an in-progress flag and the
-next one is rejected.
+Two plan writes overlapped, and the later one was rejected.
 
 Serialise your plan writes: one `put_job_plan` at a time, and never fire a second because the
 first seemed slow. On this error, pause, `list_job_plan_steps`, and re-put only what's missing.
 
 ## ConflictException
 
-Treat it as **"retries already exhausted"** — the service already retried three times internally,
-re-reading the record between attempts. Do not loop.
+Do not loop on it.
 
 Back off, re-read state (`get_job` + `list_job_plan_steps`), decide whether your write is still
 the right one, then retry at most once.
@@ -42,9 +40,7 @@ Recovery: `get_job`, wait until the job has left the startup states, then re-iss
 This is also why your first `update_job_status` should follow a `get_job` — sending `PLANNING`
 while the job is still `STARTING` gets *"Invalid job status transition"*.
 
-Note where the platform actually enforces transitions: only when the current status is `CREATED`,
-`STARTING`, or `STOPPING`. From every other status it does not validate you, so the correctness of
-the rest of your sequence is entirely yours to keep.
+Keep the rest of the status sequence correct yourself, following the ordering rules in `job-plan`.
 
 ## Re-deriving lost step ids
 

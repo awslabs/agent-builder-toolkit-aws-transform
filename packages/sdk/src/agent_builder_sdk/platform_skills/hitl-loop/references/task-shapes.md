@@ -42,8 +42,7 @@ pattern-match instead of reading properly.
 
 ## Severity is frozen at creation
 
-You cannot raise severity later — the submit path compares the caller's severity against the
-stored value and rejects a mismatch, which surfaces to the human as a task that has vanished.
+You cannot raise or otherwise change severity after creation.
 
 If you realize mid-interaction that a `STANDARD` task should have been a `CRITICAL` approval gate,
 close the old task and create a new `CRITICAL` one. Do not try to escalate in place.

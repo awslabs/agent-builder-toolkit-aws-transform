@@ -54,8 +54,9 @@ followed by a copy when you already know the file is for the user.
 ```
 
 **The digest is base64 of the raw 32 sha256 bytes** — 44 chars, ends in `=`. Use the command
-above; never `sha256sum` or `hexdigest()`. A hex digest is rejected locally with *"Invalid SHA-256
-checksum format"* before any network call — regenerate it rather than retrying the same value.
+above; never `sha256sum` or `hexdigest()`. A hex digest is not caught locally: it passes
+validation and then fails at upload. If that happens, recompute the base64 digest and request a
+new URL rather than retrying the same value.
 
 **Compute the digest last, and freeze the file.** The digest is handed back inside
 `requestHeaders` and forwarded on the PUT, so the URL accepts only those exact bytes. If you edit
@@ -114,18 +115,18 @@ Upload as soon as results are final — don't wait to be asked, and don't treat 
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| "Invalid SHA-256 checksum format" | passed a hex digest | regenerate with the base64 command above |
+| "Invalid SHA-256 checksum format" | digest is not base64 (e.g. raw `sha256sum` output) | regenerate with the base64 command above |
+| Upload fails although the digest passed local checks | hex digest | recompute the base64 digest, request a new URL |
 | Artifact "uploaded" but downloads fail / never appears | `complete_artifact_upload` skipped, or `success:false` ignored | check `success`, then complete; verify `isS3ObjectPresent` |
 | PUT returns 403 / expired | presigned URL lapsed | re-request the URL for the SAME id — see `references/upload-recovery.md` |
 | User can't see a file you delivered | uploaded `INTERNAL` | upload as `CUSTOMER_OUTPUT` + `visibility="EXTERNAL"`; `copy_artifact` to repair |
 | Downloaded file has no extension | `file_name` omitted | always pass it, from `fileMetadata` |
-| Your download works, the user's fails | malware-scan gate, not visibility | check `scanStatus` first — see `references/upload-recovery.md` |
 | 404 on an artifact id you cited | id fabricated or from a failed upload | cite only verified ids |
 | Deliverables lost after container restart | outputs kept in `/tmp` | upload as artifacts as soon as produced |
 
 ## References
 
-- `references/upload-recovery.md` — expired URLs, scan-status triage, download failure types, and
-  `copy_artifact`'s async behavior.
+- `references/upload-recovery.md` — expired URLs, download failures, and `copy_artifact`'s async
+  behavior.
 - `references/finding-artifacts.md` — `list_artifacts` filter shapes (the tool description's field
   names differ from the wire model).

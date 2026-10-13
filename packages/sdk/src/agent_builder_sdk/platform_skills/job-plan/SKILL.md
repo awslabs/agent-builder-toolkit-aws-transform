@@ -85,11 +85,8 @@ finish a step  -> create_worklog(plan_step_id=stepId, description="what you foun
 
 - `NOT_STARTED` is the platform's initial value — don't set it. `SUCCEEDED` and `FAILED` are
   terminal: stop writing to that step afterward.
-- Never walk a step backwards. The transition table is only checked when a write hits a
-  concurrency conflict and retries, so an illegal sequence works most of the time and then fails
-  under load — exactly when you least want it.
-- **Never set `STOPPED` yourself.** Use `FAILED` for abandoned work; `STOPPED` has no entry in
-  the transition table and surfaces as a 500 on any retry.
+- Never walk a step backwards.
+- **Never set `STOPPED` yourself.** Use `FAILED` for abandoned work.
 - The worklog is what the user actually reads. Write a full plain-language sentence — it is the
   entire visible payload of the row, and a step with no worklogs shows no progress at all.
 
@@ -111,12 +108,13 @@ the step or job back.
 
 `update_job_status(status=..., status_info=...)`. Drive it `PLANNING` (drafting) → `PLANNED`
 (only after the user approves) → `EXECUTING` (working) → `COMPLETED`, or `FAILED` with
-`status_info`.
+`status_info`. If the runtime already moved the job to `EXECUTING` before your first turn, stay
+there and get the plan approved through a HITL approval task instead of `PLANNED`.
 
 `CREATED`, `STARTING`, and `ASSESSING` describe the job *before* you are running. The platform
 owns them and you never set one: the product reads them as "the agent hasn't started" and takes
 the chat input away from the user. Gather requirements while the status is `PLANNING`.
-`AWAITING_HUMAN_INPUT`, `STOPPING`, `STOPPED`, and `DELETED` are also the platform's.
+`AWAITING_HUMAN_INPUT`, `STOPPING`, and `STOPPED` are also the platform's.
 
 Two ordering rules: never walk the status backwards (revise the plan while staying in
 `EXECUTING`), and make `COMPLETED`/`FAILED` your **last** platform call — once terminal, every

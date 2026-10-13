@@ -5,11 +5,7 @@ The theme: **recover by discovery, never by retrying a create.**
 
 ## A `start_hitl_task` that errored
 
-Retry `start_hitl_task` with the SAME `hitl_task_id`. The status is written only after the
-artifact copy succeeds, and the write requires the task to still be `CREATED`, so a failure
-anywhere in that path leaves the task startable.
-
-Check first with `get_hitl_task`:
+Retry `start_hitl_task` with the SAME `hitl_task_id`, but check first with `get_hitl_task`:
 
 - `CREATED` → start never took effect. Retry start.
 - anything else → start already succeeded. Stop retrying and poll.
@@ -70,9 +66,9 @@ human with no open task, and the job looks stuck to the user.
 
 ## The plan step is not a health signal
 
-Never confirm your task is live by looking at the plan step. The step update on start is
-fail-open: if it fails, the task is still correctly awaiting input while the step looks untouched.
-It is also skipped entirely for `NON_BLOCKING` tasks and when no step id was stored.
+Never confirm your task is live by looking at the plan step. A started task can be correctly
+awaiting input while its step looks untouched — always so for `NON_BLOCKING` tasks and for tasks
+created without a step id.
 
 Confirm liveness from `get_hitl_task` status only. An agent that checks the step instead
 concludes the start failed and recreates a task the user can already see.
