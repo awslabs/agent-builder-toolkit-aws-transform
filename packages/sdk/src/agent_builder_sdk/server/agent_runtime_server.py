@@ -452,8 +452,10 @@ class AgentRuntimeServer(BaseServer):
                 self.message_handler.task_manager = self.task_manager
             logger.info("TaskManager created and injected into handlers")
 
-        # Always create agent (core functionality)
-        self.agent = await self._create_agent(mcp_client, **self._get_agent_params(context))
+        # Always create agent (core functionality). _get_agent_params() is a documented
+        # override point that reads self.context, so restore it first (no await between).
+        self.context = context
+        self.agent = await self._create_agent(mcp_client, **self._get_agent_params())
 
         # Set agent to running
         if agent_status == "INVOKED":
@@ -475,15 +477,14 @@ class AgentRuntimeServer(BaseServer):
         self.agent_ready_event.set()
         logger.info("Agent initialization completed successfully.")
 
-    def _get_agent_params(self, context: Optional[AgentRuntimeContext] = None) -> dict[str, Any]:
+    def _get_agent_params(self) -> dict[str, Any]:
         """Return parameters to be used for agent initialization"""
-        context = context or self.context
-        assert context
+        assert self.context
 
         return {
-            "workspace_id": context.workspace_id,
-            "job_id": context.job_id,
-            "agent_instance_id": context.agent_instance_id,
+            "workspace_id": self.context.workspace_id,
+            "job_id": self.context.job_id,
+            "agent_instance_id": self.context.agent_instance_id,
             "hitl_notifier": self._hitl_notifier,
             "task_manager": self.task_manager,
         }

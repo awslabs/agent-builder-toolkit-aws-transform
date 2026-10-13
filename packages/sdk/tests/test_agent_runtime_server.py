@@ -2321,15 +2321,33 @@ class TestAgentRuntimeServer:
         assert mock_get_status.call_count == 2
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("agent_status", ["INVOKED", "RUNNING"])
     async def test_request_during_status_lookup_does_not_break_initialization(
-        self, agent_runtime_server
+        self, mock_agent, agent_status
     ):
         """A request handled while the status lookup is in flight must not derail init.
 
         ensure_initialized() clears self.context for any request that arrives before
-        initialization finishes; initialize_agent must keep using its own context.
+        initialization finishes; initialize_agent must keep using its own context, and
+        a subclass overriding _get_agent_params() (the documented hook) must still see it.
         """
-        server = agent_runtime_server
+        factory_kwargs = {}
+
+        def factory(mcp_client, storage_dir, **kwargs):
+            factory_kwargs.update(kwargs)
+            return mock_agent
+
+        class CustomServer(AgentRuntimeServer):
+            def _get_agent_params(self):
+                return {**super()._get_agent_params(), "custom_arg": "custom"}
+
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                server = CustomServer(
+                    agent_factory=factory,
+                    binary_location="/tmp/test_binary",
+                    storage_dir="/tmp/test_storage",
+                )
         invoke = {
             "jsonrpc": "2.0",
             "id": "1",
@@ -2351,7 +2369,7 @@ class TestAgentRuntimeServer:
         def slow_get_agent_status(*_args):
             lookup_started.set()
             release_lookup.wait(timeout=5)
-            return "INVOKED"
+            return agent_status
 
         module = "agent_builder_sdk.server.agent_runtime_server"
         with (
@@ -2371,8 +2389,15 @@ class TestAgentRuntimeServer:
             await server.ensure_initialized(handshake)  # clears self.context mid-init
             release_lookup.set()
             await init
+            if server._initialization_task:  # RUNNING finalizes in the background
+                await server._initialization_task
 
         assert server.initialized is True
-        mock_set_running.assert_called_once_with("ws-1", "job-1", "ai-1")
+        assert factory_kwargs["job_id"] == "job-1"
+        assert factory_kwargs["custom_arg"] == "custom"
+        if agent_status == "INVOKED":
+            mock_set_running.assert_called_once_with("ws-1", "job-1", "ai-1")
+        else:
+            mock_set_running.assert_not_called()
         assert server.context is not None and server.context.agent_id == "agent-1"
 
