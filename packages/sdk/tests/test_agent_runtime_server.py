@@ -2388,7 +2388,7 @@ class TestAgentRuntimeServer:
             assert await asyncio.to_thread(lookup_started.wait, 5)
             await server.ensure_initialized(handshake)  # clears self.context mid-init
             release_lookup.set()
-            await init
+            await asyncio.wait_for(init, timeout=5)
             if server._initialization_task:  # RUNNING finalizes in the background
                 await server._initialization_task
 
