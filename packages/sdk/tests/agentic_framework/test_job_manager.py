@@ -83,6 +83,17 @@ class TestJobManager:
             mock_client.get_job.assert_called_once()
             mock_client.update_job_status.assert_not_called()
 
+    def test_update_job_status_proceeds_when_status_check_fails(self, job_manager, mock_client):
+        """A failed terminal-state check must not block the update."""
+        mock_client.get_job.side_effect = Exception("ThrottlingException")
+        mock_client.update_job_status.return_value = {"status": "success"}
+
+        result = job_manager.update_job_status(JobStatus.FAILED)
+
+        assert result == {"status": "success"}
+        mock_client.update_job_status.assert_called_once()
+        assert mock_client.update_job_status.call_args[1]["status"] == "FAILED"
+
     def test_update_job_status_allows_transition_into_terminal(self, job_manager, mock_client):
         """Test transition from a non-terminal state into a terminal state still calls the API."""
         mock_client.get_job.return_value = {"job": {"statusDetails": {"status": "EXECUTING"}}}
