@@ -114,11 +114,13 @@ def _manage_sessions(interpreter: AgentCoreCodeInterpreter) -> Callable:
       session instead of scattering staged files across several.
     - When a session's lifetime runs out, strands keeps using the cached session. A call
       that fails on a session the service reports as ended drops it and runs once more,
-      which starts a new session.
+      which starts a new session. Parallel calls that failed on that same session run
+      once more too, in the replacement the first one started.
 
     Returns the retry wrapper, for actions this module adds.
     """
     lock = threading.RLock()  # re-entrant: strands' _ensure_session calls init_session
+    used = threading.local()  # .info: the session the call running on this thread resolved
     prefix = interpreter.default_session
     ensure_session = interpreter._ensure_session
     init_session = interpreter.init_session
@@ -128,16 +130,15 @@ def _manage_sessions(interpreter: AgentCoreCodeInterpreter) -> Callable:
 
     def locked_ensure_session(name: Optional[str]) -> Any:
         with lock:
-            return ensure_session(scoped(name))
+            target, error = ensure_session(scoped(name))
+            used.info = interpreter._sessions.get(target)
+            return target, error
 
     def locked_init_session(action: Any) -> Any:
         with lock:
             return init_session(action.model_copy(update={"session_name": scoped(action.session_name)}))
 
-    def session_ended(name: str) -> bool:
-        info = interpreter._sessions.get(name)
-        if info is None:  # a concurrent call already dropped it
-            return True
+    def session_ended(info: Any) -> bool:
         try:
             return info.client.get_session().get("status") != "READY"
         except ClientError as e:
@@ -146,14 +147,21 @@ def _manage_sessions(interpreter: AgentCoreCodeInterpreter) -> Callable:
     def retry_on_ended_session(method: Callable) -> Callable:
         @functools.wraps(method)
         def wrapper(action: Any) -> Any:
+            used.info = None
             try:
                 return method(action)
-            except ClientError:
+            # KeyError: strands looks the session up again after resolving it, and a
+            # concurrent call may have dropped it in between.
+            except (ClientError, KeyError):
                 name = scoped(action.session_name) or prefix
                 with lock:
-                    if not session_ended(name):
-                        raise
-                    interpreter._sessions.pop(name, None)
+                    current = interpreter._sessions.get(name)
+                    # If another call already dropped or replaced the session this call
+                    # used, just run again; otherwise only if the service says it ended.
+                    if current is used.info:
+                        if current is None or not session_ended(current):
+                            raise
+                        del interpreter._sessions[name]
                 logger.warning("Sandbox session %s has ended; retrying in a new session", name)
                 return method(action)
 

@@ -8,6 +8,7 @@ import os
 import shutil
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import warnings
@@ -17,6 +18,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from botocore.exceptions import ClientError
 from strands_tools.code_interpreter import AgentCoreCodeInterpreter
+from strands_tools.code_interpreter.models import ListFilesAction
 
 from agent_builder_sdk.experimental.code_interpreter import code_interpreter_tool
 from agent_builder_sdk.experimental.code_interpreter.code_interpreter_tool import (
@@ -122,6 +124,8 @@ class _FakeSandbox:
         self.files = {}  # session id -> paths written to it
         self.ended = set()  # session ids the service has terminated
         self.write_error = None  # when set, writeFiles answers with isError=True
+        self.ended_barrier = None  # see _FakeClient.invoke
+        self.session_started = threading.Event()
         self._ids = itertools.count(1)
 
     def client(self, region=None, session=None):
@@ -139,6 +143,7 @@ class _FakeClient:
         self.identifier = identifier
         self.session_id = f"aws-session-{next(self.sandbox._ids)}"
         self.sandbox.files[self.session_id] = []
+        self.sandbox.session_started.set()
         return self.session_id
 
     def get_session(self, interpreter_id=None, session_id=None):
@@ -147,6 +152,10 @@ class _FakeClient:
 
     def invoke(self, method, params=None):
         if self.session_id in self.sandbox.ended:
+            # With a barrier, parallel calls on the ended session meet here: one fails at
+            # once, the rest only after a replacement session has started.
+            if self.sandbox.ended_barrier and self.sandbox.ended_barrier.wait(timeout=5):
+                self.sandbox.session_started.wait(timeout=5)
             error = {"Error": {"Code": "ResourceNotFoundException", "Message": "session ended"}}
             raise ClientError(error, "InvokeCodeInterpreter")
         if method == "writeFiles" and self.sandbox.write_error:
@@ -239,6 +248,40 @@ class SandboxStagingAndSessionTest(unittest.TestCase):
         self.sandbox.ended.update(self.sandbox.files)
         self.assertEqual(self._list_files(tools)["status"], "success")
         self.assertEqual(len(self.sandbox.files), 3)
+
+    def test_parallel_calls_on_ended_session_all_recover(self):
+        # All four calls fail on the ended session; one starts a replacement, and the
+        # other three, failing after that, must run again in it rather than re-raise.
+        tools = self._tools()
+        self._stage(tools, self._file("a.csv"), "a.csv")
+        self.sandbox.ended.update(self.sandbox.files)
+        self.sandbox.session_started.clear()
+        self.sandbox.ended_barrier = threading.Barrier(4)
+        names = [f"part{i}.csv" for i in range(4)]
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(lambda n: self._stage(tools, self._file(n), n), names))
+        self.assertTrue(all(r.startswith("Staged") for r in results), results)
+        self.assertCountEqual(self.sandbox.files["aws-session-2"], names)
+        self.assertEqual(len(self.sandbox.files), 2)
+
+    def test_call_whose_session_is_dropped_mid_call_runs_again(self):
+        # A concurrent recovery can drop the session between a call resolving it and
+        # reading it back, which surfaces as a KeyError in strands.
+        interpreter = AgentCoreCodeInterpreter(region="us-west-2")
+        retry = code_interpreter_tool._manage_sessions(interpreter)
+        runs = []
+
+        @retry
+        def list_files(action):
+            name, _ = interpreter._ensure_session(action.session_name)
+            if not runs:
+                interpreter._sessions.pop(name)
+            runs.append(name)
+            return interpreter._sessions[name].client.invoke("listFiles", {"path": action.path})
+
+        result = list_files(ListFilesAction(type="listFiles", path="."))
+        self.assertEqual(len(runs), 2)
+        self.assertFalse(result["stream"][0]["result"]["isError"])
 
     def test_error_on_live_session_is_not_retried(self):
         tools = self._tools()
