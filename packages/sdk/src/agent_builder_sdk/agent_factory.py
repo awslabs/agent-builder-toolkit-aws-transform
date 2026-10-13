@@ -367,10 +367,15 @@ def create_default_async_orchestrator_with_subagent(
             you need in-container script execution.
         enable_code_interpreter: Enable the experimental AgentCore Code Interpreter sandbox
             tools (code_interpreter + stage_file_to_sandbox). Off by default. Runs
-            computation in a managed, network-isolated Python sandbox with
-            pyarrow/pandas/numpy preinstalled; data moves in via stage_file_to_sandbox.
-            Requires the bedrock-agentcore dependency.
-            For sandboxed execution, AgentCore Code Interpreter integration is planned.
+            computation in a managed Python sandbox with pyarrow/pandas/numpy
+            preinstalled; data moves in via stage_file_to_sandbox. The default interpreter
+            (aws.codeinterpreter.v1) is network-isolated. Setting ATX_CODE_INTERPRETER_ID
+            selects a custom interpreter instead, which may have internet access (e.g.
+            PUBLIC network mode); the tool then tells the model it can pip install. Each
+            sandbox session ends ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS (default
+            900, max 28800) after it starts, regardless of activity, and takes its files
+            with it; the next call starts a new session. Requires the code-interpreter
+            extra: pip install 'agent-builder-sdk-aws-transform[code-interpreter]'.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
