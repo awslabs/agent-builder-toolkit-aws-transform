@@ -399,6 +399,34 @@ class TestCreateCheckpointRepository:
         # extracted over existing files: nothing lost, no scratch dir left
         assert sorted(os.listdir(tmp_path)) == ["live.txt", "state.json"]
 
+    def test_restore_into_read_only_dir_with_writable_subdirs(
+        self, checkpoint_repository, mock_artifact_store, tmp_path
+    ):
+        """No room to stage in a read-only checkpoint dir: extract in place, restore verified."""
+        mock_artifact_store.list_artifacts.return_value = {"artifacts": [{"artifactId": "cp"}]}
+
+        def mock_download(artifact_id, temp_path):
+            with zipfile.ZipFile(temp_path, "w") as zf:
+                zf.writestr("agent/conv.json", "restored")
+                zf.writestr("queue/requests.json", "[]")
+
+        mock_artifact_store.download_artifact.side_effect = mock_download
+        (tmp_path / "agent").mkdir()
+        (tmp_path / "queue").mkdir()
+        (tmp_path / "agent" / "conv.json").write_text("live")
+        checkpoint_repository.checkpoint_location = str(tmp_path)
+
+        tmp_path.chmod(0o555)
+        try:
+            assert checkpoint_repository.restore_if_available() is True
+        finally:
+            tmp_path.chmod(0o755)
+
+        assert checkpoint_repository.is_restore_verified is True
+        assert (tmp_path / "agent" / "conv.json").read_text() == "restored"
+        assert (tmp_path / "queue" / "requests.json").read_text() == "[]"
+        assert sorted(os.listdir(tmp_path)) == ["agent", "queue"]
+
     def test_extract_zip_failure_mid_backup_keeps_every_live_file(
         self, checkpoint_repository, tmp_path
     ):

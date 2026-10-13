@@ -389,18 +389,21 @@ class CheckpointRepository:
         """Extract ZIP into destination, replacing its contents so it matches the checkpoint.
 
         Existing entries move to a backup and the extracted ones move in. If a move
-        fails, the entries already moved are put back. If entries can't be renamed
-        at all (cross-device, permission, mount point), the ZIP is extracted over the
-        existing files instead, which leaves files absent from the checkpoint in place.
+        fails, the entries already moved are put back. If the destination is read-only
+        or entries can't be renamed at all (cross-device, permission, mount point), the
+        ZIP is extracted over the existing files instead, which leaves files absent from
+        the checkpoint in place.
         """
         destination = Path(destination_path)
         destination.mkdir(parents=True, exist_ok=True)
-        work_dir = Path(tempfile.mkdtemp(dir=destination, prefix=_RESTORE_WORK_PREFIX))
-        staged = work_dir / "staged"
-        backup = work_dir / "backup"
+        work_dir: Optional[Path] = None
         backed_up: list[str] = []
         placed: list[str] = []
         try:
+            # Raises on a read-only destination; its subdirectories may still be writable.
+            work_dir = Path(tempfile.mkdtemp(dir=destination, prefix=_RESTORE_WORK_PREFIX))
+            staged = work_dir / "staged"
+            backup = work_dir / "backup"
             staged.mkdir()
             backup.mkdir()
             with zipfile.ZipFile(zip_file_path, "r") as zip_file:
@@ -414,10 +417,12 @@ class CheckpointRepository:
                 os.replace(entry, destination / entry.name)
                 placed.append(entry.name)
         except Exception as e:
-            if not self._undo_restore_swap(destination, backup, backed_up, placed):
-                logger.error(f"Restore failed and could not put back all files; kept in {backup}")
-                raise
-            shutil.rmtree(work_dir, ignore_errors=True)
+            if work_dir is not None:
+                backup = work_dir / "backup"
+                if not self._undo_restore_swap(destination, backup, backed_up, placed):
+                    logger.error(f"Restore failed and could not put back all files; kept in {backup}")
+                    raise
+                shutil.rmtree(work_dir, ignore_errors=True)
             if not (isinstance(e, OSError) and e.errno in _IN_PLACE_RESTORE_ERRNOS):
                 raise
             logger.warning(f"Cannot swap {destination} ({e}); extracting over existing files")
