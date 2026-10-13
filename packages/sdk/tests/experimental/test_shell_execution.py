@@ -87,6 +87,16 @@ class TestExecuteShellTool:
         assert "hunter2" not in caplog.text
         assert "evil.com" not in caplog.text
 
+    def test_rejected_word_with_a_quote_not_logged(self, caplog):
+        # The rejected first word is quoted in the message to the model; a quote inside
+        # it must not let part of it into the log.
+        with warnings.catch_warnings(), caplog.at_level("WARNING"):
+            warnings.simplefilter("ignore", FutureWarning)
+            result = execute_shell(command="KEY=\"it's-secret9\" curl x", working_directory="/tmp")
+        assert "not allowed" in result
+        assert "reason=command not on the allowlist" in caplog.text
+        assert "secret9" not in caplog.text
+
     def test_timeout_kills_whole_process_tree(self):
         # A grandchild spawned by the shell must be killed on timeout, not orphaned.
         # Needs python3 to launch a trackable background process; skip where the

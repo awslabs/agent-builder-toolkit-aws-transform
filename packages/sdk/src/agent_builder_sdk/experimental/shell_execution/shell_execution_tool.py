@@ -277,7 +277,7 @@ _EXEC_FLAG_PATTERNS = (
 _TAR_COMPRESS_SHORT_FLAG = re.compile(r"-[^-fF]*I")
 
 
-def _validate_command(command: str) -> Tuple[bool, str]:
+def _validate_command(command: str) -> Tuple[bool, str, str]:
     """Validate that every command in the pipeline is on the allowlist.
 
     Splits on unquoted pipes (|) and newlines and checks the first token of
@@ -293,7 +293,8 @@ def _validate_command(command: str) -> Tuple[bool, str]:
     interpreter.
 
     Returns:
-        (is_valid, error_message) — error_message is empty when valid.
+        (is_valid, error_message, reason) — both strings empty when valid. The message,
+        for the model, may quote the command; the reason is a fixed category, safe to log.
     """
     allowed = _ALLOWED_COMMANDS | _PYTHON_COMMANDS if _python_allowed() else _ALLOWED_COMMANDS
 
@@ -312,7 +313,7 @@ def _validate_command(command: str) -> Tuple[bool, str]:
         return False, (
             "Error: Unquoted shell operators (;, newline, &, &&, ||, $(), ``, <(, >() are not "
             "allowed. Use pipes (|) to chain commands."
-        )
+        ), "unquoted shell operator"
 
     stages = _split_on_unquoted_separators(command)
     for stage in stages:
@@ -332,13 +333,13 @@ def _validate_command(command: str) -> Tuple[bool, str]:
             return False, (
                 f"Error: Command '{cmd_name}' is not allowed. "
                 f"Allowed commands: {', '.join(sorted(allowed))}"
-            )
+            ), "command not on the allowlist"
 
         if cmd_name in _COMMAND_WRAPPERS:
             return False, (
                 f"Error: '{cmd_name}' runs another command from its arguments, which would "
                 f"bypass the allowlist. Run the target command directly instead."
-            )
+            ), "command wrapper"
 
         for wrapper, exec_flags in _EXEC_FLAG_PATTERNS:
             if cmd_name == wrapper and any(
@@ -349,7 +350,7 @@ def _validate_command(command: str) -> Tuple[bool, str]:
                 return False, (
                     f"Error: '{cmd_name}' with an exec flag ({', '.join(exec_flags)}) can run an "
                     f"arbitrary command, which would bypass the allowlist."
-                )
+                ), "exec-delegating flag"
 
         if cmd_name == "tar" and any(
             _TAR_COMPRESS_SHORT_FLAG.match(token) for token in tokens[1:] if token.startswith("-")
@@ -357,9 +358,9 @@ def _validate_command(command: str) -> Tuple[bool, str]:
             return False, (
                 "Error: 'tar' with -I (--use-compress-program) can run an arbitrary command, "
                 "which would bypass the allowlist."
-            )
+            ), "exec-delegating flag"
 
-    return True, ""
+    return True, "", ""
 
 
 @tool
@@ -402,14 +403,13 @@ def execute_shell(
     if not command or not command.strip():
         return "Error: Command cannot be empty."
 
-    is_valid, error_msg = _validate_command(command)
+    is_valid, error_msg, reason = _validate_command(command)
     if not is_valid:
-        # Log the length and reason, never the text: the command may embed sensitive
-        # values, even in the rejected word the reason quotes (e.g. `KEY=secret python3 x.py`).
+        # Log the length and fixed reason, never the text or the message: the command may
+        # embed sensitive values, even in the rejected word the message quotes
+        # (e.g. `KEY=secret python3 x.py`).
         logger.warning(
-            "Command rejected by allowlist: command_length=%d, reason=%s",
-            len(command),
-            re.sub(r"'[^']*'", "'<redacted>'", error_msg),
+            "Command rejected by allowlist: command_length=%d, reason=%s", len(command), reason
         )
         return error_msg
 
