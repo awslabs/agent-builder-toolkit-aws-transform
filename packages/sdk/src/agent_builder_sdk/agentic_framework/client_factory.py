@@ -7,6 +7,7 @@ Client factory for ATX Agentic API.
 import functools
 import logging
 import os
+import warnings
 from typing import Optional
 
 import boto3
@@ -37,6 +38,8 @@ def create_agentic_api_client(
     region: Optional[str] = None,
     endpoint_url: Optional[str] = None,
     max_retries: int = 3,
+    timeout: Optional[int] = None,
+    *,
     connect_timeout: int = 5,
     read_timeout: int = 30,
 ) -> BaseClient:
@@ -48,12 +51,22 @@ def create_agentic_api_client(
         region: AWS region (defaults to env var)
         endpoint_url: Direct endpoint URL (overrides stage/region)
         max_retries: Maximum retries for API calls
+        timeout: Deprecated, use connect_timeout and read_timeout. If set, it is
+            used for both and overrides them.
         connect_timeout: TCP connect timeout in seconds (default: 5)
         read_timeout: Read timeout in seconds (default: 30)
 
     Returns:
         Configured boto3 client
     """
+    if timeout is not None:
+        warnings.warn(
+            "timeout is deprecated; use connect_timeout and read_timeout instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        connect_timeout = read_timeout = timeout
+
     # Get values from environment if not provided
     stage = stage or os.environ.get("STAGE")
     endpoint_url = endpoint_url or os.environ.get("QT_AGENTIC_API_ENDPOINT")

@@ -27,6 +27,29 @@ def test_create_agentic_api_client_with_endpoint_url(mock_boto_client):
 
 
 @mock.patch("agent_builder_sdk.agentic_framework.client_factory.boto3.client")
+def test_create_agentic_api_client_timeouts(mock_boto_client):
+    """Timeouts default to 5s connect / 30s read; the deprecated timeout sets both."""
+
+    def timeouts():
+        config = mock_boto_client.call_args[1]["config"]
+        return config.connect_timeout, config.read_timeout
+
+    create_agentic_api_client(endpoint_url="https://e", region="us-west-2")
+    assert timeouts() == (5, 30)
+
+    create_agentic_api_client(endpoint_url="https://e", connect_timeout=2, read_timeout=90)
+    assert timeouts() == (2, 90)
+
+    with pytest.warns(DeprecationWarning, match="timeout is deprecated"):
+        create_agentic_api_client(endpoint_url="https://e", timeout=60)
+    assert timeouts() == (60, 60)
+
+    with pytest.warns(DeprecationWarning):
+        create_agentic_api_client(None, "us-west-2", "https://e", 3, 45)  # positional, as before
+    assert timeouts() == (45, 45)
+
+
+@mock.patch("agent_builder_sdk.agentic_framework.client_factory.boto3.client")
 def test_create_agentic_api_client_with_stage_region(mock_boto_client):
     """Test client creation with stage and region."""
     mock_client = mock.Mock()

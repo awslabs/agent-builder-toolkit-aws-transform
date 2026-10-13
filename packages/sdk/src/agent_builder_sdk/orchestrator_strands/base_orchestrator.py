@@ -95,9 +95,9 @@ class _BaseOrchestrator(StrandsAgent):
                 When None, Strands applies its OWN default client config internally
                 (``read_timeout=120s`` and ``user_agent_extra="strands-agents"``), so passing None
                 is equivalent to not passing it and existing callers are unchanged. When set,
-                Strands merges its ``user_agent_extra`` onto the supplied config, so e.g.
-                ``Config(read_timeout=300)`` raises the read timeout while keeping the
-                ``strands-agents`` user agent.
+                it is merged onto ``Config(read_timeout=120)`` and Strands adds its
+                ``user_agent_extra``, so e.g. ``Config(read_timeout=300)`` raises the read
+                timeout, while a Config that leaves ``read_timeout`` unset keeps 120s.
         """
         # Store configuration
         self.excluded_tool_names = excluded_tool_names
@@ -110,6 +110,11 @@ class _BaseOrchestrator(StrandsAgent):
         self.evaluation_card = evaluation_card
         self.evaluator = EvaluateAgent(self, self.evaluation_card) if self.evaluation_card else None
         self.metrics_config = metrics_config or MetricsConfig(enabled=False)
+
+        # Strands applies its 120s read timeout only when no Config is given; keep it
+        # for a caller Config that leaves read_timeout unset.
+        if boto_client_config is not None:
+            boto_client_config = BotocoreConfig(read_timeout=120).merge(boto_client_config)
 
         # Create Bedrock model only if no model provided
         bedrock_model = (

@@ -315,6 +315,22 @@ def test_initialize_bedrock_model_default_credentials(mock_factory, mock_model):
     assert orchestrator.model == mock_model
 
 
+def test_boto_client_config_keeps_default_read_timeout(patch_create_with_shared_capacity_role):
+    """A caller Config is merged onto read_timeout=120, so options it leaves unset keep it."""
+    from botocore.config import Config as BotocoreConfig
+
+    def forwarded_config():
+        return patch_create_with_shared_capacity_role.call_args.kwargs["boto_client_config"]
+
+    retries_only = BotocoreConfig(retries={"mode": "adaptive"})
+    BaseOrchestrator(system_prompt="p", boto_client_config=retries_only)
+    assert forwarded_config().read_timeout == 120
+    assert forwarded_config().retries == {"mode": "adaptive"}
+
+    BaseOrchestrator(system_prompt="p", boto_client_config=BotocoreConfig(read_timeout=300))
+    assert forwarded_config().read_timeout == 300
+
+
 class TestBaseOrchestratorIntegration:
     """Integration tests for BaseOrchestrator."""
 

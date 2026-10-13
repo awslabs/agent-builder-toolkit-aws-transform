@@ -290,8 +290,8 @@ class TransformEndpointConfig:
 
         GovCloud endpoints live under a separate child zone
         (us-gov.elastic-gumby.ai.aws.dev), not the commercial apex. Building a gov
-        endpoint on the commercial apex yields a hostname with no DNS record in the
-        gov partition, causing SdkClientException "Unable to execute HTTP request".
+        endpoint on the commercial apex yields a hostname that does not resolve
+        (botocore raises EndpointConnectionError).
         """
         if region.lower().startswith("us-gov-"):
             return "us-gov.elastic-gumby.ai.aws.dev"
