@@ -41,7 +41,14 @@ full = [
     "agent-builder-agentic-mcp-aws-transform>=1.0",
     "agent-builder-mcp-aws-transform>=1.0",
 ]
-test = ["pytest", "pytest-asyncio"]
+# Experimental AgentCore code-interpreter tools (enable_code_interpreter). 0.8.0 is
+# the first strands-agents-tools release with binary file staging (FileContent.blob).
+code-interpreter = ["strands-agents-tools[agent-core-code-interpreter]>=0.8.0"]
+test = [
+    "pytest",
+    "pytest-asyncio",
+    "strands-agents-tools[agent-core-code-interpreter]>=0.8.0",
+]
 
 [project.scripts]
 agent-builder-sdk = "agent_builder_sdk.cli:run_main"
