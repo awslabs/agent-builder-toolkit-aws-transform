@@ -1968,6 +1968,31 @@
     "description": "Parameters:\n  queue_service: QueueService (required)\n  notification_handler: Optional[NotificationHandler] (default=None)\n  host: str (default='0.0.0.0')\n  port: int (default=8080)"
   },
   {
+    "name": "HeartbeatService",
+    "kind": "class",
+    "file": "agent_builder_sdk/heartbeat/heartbeat_service.py",
+    "module": "agent_builder_sdk.heartbeat.heartbeat_service",
+    "docstring": "Periodically emits heartbeat (update_agent_instance RUNNING) to the platform.",
+    "signature": "HeartbeatService(context: AgentRuntimeContext, interval_minutes: int = HEARTBEAT_INTERVAL_MINUTES)",
+    "description": "Parameters:\n  context: AgentRuntimeContext (required)\n  interval_minutes: int (default=HEARTBEAT_INTERVAL_MINUTES)\n\nMethods:\n  async start() -> None\n  async stop() -> None"
+  },
+  {
+    "name": "HeartbeatService.start",
+    "kind": "method",
+    "file": "agent_builder_sdk/heartbeat/heartbeat_service.py",
+    "module": "agent_builder_sdk.heartbeat.heartbeat_service",
+    "docstring": "Check monitoring type and start heartbeat loop if HEARTBEAT is configured.\n\nIf the monitoring type can't be looked up yet, the loop starts anyway and\nre-checks it on each tick until it resolves.",
+    "signature": "async start() -> None"
+  },
+  {
+    "name": "HeartbeatService.stop",
+    "kind": "method",
+    "file": "agent_builder_sdk/heartbeat/heartbeat_service.py",
+    "module": "agent_builder_sdk.heartbeat.heartbeat_service",
+    "docstring": "Stop the heartbeat background task.\n\nA beat that has not written yet skips its RUNNING write, and a write already in\nflight is waited for (up to STOP_TIMEOUT_SECONDS), so the heartbeat does not\noverwrite a status the caller sets next (such as STOPPED).",
+    "signature": "async stop() -> None"
+  },
+  {
     "name": "AsyncBaseAgent",
     "kind": "class",
     "file": "agent_builder_sdk/interfaces.py",

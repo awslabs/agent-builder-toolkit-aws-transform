@@ -40,6 +40,7 @@ from agent_builder_sdk.extensions.acknowledgments.acknowledgment_handler import 
     AcknowledgmentHandler,
 )
 from agent_builder_sdk.extensions.base_extension_handler import BaseExtensionHandler
+from agent_builder_sdk.heartbeat import HeartbeatService
 from agent_builder_sdk.interfaces import AnyBaseAgent
 from agent_builder_sdk.mcp_client_factory import MCPClientFactory
 from agent_builder_sdk.message_queue import QueueService
@@ -204,6 +205,7 @@ class AgentRuntimeServer(BaseServer):
 
         # Create notification handler with queue access
         self.notification_handler = NotificationHandler(queue=self.queue)
+        self.heartbeat_service: Optional[HeartbeatService] = None
 
         # Register default processors
         self.notification_handler.register_processor(
@@ -401,6 +403,10 @@ class AgentRuntimeServer(BaseServer):
             )
             job_manager.transition_to_executing_if_assessing()
 
+        # Start heartbeat service (opt-in based on agent's MonitoringType)
+        self.heartbeat_service = HeartbeatService(self.context)
+        await self.heartbeat_service.start()
+
         self.initialized = True
         self.agent_ready_event.set()
         logger.info("Agent initialization completed successfully.")
@@ -504,7 +510,11 @@ class AgentRuntimeServer(BaseServer):
             if self.checkpoint_service:
                 await self.checkpoint_service.shutdown()
 
-            # 5. Stop auth token refresher process
+            # 5. Stop heartbeat service
+            if self.heartbeat_service:
+                await self.heartbeat_service.stop()
+
+            # 6. Stop auth token refresher process
             if self.auth_token_refresher:
                 logger.info("Shutting down the auth_token_refresher")
                 self.auth_token_refresher.shutdown()

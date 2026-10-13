@@ -329,6 +329,23 @@ class TestGetInitialAgentRuntimeContextFromEnv:
             assert context.agent_instance_id == "test-agent-instance-id"
             assert context.initial_auth_token == "test-auth-token"
 
+    def test_get_initial_agent_runtime_context_from_env_agent_id(self):
+        """Test AGENT_ID/AGENT_VERSION populate agent_id/agent_version."""
+        env_vars = {
+            "JOB_ID": "test-job-id",
+            "WORKSPACE_ID": "test-workspace-id",
+            "AGENT_INSTANCE_ID": "test-agent-instance-id",
+            "AUTHORIZATION_TOKEN": "test-auth-token",
+            "AGENT_ID": "test-agent-id",
+            "AGENT_VERSION": "1.0.0",
+        }
+
+        with mock.patch.dict(os.environ, env_vars, clear=True):
+            context = get_initial_agent_runtime_context_from_env()
+
+            assert context.agent_id == "test-agent-id"
+            assert context.agent_version == "1.0.0"
+
     def test_get_initial_agent_runtime_context_from_env_missing_vars(self):
         """Test that missing environment variables raise ValueError."""
         env_vars = {
