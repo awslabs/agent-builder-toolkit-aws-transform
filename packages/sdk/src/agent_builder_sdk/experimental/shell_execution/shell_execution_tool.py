@@ -13,8 +13,9 @@ This tool adds application-level defense-in-depth:
 1. Command allowlist — only known-safe commands are permitted
 2. Sanitized environment — only safe env vars passed to subprocess. No credential
    vars are passed (AWS_PROFILE and the AWS_CONTAINER_CREDENTIALS_* URIs are all
-   dropped), so a subprocess boto3 client has no ambient credential chain and must
-   use connector-vended temporary credentials instead.
+   dropped), and the shared credential/config files and the instance metadata
+   endpoint are switched off, so a subprocess boto3 client has no ambient credential
+   chain and must use connector-vended temporary credentials instead.
 3. Timeout + output limits — prevent runaway commands
 """
 
@@ -49,8 +50,9 @@ _MAX_STDERR_BYTES = 10 * 1024  # 10 KB
 
 # Only these environment variables are passed to subprocesses. No credential vars
 # are included: AWS_PROFILE and the AWS_CONTAINER_CREDENTIALS_* / AWS_WEB_IDENTITY_*
-# vars are all excluded, so a subprocess has no ambient AWS credential chain (a bare
-# boto3 client fails at call time). Scripts needing AWS access use connector-vended
+# vars are all excluded, and _NO_AMBIENT_CREDENTIALS below closes the providers that
+# need no env var, so a subprocess has no ambient AWS credential chain (a bare boto3
+# client fails at call time). Scripts needing AWS access use connector-vended
 # temporary credentials. AWS_REGION is kept so the region resolves for those clients.
 _SAFE_ENV_VARS = frozenset(
     {
@@ -73,6 +75,18 @@ _SAFE_ENV_VARS = frozenset(
         "AWS_DEFAULT_REGION",
     }
 )
+
+# Set in every subprocess env. botocore also finds credentials without any env var:
+# in ~/.aws/credentials and ~/.aws/config under the forwarded HOME, in the legacy
+# ~/.boto and /etc/boto.cfg, and from the instance metadata endpoint (on AgentCore,
+# the MicroVM metadata service hands out the execution role). Point the files at
+# /dev/null and switch the metadata lookup off.
+_NO_AMBIENT_CREDENTIALS = {
+    "AWS_SHARED_CREDENTIALS_FILE": os.devnull,
+    "AWS_CONFIG_FILE": os.devnull,
+    "BOTO_CONFIG": os.devnull,
+    "AWS_EC2_METADATA_DISABLED": "true",
+}
 
 # Commands allowlisted only when ATX_SHELL_ALLOW_PYTHON is not "false".
 _PYTHON_COMMANDS: FrozenSet[str] = frozenset({"python", "python3"})
@@ -161,8 +175,10 @@ def _python_allowed() -> bool:
 
 
 def _sanitized_env() -> dict:
-    """Build a minimal environment dict with only safe variables."""
-    return {k: v for k, v in os.environ.items() if k in _SAFE_ENV_VARS}
+    """Build a minimal environment dict with only safe variables and no credential sources."""
+    env = {k: v for k, v in os.environ.items() if k in _SAFE_ENV_VARS}
+    env.update(_NO_AMBIENT_CREDENTIALS)
+    return env
 
 
 def _truncate(text: str, max_bytes: int) -> str:
@@ -368,8 +384,9 @@ def execute_shell(
     (;, newline, &&, ||, $(), ``, <(, >() is blocked; use pipes (|) instead.
     Operators inside quotes are fine. Output redirection (>, >>) is allowed.
 
-    The subprocess has no AWS credentials: AWS_PROFILE is stripped and no
-    credential env vars are passed, so a bare boto3 client will fail at call
+    The subprocess has no AWS credentials: AWS_PROFILE is stripped, no
+    credential env vars are passed, and the shared credential/config files and
+    instance metadata are switched off, so a bare boto3 client will fail at call
     time even though `import boto3` resolves (PYTHONPATH is kept). Scripts that
     need AWS access must use connector-vended temporary credentials rather than
     ambient ones.
@@ -387,7 +404,13 @@ def execute_shell(
 
     is_valid, error_msg = _validate_command(command)
     if not is_valid:
-        logger.warning("Command rejected by allowlist: %r — %s", command, error_msg)
+        # Log the length and reason, never the text: the command may embed sensitive
+        # values, even in the rejected word the reason quotes (e.g. `KEY=secret python3 x.py`).
+        logger.warning(
+            "Command rejected by allowlist: command_length=%d, reason=%s",
+            len(command),
+            re.sub(r"'[^']*'", "'<redacted>'", error_msg),
+        )
         return error_msg
 
     cwd = working_directory or _DEFAULT_CWD
@@ -423,6 +446,11 @@ def execute_shell(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            # Decode leniently: one non-UTF-8 byte (a binary file, an odd filename)
+            # must not throw away the output and exit code of a command that already
+            # ran, nor mask the timeout message on the post-kill reap.
+            encoding="utf-8",
+            errors="replace",
             env=_sanitized_env(),
             start_new_session=True,
         )

