@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import logging
 import os
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -32,11 +31,6 @@ ENV_KEY_DISABLE_MCP_USAGE_FLAG = "DISABLE_MCP_USAGE"
 
 # Constants for token file format
 ATX_AUTH_TOKEN_KEY = "ATX_AUTHZ_TOKEN"
-
-# A separate refresh process owns the credentials file, so a read can land while the token
-# is absent. Bounded re-read: total added latency on a genuine failure is under a second.
-AUTH_TOKEN_READ_ATTEMPTS = 3
-AUTH_TOKEN_READ_RETRY_SECONDS = 0.2
 
 
 def should_use_prod_bedrock_capacity() -> bool:
@@ -84,20 +78,6 @@ def get_bedrock_shared_capacity_role_arn(region: str) -> Optional[str]:
     return None
 
 
-def _read_auth_token_from_file(auth_token_file_path: str) -> Optional[str]:
-    """Read the token value from the credentials file, or None when the key is absent.
-
-    Matches the key followed by "=" so a longer key sharing the same prefix (for example
-    ATX_AUTHZ_TOKEN_EXPIRY) is not returned as the token.
-    """
-    with open(auth_token_file_path, "r") as file:
-        for line in file:
-            line = line.strip()
-            if line.startswith(f"{ATX_AUTH_TOKEN_KEY}="):
-                return line.split("=", 1)[1]
-    return None
-
-
 def retrieve_auth_token() -> str:
     auth_token_file_path = os.getenv(ENV_KEY_AUTH_TOKEN_FILE)
     if auth_token_file_path is None or not Path(auth_token_file_path).exists():
@@ -105,25 +85,28 @@ def retrieve_auth_token() -> str:
             f"{ENV_KEY_AUTH_TOKEN_FILE} env-var is not set or auth-token file is not found"
         )
 
-    failure = f"{ATX_AUTH_TOKEN_KEY} not found in credentials file {auth_token_file_path}"
-    for attempt in range(1, AUTH_TOKEN_READ_ATTEMPTS + 1):
-        try:
-            auth_token = _read_auth_token_from_file(auth_token_file_path)
-        except IOError as e:
-            auth_token = None
-            failure = f"Failed to read auth token from file {auth_token_file_path}: {e}"
+    # Read auth token from file if env-var is set and file exists. Match the key plus "=" so
+    # a longer key sharing the prefix (e.g. ATX_AUTHZ_TOKEN_EXPIRY) is not read as the token.
+    auth_token = None
+    try:
+        with open(auth_token_file_path, "r") as file:
+            for line in file:
+                line = line.strip()
+                if line.startswith(f"{ATX_AUTH_TOKEN_KEY}="):
+                    auth_token = line.split("=", 1)[1]
+                    break
+    except IOError as e:
+        raise AuthTokenUnavailableError(
+            f"Failed to read auth token from file {auth_token_file_path}: {e}"
+        )
 
-        if auth_token:
-            logger.info(f"Successfully read auth token from file: {auth_token_file_path}")
-            return auth_token
+    if not auth_token:
+        raise AuthTokenUnavailableError(
+            f"{ATX_AUTH_TOKEN_KEY} not found in credentials file {auth_token_file_path}"
+        )
 
-        if attempt < AUTH_TOKEN_READ_ATTEMPTS:
-            logger.warning(
-                f"{failure}; re-reading (attempt {attempt + 1} of {AUTH_TOKEN_READ_ATTEMPTS})"
-            )
-            time.sleep(AUTH_TOKEN_READ_RETRY_SECONDS * attempt)
-
-    raise AuthTokenUnavailableError(failure)
+    logger.info(f"Successfully read auth token from file: {auth_token_file_path}")
+    return auth_token
 
 
 def get_agent_context_from_env() -> AgenticApiRequestContext:

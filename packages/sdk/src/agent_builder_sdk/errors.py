@@ -26,10 +26,9 @@ class InternalBaseAgentError(BaseAgentError):
 class AuthTokenUnavailableError(InternalBaseAgentError, ValueError):
     """The agent auth token could not be read from the credentials file.
 
-    May be transient: the token is written by a separate refresh process, so a read that
-    finds the file unreadable or without the token key can succeed on a later attempt, and
-    retrieve_auth_token re-reads a bounded number of times before raising this. A missing
-    env var or missing file is treated as configuration and is not retried.
+    Raised when AUTH_TOKEN_FILE is unset, the file is missing or unreadable, or it has no
+    ATX_AUTHZ_TOKEN value. The SDK's token refresher replaces the file atomically, so this
+    is not a read racing a write and re-reading right away will not help.
     Also subclasses ValueError, which this used to be raised as, so existing callers that
     catch ValueError keep working.
     """

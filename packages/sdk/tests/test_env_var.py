@@ -8,7 +8,6 @@ import pytest
 
 from agent_builder_sdk.agentic_framework.api_model import AgenticApiRequestContext
 from agent_builder_sdk.env_var import (
-    AUTH_TOKEN_READ_ATTEMPTS,
     get_agent_context_from_env,
     get_agentic_api_request_context_with_current_token,
     get_bedrock_shared_capacity_role_arn,
@@ -247,61 +246,6 @@ class TestRetrieveAuthToken:
         finally:
             os.unlink(temp_file_path)
 
-    def test_retrieve_auth_token_rereads_until_the_token_appears(self):
-        """A read that races the refresh process succeeds on a later attempt."""
-        with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
-            temp_file.write("ATX_AUTHZ_TOKEN=rotated-token")
-            temp_file_path = temp_file.name
-
-        try:
-            with mock.patch.dict(os.environ, {"AUTH_TOKEN_FILE": temp_file_path}, clear=True):
-                with mock.patch(
-                    "agent_builder_sdk.env_var._read_auth_token_from_file",
-                    side_effect=[None, "rotated-token"],
-                ) as mock_read:
-                    with mock.patch("agent_builder_sdk.env_var.time.sleep") as mock_sleep:
-                        assert retrieve_auth_token() == "rotated-token"
-
-            assert mock_read.call_count == 2
-            mock_sleep.assert_called_once()
-        finally:
-            os.unlink(temp_file_path)
-
-    def test_retrieve_auth_token_gives_up_after_a_bounded_number_of_rereads(self):
-        """The re-read is bounded, so a permanently missing token still fails fast."""
-        with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
-            temp_file.write("SOME_OTHER_KEY=some-value")
-            temp_file_path = temp_file.name
-
-        try:
-            with mock.patch.dict(os.environ, {"AUTH_TOKEN_FILE": temp_file_path}, clear=True):
-                with mock.patch(
-                    "agent_builder_sdk.env_var._read_auth_token_from_file", return_value=None
-                ) as mock_read:
-                    with mock.patch("agent_builder_sdk.env_var.time.sleep"):
-                        with pytest.raises(AuthTokenUnavailableError):
-                            retrieve_auth_token()
-
-            assert mock_read.call_count == AUTH_TOKEN_READ_ATTEMPTS
-        finally:
-            os.unlink(temp_file_path)
-
-    def test_retrieve_auth_token_rereads_after_a_transient_io_error(self):
-        """A transient IOError is retried rather than failing the caller outright."""
-        with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
-            temp_file.write("ATX_AUTHZ_TOKEN=recovered-token")
-            temp_file_path = temp_file.name
-
-        try:
-            with mock.patch.dict(os.environ, {"AUTH_TOKEN_FILE": temp_file_path}, clear=True):
-                with mock.patch(
-                    "agent_builder_sdk.env_var._read_auth_token_from_file",
-                    side_effect=[IOError("Resource temporarily unavailable"), "recovered-token"],
-                ):
-                    with mock.patch("agent_builder_sdk.env_var.time.sleep"):
-                        assert retrieve_auth_token() == "recovered-token"
-        finally:
-            os.unlink(temp_file_path)
 
 class TestGetBedrockSharedCapacityRoleArn:
     """Tests for get_bedrock_shared_capacity_role_arn function"""
