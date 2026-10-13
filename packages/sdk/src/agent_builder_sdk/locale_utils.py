@@ -24,7 +24,8 @@ def get_locale_instruction(locale: Optional[str]) -> str:
     """Return a system prompt instruction for the given locale.
 
     Returns empty string for English, None, or unknown locales.
-    Agents must explicitly call this method to opt in to locale-aware responses.
+    Orchestrators created with ``locale=...`` append this instruction automatically; call it
+    directly only when building a system prompt by hand.
     """
     if not locale or not isinstance(locale, str):
         return ""

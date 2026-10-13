@@ -3,6 +3,7 @@
 """Unit tests for locale utilities."""
 
 from agent_builder_sdk.locale_utils import get_locale_instruction
+from agent_builder_sdk.server.server_models import AgentRuntimeContext
 
 
 class TestGetLocaleInstruction:
@@ -26,6 +27,12 @@ class TestGetLocaleInstruction:
 
     def test_french(self):
         assert "French" in get_locale_instruction("fr")
+
+    def test_indonesian(self):
+        assert "Indonesian" in get_locale_instruction("id")
+
+    def test_italian(self):
+        assert "Italian" in get_locale_instruction("it")
 
     def test_portuguese_brazil(self):
         assert "Brazilian Portuguese" in get_locale_instruction("pt-BR")
@@ -62,3 +69,9 @@ class TestGetLocaleInstruction:
         result = get_locale_instruction("ja")
         assert result.startswith("Respond to the user in Japanese")
         assert "follow their lead" in result
+
+
+def test_runtime_context_get_locale_instruction():
+    ids = {"workspace_id": "ws", "job_id": "job", "agent_instance_id": "agent"}
+    assert "Japanese" in AgentRuntimeContext(**ids, locale="ja").get_locale_instruction()
+    assert AgentRuntimeContext(**ids).get_locale_instruction() == ""

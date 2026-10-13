@@ -174,6 +174,8 @@ def create_default_orchestrator(
         model_id: Optional model ID for Bedrock inference
         model: Optional Strands Model instance or model ID string (takes precedence over model_id)
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        locale: Optional user locale (e.g. "ja"); a supported non-English locale appends a
+            respond-in-that-language instruction to the system prompt
 
     Returns:
         Configured BaseOrchestrator instance with memory, hooks, and tools
@@ -224,6 +226,8 @@ def create_default_async_orchestrator(
         model_id: Optional model ID for Bedrock inference
         model: Optional Strands Model instance or model ID string (takes precedence over model_id)
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        locale: Optional user locale (e.g. "ja"); a supported non-English locale appends a
+            respond-in-that-language instruction to the system prompt
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
@@ -277,6 +281,8 @@ def create_default_orchestrator_with_subagent(
         model_id: Optional model ID for Bedrock inference
         model: Optional Strands Model instance or model ID string (takes precedence over model_id)
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        locale: Optional user locale (e.g. "ja"); a supported non-English locale appends a
+            respond-in-that-language instruction to the system prompt
 
     Returns:
         Configured BaseOrchestrator instance with memory, hooks, and tools
@@ -311,10 +317,10 @@ def create_default_async_orchestrator_with_subagent(
     trace_attributes: Optional[dict[str, Any]] = None,
     excluded_mcp_tool_names: Optional[Set[str]] = None,
     metrics_config: Optional[MetricsConfig] = None,
-    locale: Optional[str] = None,
     enable_skills: bool = False,
     skills_dir: Optional[str] = None,
     enable_code_execution: bool = False,
+    locale: Optional[str] = None,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.
 
@@ -346,6 +352,8 @@ def create_default_async_orchestrator_with_subagent(
         enable_code_execution: Enable experimental local Python code execution tool.
             WARNING: Code executes locally without sandboxing. Use with caution.
             For sandboxed execution, AgentCore Code Interpreter integration is planned.
+        locale: Optional user locale (e.g. "ja"); a supported non-English locale appends a
+            respond-in-that-language instruction to the system prompt
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
