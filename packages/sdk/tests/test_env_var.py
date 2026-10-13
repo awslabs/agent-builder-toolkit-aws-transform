@@ -328,6 +328,20 @@ class TestGetInitialAgentRuntimeContextFromEnv:
             assert context.workspace_id == "test-workspace-id"
             assert context.agent_instance_id == "test-agent-instance-id"
             assert context.initial_auth_token == "test-auth-token"
+            assert context.locale is None
+
+    def test_get_initial_agent_runtime_context_from_env_reads_locale(self):
+        """INVOCATION_USER_CURRENT_LOCALE populates context.locale."""
+        env_vars = {
+            "JOB_ID": "test-job-id",
+            "WORKSPACE_ID": "test-workspace-id",
+            "AGENT_INSTANCE_ID": "test-agent-instance-id",
+            "AUTHORIZATION_TOKEN": "test-auth-token",
+            "INVOCATION_USER_CURRENT_LOCALE": "ja",
+        }
+
+        with mock.patch.dict(os.environ, env_vars, clear=True):
+            assert get_initial_agent_runtime_context_from_env().locale == "ja"
 
     def test_get_initial_agent_runtime_context_from_env_missing_vars(self):
         """Test that missing environment variables raise ValueError."""

@@ -4,15 +4,28 @@
 Unit tests for agent factory functions.
 """
 
+import inspect
 import os
 from unittest import mock
 
+import pytest
+
 from agent_builder_sdk.agent_factory import (
+    create_default_async_orchestrator,
+    create_default_async_orchestrator_with_subagent,
     create_default_async_subagent,
     create_default_orchestrator,
     create_default_orchestrator_with_subagent,
     create_default_subagent,
 )
+from agent_builder_sdk.locale_utils import get_locale_instruction
+
+ORCHESTRATOR_FACTORIES = [
+    create_default_orchestrator,
+    create_default_async_orchestrator,
+    create_default_orchestrator_with_subagent,
+    create_default_async_orchestrator_with_subagent,
+]
 
 
 class TestAgentFactory:
@@ -651,3 +664,18 @@ class TestAgentFactory:
         mock_async_subagent.assert_called_once()
         call_kwargs = mock_async_subagent.call_args.kwargs
         assert call_kwargs["region_name"] == "us-west-2"
+
+
+@pytest.mark.parametrize("factory", ORCHESTRATOR_FACTORIES)
+def test_orchestrator_factories_pass_locale_to_the_system_prompt(factory, mock_model, tmp_path):
+    agent = factory(
+        system_prompt="Base prompt", storage_dir=str(tmp_path), model=mock_model, locale="ja"
+    )
+
+    assert agent.system_prompt == "Base prompt\n" + get_locale_instruction("ja")
+
+
+@pytest.mark.parametrize("factory", ORCHESTRATOR_FACTORIES)
+def test_locale_is_the_last_factory_parameter(factory):
+    # New parameters go last so arguments passed positionally keep their meaning.
+    assert list(inspect.signature(factory).parameters)[-1] == "locale"

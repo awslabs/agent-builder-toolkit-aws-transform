@@ -99,6 +99,22 @@ if __name__ == "__main__":
 
 **Custom agent initialization**: Extend `AgentRuntimeServer` and override `_get_agent_params` to pass additional arguments to your factory. See `_get_agent_params` in `agent_runtime_server.py` for the defaults.
 
+### Locale support
+
+`AgentRuntimeServer` and `StatelessAgentRuntimeServer` read the user's locale (for example `ja` or `pt-BR`) from the invoke/restore request, or from the `INVOCATION_USER_CURRENT_LOCALE` environment variable, and pass it to agent factories that take a `locale` argument (or `**kwargs`). Forward it to the orchestrator factory, which appends a "respond in <language>" instruction to the system prompt:
+
+```python
+def agent_factory(mcp_client, storage_dir, locale=None):
+    return create_default_orchestrator(
+        mcp_client=mcp_client,
+        storage_dir=storage_dir,
+        system_prompt="Your custom system prompt here",
+        locale=locale,
+    )
+```
+
+English, unset, and unsupported locales leave the system prompt unchanged, and factories without a `locale` parameter keep working as before. To build a prompt by hand, use `get_locale_instruction(locale)` from `agent_builder_sdk.locale_utils`; supported locales are listed in `LOCALE_TO_LANGUAGE`.
+
 ## Building a subagent
 
 ### 1. Create your subagent class

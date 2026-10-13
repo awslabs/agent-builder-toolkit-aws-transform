@@ -57,6 +57,25 @@ def test_initialization_defaults(orchestrator):
     assert hasattr(orchestrator, "model")
 
 
+def test_initialization_appends_locale_instruction():
+    """A supported locale appends its instruction to the system prompt."""
+    orchestrator = BaseOrchestrator(system_prompt="Test prompt", locale="ja")
+    assert orchestrator.system_prompt.startswith("Test prompt\n")
+    assert "Respond to the user in Japanese" in orchestrator.system_prompt
+
+
+def test_initialization_locale_none_leaves_prompt_unchanged():
+    """No locale leaves the system prompt byte-identical (no behavior change)."""
+    orchestrator = BaseOrchestrator(system_prompt="Test prompt", locale=None)
+    assert orchestrator.system_prompt == "Test prompt"
+
+
+def test_initialization_english_or_unknown_locale_leaves_prompt_unchanged():
+    """English/unknown locales produce no instruction, so the prompt is unchanged."""
+    assert BaseOrchestrator(system_prompt="Test prompt", locale="en").system_prompt == "Test prompt"
+    assert BaseOrchestrator(system_prompt="Test prompt", locale="xx").system_prompt == "Test prompt"
+
+
 def test_initialization_with_custom_parameters(mock_model):
     """Test orchestrator initialization with custom parameters."""
     mock_tools = [Mock(), Mock()]
