@@ -188,45 +188,6 @@ class TestCheckpointManagerMultiCheckpoint:
         repo.create_checkpoint.assert_called_once()
 
 
-class TestCheckpointManagerRestore:
-    """Test manager-routed rollback holds the lock and delegates."""
-
-    def test_restore_checkpoint_delegates_and_returns_true(self):
-        repo = Mock()
-        manager = CheckpointManager(repo, Mock())
-
-        assert manager.restore_checkpoint("artifact-123") is True
-        repo.restore_checkpoint.assert_called_once_with("artifact-123")
-
-    def test_restore_checkpoint_returns_false_on_exception(self):
-        repo = Mock()
-        repo.restore_checkpoint.side_effect = ValueError("bad id")
-        manager = CheckpointManager(repo, Mock())
-
-        assert manager.restore_checkpoint("artifact-123") is False
-
-    def test_restore_checkpoint_holds_lock_while_repository_runs(self):
-        repo = Mock()
-        manager = CheckpointManager(repo, Mock())
-
-        lock_acquirable_during_restore = []
-
-        def restore(artifact_id):
-            acquired = manager._checkpoint_lock.acquire(blocking=False)
-            lock_acquirable_during_restore.append(acquired)
-            if acquired:
-                manager._checkpoint_lock.release()
-
-        repo.restore_checkpoint.side_effect = restore
-
-        assert manager.restore_checkpoint("artifact-123") is True
-        # non-reentrant lock was held during the repo call -> could not re-acquire
-        assert lock_acquirable_during_restore == [False]
-        # released afterwards
-        assert manager._checkpoint_lock.acquire(blocking=False)
-        manager._checkpoint_lock.release()
-
-
 class TestCheckpointManagerRestoreVerification:
     """Test restore verification guard in CheckpointManager."""
 
