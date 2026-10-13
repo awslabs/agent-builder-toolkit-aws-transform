@@ -753,3 +753,39 @@ class TestStatelessAgentRuntimeServer:
                             # Verify set_agent_running was NOT called for RUNNING status
                             mock_set_running.assert_not_called()
                             assert stateless_agent_runtime_server.initialized is True
+
+    @pytest.mark.parametrize(
+        "factory, expected_locale",
+        [
+            (lambda mcp_client, storage_dir, **kwargs: mock.Mock(locale=kwargs["locale"]), "ja"),
+            (lambda mcp_client, storage_dir, locale=None: mock.Mock(locale=locale), "ja"),
+            (lambda mcp_client, storage_dir: mock.Mock(locale=None), None),
+        ],
+        ids=["kwargs", "locale_param", "no_locale_param"],
+    )
+    async def test_agent_factory_receives_locale_when_accepted(
+        self, stateless_agent_runtime_server, factory, expected_locale
+    ):
+        """Only factories that take ``locale`` get it; others are called as before."""
+        from agent_builder_sdk.server.server_models import AgentRuntimeContext
+
+        server = stateless_agent_runtime_server
+        server.agent_factory = factory
+        server.context = AgentRuntimeContext(
+            workspace_id="test-workspace",
+            job_id="test-job",
+            agent_instance_id="test-agent",
+            locale="ja",
+        )
+
+        module = "agent_builder_sdk.server.stateless_agent_runtime_server"
+        with (
+            mock.patch(f"{module}.build_agentic_api_endpoint_from_env"),
+            mock.patch(f"{module}.MCPClientFactory.setup_ab_mcp_client"),
+            mock.patch(f"{module}.get_agentic_api_client"),
+            mock.patch(f"{module}.JobManager"),
+        ):
+            await server._finalize_agent_setup("RUNNING")
+
+        assert server.initialized is True
+        assert server.agent.locale == expected_locale

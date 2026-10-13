@@ -92,9 +92,9 @@ class _BaseOrchestrator(StrandsAgent):
             metrics_config: Optional metrics configuration (default: disabled with standard settings)
             locale: Optional user locale (e.g. "ja", "pt-BR"). When set, a localization
                 instruction is appended to the system prompt so the agent responds in the
-                user's language. Sourced from AgentRuntimeContext.locale, which is populated
-                from the invoke/restore payload (AgentCore) or the
-                INVOCATION_USER_CURRENT_LOCALE environment variable.
+                user's language. The runtime servers read it from the invoke/restore payload
+                (AgentCore) or the INVOCATION_USER_CURRENT_LOCALE environment variable and pass
+                it to agent factories that take a ``locale`` argument; forward it here.
         """
         # Append locale instruction to the system prompt when a locale is present.
         # get_locale_instruction returns "" for English/None/unknown, so non-localized

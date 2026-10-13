@@ -52,7 +52,7 @@ from agent_builder_sdk.notification import (
 )
 from agent_builder_sdk.notification.notification_handler import NotificationHandler
 from agent_builder_sdk.request_handler import QueueRequestHandler
-from agent_builder_sdk.server.base_server import BaseServer
+from agent_builder_sdk.server.base_server import BaseServer, _accepts_locale
 from agent_builder_sdk.server.request_context import RequestContextMiddleware
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 from agent_builder_sdk.task.task_manager import TaskManager
@@ -99,7 +99,8 @@ class AgentRuntimeServer(BaseServer):
         Initialize the Agent Runtime Server.
 
         Args:
-            agent_factory: Factory function for creating custom agents (required)
+            agent_factory: Factory function for creating custom agents (required). A factory that
+                takes a ``locale`` argument (or ``**kwargs``) also receives the user's locale, or None.
             host: Server host address (default: "0.0.0.0")
             port: Server port (default: 8080)
             storage_dir: Base directory for all agent runtime data (default: "/tmp/agent_runtime")
@@ -409,13 +410,16 @@ class AgentRuntimeServer(BaseServer):
         """Return parameters to be used for agent initialization"""
         assert self.context
 
-        return {
+        params: dict[str, Any] = {
             "workspace_id": self.context.workspace_id,
             "job_id": self.context.job_id,
             "agent_instance_id": self.context.agent_instance_id,
             "hitl_notifier": self._hitl_notifier,
             "task_manager": self.task_manager,
         }
+        if _accepts_locale(self.agent_factory):
+            params["locale"] = self.context.locale
+        return params
 
     async def _create_agent(self, mcp_client: MCPClient, **agent_params) -> AnyBaseAgent:
         def accepts_kwargs(func):
@@ -432,8 +436,14 @@ class AgentRuntimeServer(BaseServer):
                 sync_factory = cast(SyncAgentFactory, self.agent_factory)
                 return sync_factory(mcp_client, self.storage_dir, **agent_params)
             else:
+                # Without **kwargs, only a declared ``locale`` parameter is passed.
+                locale_kwarg = (
+                    {"locale": agent_params["locale"]}
+                    if "locale" in agent_params and _accepts_locale(self.agent_factory)
+                    else {}
+                )
                 sync_factory_no_kwargs = cast(SyncAgentFactoryNoKwargs, self.agent_factory)
-                return sync_factory_no_kwargs(mcp_client, self.storage_dir)
+                return sync_factory_no_kwargs(mcp_client, self.storage_dir, **locale_kwarg)
 
     async def handle_mde_notification(self, request: Dict[str, Any]) -> Dict[str, Any]:
         if self.notification_handler is None:

@@ -67,6 +67,43 @@ def async_agent_factory(mock_agent):
     return factory
 
 
+def locale_param_factory(mcp_client, storage_dir, locale=None):
+    return {"locale": locale}
+
+
+def kwargs_factory(mcp_client, storage_dir, **kwargs):
+    return kwargs
+
+
+async def async_kwargs_factory(mcp_client, storage_dir, **kwargs):
+    return kwargs
+
+
+def no_locale_factory(mcp_client, storage_dir):
+    return {}
+
+
+async def async_explicit_params_factory(
+    mcp_client, storage_dir, workspace_id, job_id, agent_instance_id, hitl_notifier, task_manager
+):
+    return {}
+
+
+def server_with_locale(factory, locale):
+    with (
+        mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"),
+        mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"),
+    ):
+        server = AgentRuntimeServer(agent_factory=factory, storage_dir="/tmp/test_storage")
+    server.context = AgentRuntimeContext(
+        workspace_id="test-workspace",
+        job_id="test-job",
+        agent_instance_id="test-agent",
+        locale=locale,
+    )
+    return server
+
+
 @pytest.fixture
 def agent_runtime_server(mock_agent_factory):
     """Create Agent Runtime Server instance for testing."""
@@ -413,6 +450,7 @@ class TestAgentRuntimeServer:
                             "userMetadata": {
                                 "accountId": "XXXXXXXXXXXX",
                                 "invocationUserId": "user-456",
+                                "invocationUserCurrentLocale": "ja",
                             },
                             "authorizationToken": "token-2",
                         },
@@ -422,6 +460,7 @@ class TestAgentRuntimeServer:
                 "expected_agent_id": "agent-123",
                 "expected_agent_version": "1.0",
                 "expected_tenant_account_id": "XXXXXXXXXXXX",
+                "expected_locale": "ja",
             },
             # 3. atx_agent/notify format
             {
@@ -510,6 +549,9 @@ class TestAgentRuntimeServer:
                     )
                 else:
                     assert agent_runtime_server.context.tenant_account_id is None
+
+                # Locale comes only from the invoke/restore userMetadata
+                assert agent_runtime_server.context.locale == test_case.get("expected_locale")
 
                 mock_init.assert_called_once()
 
@@ -2072,3 +2114,97 @@ class TestAgentRuntimeServer:
                         call_args = mock_factory.call_args[0][0]
                         assert call_args["binaryLocation"] == "/tmp/test_binary"
                         assert server.initialized is True
+
+    @pytest.mark.parametrize(
+        "factory", [locale_param_factory, kwargs_factory, async_kwargs_factory]
+    )
+    async def test_agent_factory_receives_locale(self, factory):
+        """Factories that take ``locale`` (by name or via **kwargs) get the context locale."""
+        server = server_with_locale(factory, "ja")
+
+        agent = await server._create_agent(MagicMock(), **server._get_agent_params())
+
+        assert agent["locale"] == "ja"
+
+    @pytest.mark.parametrize("factory", [no_locale_factory, async_explicit_params_factory])
+    async def test_agent_factory_without_locale_is_called_as_before(self, factory):
+        """Factories without a ``locale`` parameter are not passed one (no TypeError)."""
+        server = server_with_locale(factory, "ja")
+
+        agent = await server._create_agent(MagicMock(), **server._get_agent_params())
+
+        assert agent == {}
+
+    async def test_locale_survives_healthcheck_during_background_init(self, mock_agent):
+        """A healthcheck that arrives while setup waits on INVOKING keeps the restore's locale."""
+        received = {}
+
+        def factory(mcp_client, storage_dir, locale=None):
+            received["locale"] = locale
+            return mock_agent
+
+        with (
+            mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"),
+            mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"),
+        ):
+            server = AgentRuntimeServer(
+                agent_factory=factory,
+                mcp_client=MagicMock(),
+                storage_dir="/tmp/test_storage",
+                auto_transition_job_to_executing=False,
+            )
+
+        job_metadata = {"workspaceId": "ws-1", "jobId": "job-1"}
+        restore = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": JsonRpcMethods.RESTORE,
+            "params": {
+                "agentInstanceId": "agent-1",
+                "invocationContext": {
+                    "jobMetadata": job_metadata,
+                    "agentMetadata": {"agentId": "agent-123", "agentVersion": "1.0"},
+                    "userMetadata": {"invocationUserCurrentLocale": "ja"},
+                    "authorizationToken": "token-1",
+                },
+            },
+        }
+        healthcheck = {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": JsonRpcMethods.HEALTHCHECK,
+            "params": {
+                "jobMetadata": job_metadata,
+                "agentInstanceId": "agent-1",
+                "authorizationToken": "token-2",
+            },
+        }
+        release = asyncio.Event()
+
+        async def wait_for_non_invoking(*args):
+            await release.wait()
+            return "INVOKED"
+
+        module = "agent_builder_sdk.server.agent_runtime_server"
+        with (
+            mock.patch(f"{module}.get_agent_status", return_value="INVOKING"),
+            mock.patch(f"{module}.wait_for_agent_non_invoking", new=wait_for_non_invoking),
+            mock.patch(f"{module}.setup_initial_auth_token"),
+            mock.patch(f"{module}.get_auth_token_refresher"),
+            mock.patch(f"{module}.set_agent_running"),
+            mock.patch.object(server.checkpoint_service, "initialize"),
+            mock.patch.object(server.checkpoint_service, "start_background_checkpointing"),
+        ):
+            await server.ensure_initialized(restore)
+            await server.ensure_initialized(healthcheck)  # setup is still waiting
+
+            assert server.initialized is False
+            assert server.context.locale == "ja"
+            assert server.context.agent_id == "agent-123"
+            assert server.context.initial_auth_token == "token-2"
+
+            release.set()
+            await server._initialization_task
+
+        assert server.initialized is True
+        assert received["locale"] == "ja"

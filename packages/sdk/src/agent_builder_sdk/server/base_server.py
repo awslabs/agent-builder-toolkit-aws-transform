@@ -4,11 +4,13 @@
 Abstract base server interface.
 """
 
+import dataclasses
+import inspect
 import logging
 import os
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from fastapi import FastAPI
 from starlette_context import context as request_context
@@ -35,6 +37,19 @@ from agent_builder_sdk.server.server_models import AgentRuntimeContext
 from agent_builder_sdk.task_handler import TaskHandler
 
 logger = logging.getLogger(__name__)
+
+
+def _accepts_locale(factory: Callable[..., Any]) -> bool:
+    """Whether an agent factory takes a ``locale`` keyword argument (by name or via ``**kwargs``).
+
+    The servers pass ``locale`` only to factories that accept it, so factories written
+    without it keep working.
+    """
+    return any(
+        p.kind is p.VAR_KEYWORD
+        or (p.name == "locale" and p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY))
+        for p in inspect.signature(factory).parameters.values()
+    )
 
 
 class BaseServer(ABC):
@@ -80,11 +95,6 @@ class BaseServer(ABC):
         if self.initialized:
             logger.info("Agent already initialized. Skipping initialization.")
             return
-
-        # Clear any inconsistent state from previous failed initialization
-        if self.context and not self.initialized:
-            logger.warning("Clearing inconsistent state from previous failed initialization")
-            self.context = None
 
         # Only AgentCore initialization from request - MDE is already initialized in _startup()
         if request and self.is_jsonrpc_request(request):
@@ -170,8 +180,7 @@ class BaseServer(ABC):
             if locale:
                 logger.info("Locale configured: %s", locale)
 
-            # Set context in class
-            self.context = AgentRuntimeContext(
+            context = AgentRuntimeContext(
                 workspace_id=init_request["workspaceId"],
                 job_id=init_request["jobId"],
                 agent_instance_id=init_request["agentInstanceId"],
@@ -181,6 +190,22 @@ class BaseServer(ABC):
                 initial_auth_token=init_request.get("authorizationToken"),
                 locale=locale,
             )
+            previous = self.context
+            if (
+                previous is not None
+                and method not in [JsonRpcMethods.INVOKE, JsonRpcMethods.RESTORE]
+                and (previous.workspace_id, previous.job_id, previous.agent_instance_id)
+                == (context.workspace_id, context.job_id, context.agent_instance_id)
+            ):
+                # Only invoke/restore carry invocationContext. A later request for the same
+                # agent instance (e.g. a healthcheck while setup is still running) keeps its
+                # agent metadata, tenant and locale, and only refreshes the token.
+                context = dataclasses.replace(
+                    previous, initial_auth_token=context.initial_auth_token
+                )
+
+            # Set context in class
+            self.context = context
 
             # Initialize with token
             await self.initialize_agent(self.context.initial_auth_token)
