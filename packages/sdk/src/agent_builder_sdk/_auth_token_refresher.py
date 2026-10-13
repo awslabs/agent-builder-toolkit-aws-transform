@@ -135,12 +135,12 @@ class AuthTokenRefresher:
         # falling back to SIGKILL — that wait added ~5s to every agent stop.
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
 
-        # Configure logging in the child process so logs are captured by
-        # the container log driver (CloudWatch).
+        # Make sure the child's logs reach the container log driver. A forked child
+        # inherits the parent's logging setup, which basicConfig leaves untouched; it only
+        # adds a stderr handler when the root logger has none.
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            force=True,
         )
 
         logger.info("Starting token refresh process")
