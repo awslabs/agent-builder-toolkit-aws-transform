@@ -16,6 +16,7 @@ from contextlib import AbstractContextManager, ExitStack
 from contextvars import ContextVar
 from typing import Any, Dict, List, Optional, Sequence, Set, Union, cast
 
+from botocore.config import Config as BotocoreConfig
 from strands import Agent as StrandsAgent
 from strands.agent import AgentResult
 from strands.hooks import HookCallback, HookProvider
@@ -70,6 +71,7 @@ class _BaseOrchestrator(StrandsAgent):
         model: Union[Model, str, None] = None,
         evaluation_card: Optional[EvaluationCard] = None,
         metrics_config: Optional[MetricsConfig] = None,
+        boto_client_config: Optional[BotocoreConfig] = None,
         **kwargs,
     ):
         """
@@ -88,6 +90,14 @@ class _BaseOrchestrator(StrandsAgent):
             model_id: Bedrock model identifier (ignored if model is provided)
             model: Optional Strands Model instance or model ID string (takes precedence over model_id)
             metrics_config: Optional metrics configuration (default: disabled with standard settings)
+            boto_client_config: Optional botocore Config for the Bedrock-Runtime client, forwarded
+                to Strands' BedrockModel (ignored if ``model`` is provided). Defaults to None.
+                When None, Strands applies its OWN default client config internally
+                (``read_timeout=120s`` and ``user_agent_extra="strands-agents"``), so passing None
+                is equivalent to not passing it and existing callers are unchanged. When set,
+                it is merged onto ``Config(read_timeout=120)`` and Strands adds its
+                ``user_agent_extra``, so e.g. ``Config(read_timeout=300)`` raises the read
+                timeout, while a Config that leaves ``read_timeout`` unset keeps 120s.
         """
         # Store configuration
         self.excluded_tool_names = excluded_tool_names
@@ -101,6 +111,11 @@ class _BaseOrchestrator(StrandsAgent):
         self.evaluator = EvaluateAgent(self, self.evaluation_card) if self.evaluation_card else None
         self.metrics_config = metrics_config or MetricsConfig(enabled=False)
 
+        # Strands applies its 120s read timeout only when no Config is given; keep it
+        # for a caller Config that leaves read_timeout unset.
+        if boto_client_config is not None:
+            boto_client_config = BotocoreConfig(read_timeout=120).merge(boto_client_config)
+
         # Create Bedrock model only if no model provided
         bedrock_model = (
             None
@@ -110,6 +125,7 @@ class _BaseOrchestrator(StrandsAgent):
                 region_name=region_name,
                 guardrail_id=guardrail_id,
                 guardrail_version=guardrail_version,
+                boto_client_config=boto_client_config,
             )
         )
 

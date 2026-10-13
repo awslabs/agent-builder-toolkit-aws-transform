@@ -651,3 +651,42 @@ class TestAgentFactory:
         mock_async_subagent.assert_called_once()
         call_kwargs = mock_async_subagent.call_args.kwargs
         assert call_kwargs["region_name"] == "us-west-2"
+
+
+class TestBotoClientConfigForwarding:
+    """boto_client_config flows from the factories into the orchestrator constructor."""
+
+    @mock.patch("agent_builder_sdk.agent_factory.BaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.get_prompt_with_name")
+    def test_boto_client_config_forwarded_to_orchestrator(
+        self,
+        mock_get_prompt,
+        mock_memory_hook,
+        mock_conversation_hook,
+        mock_conversation_repo,
+        mock_memory_tool,
+        mock_memory_manager,
+        mock_episodic_memory,
+        mock_file_repo,
+        mock_orchestrator,
+    ):
+        """boto_client_config is forwarded to the orchestrator (default None, opt-in when set)."""
+        from botocore.config import Config as BotocoreConfig
+
+        mock_get_prompt.return_value = "p"
+        mock_orchestrator.return_value = mock.Mock()
+
+        create_default_orchestrator()
+        assert mock_orchestrator.call_args.kwargs["boto_client_config"] is None
+
+        mock_orchestrator.reset_mock()
+        cfg = BotocoreConfig(read_timeout=300)
+        create_default_orchestrator(boto_client_config=cfg)
+        assert mock_orchestrator.call_args.kwargs["boto_client_config"] is cfg
