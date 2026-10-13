@@ -8,11 +8,13 @@ agent execution environments through JSON-RPC endpoints.
 """
 
 import asyncio
+import threading
 from multiprocessing import Event as MPEvent
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec, patch
 
 import pytest
+from botocore.exceptions import ClientError
 from fastapi.testclient import TestClient
 
 from agent_builder_sdk.agent_factory import create_default_orchestrator
@@ -1755,7 +1757,7 @@ class TestAgentRuntimeServer:
                     server.context.job_id,
                     server.context.agent_instance_id,
                 )
-                mock_finalize.assert_called_once_with("INVOKED")
+                mock_finalize.assert_called_once_with("INVOKED", server.context)
 
     @pytest.mark.asyncio
     async def test_wait_for_non_invoking_and_initialize_timeout(self, mock_agent_factory):
@@ -2104,7 +2106,7 @@ class TestAgentRuntimeServer:
                 "INVOKED",
             ],
         ) as mock_get_status:
-            result = await server._get_agent_status_with_retry()
+            result = await server._get_agent_status_with_retry(server.context)
 
             assert result == "INVOKED"
             assert mock_get_status.call_count == 3
@@ -2133,7 +2135,7 @@ class TestAgentRuntimeServer:
             "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
             side_effect=ConnectTimeoutError(endpoint_url="https://test.endpoint"),
         ) as mock_get_status:
-            result = await server._get_agent_status_with_retry()
+            result = await server._get_agent_status_with_retry(server.context)
 
             assert result is None
             assert mock_get_status.call_count == 3
@@ -2169,7 +2171,7 @@ class TestAgentRuntimeServer:
             "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
             side_effect=validation_error,
         ) as mock_get_status:
-            result = await server._get_agent_status_with_retry()
+            result = await server._get_agent_status_with_retry(server.context)
 
             assert result is None
             # Should NOT retry — permanent client error
@@ -2204,7 +2206,7 @@ class TestAgentRuntimeServer:
             "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
             side_effect=access_denied_error,
         ) as mock_get_status:
-            result = await server._get_agent_status_with_retry()
+            result = await server._get_agent_status_with_retry(server.context)
 
             assert result is None
             # Should NOT retry — permanent client error
@@ -2275,9 +2277,102 @@ class TestAgentRuntimeServer:
             "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
             side_effect=rnf_error,
         ) as mock_get_status:
-            result = await server._get_agent_status_with_retry()
+            result = await server._get_agent_status_with_retry(server.context)
 
             assert result is None
             # Should NOT retry — permanent client error
             assert mock_get_status.call_count == 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "error",
+        [
+            ValueError("AUTH_TOKEN_FILE is not set"),
+            ClientError(
+                {"Error": {"Code": "TerminalResourceException", "Message": "Agent stopped"}},
+                "GetAgentInstance",
+            ),
+        ],
+    )
+    async def test_get_agent_status_with_retry_fails_fast_on_permanent_error(
+        self, agent_runtime_server, error
+    ):
+        """Only connection failures, timeouts and throttling are retried."""
+        context = AgentRuntimeContext(workspace_id="ws", job_id="job", agent_instance_id="ai")
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_agent_status", side_effect=error
+        ) as mock_get_status:
+            assert await agent_runtime_server._get_agent_status_with_retry(context) is None
+        assert mock_get_status.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_get_agent_status_with_retry_retries_throttling(self, agent_runtime_server):
+        """ThrottlingException is transient and retried."""
+        throttled = ClientError(
+            {"Error": {"Code": "ThrottlingException", "Message": "Rate exceeded"}},
+            "GetAgentInstance",
+        )
+        context = AgentRuntimeContext(workspace_id="ws", job_id="job", agent_instance_id="ai")
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
+            side_effect=[throttled, "RUNNING"],
+        ) as mock_get_status:
+            assert await agent_runtime_server._get_agent_status_with_retry(context) == "RUNNING"
+        assert mock_get_status.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_request_during_status_lookup_does_not_break_initialization(
+        self, agent_runtime_server
+    ):
+        """A request handled while the status lookup is in flight must not derail init.
+
+        ensure_initialized() clears self.context for any request that arrives before
+        initialization finishes; initialize_agent must keep using its own context.
+        """
+        server = agent_runtime_server
+        invoke = {
+            "jsonrpc": "2.0",
+            "id": "1",
+            "method": JsonRpcMethods.INVOKE,
+            "params": {
+                "agentInstanceId": "ai-1",
+                "invocationContext": {
+                    "jobMetadata": {"workspaceId": "ws-1", "jobId": "job-1"},
+                    "agentMetadata": {"agentId": "agent-1", "agentVersion": "1.0"},
+                    "authorizationToken": "token-1",
+                },
+            },
+        }
+        handshake = {"jsonrpc": "2.0", "id": "2", "method": JsonRpcMethods.HANDSHAKE}
+
+        lookup_started = threading.Event()
+        release_lookup = threading.Event()
+
+        def slow_get_agent_status(*_args):
+            lookup_started.set()
+            release_lookup.wait(timeout=5)
+            return "INVOKED"
+
+        module = "agent_builder_sdk.server.agent_runtime_server"
+        with (
+            patch(f"{module}.get_agent_status", side_effect=slow_get_agent_status),
+            patch(f"{module}.set_agent_running") as mock_set_running,
+            patch(f"{module}.setup_initial_auth_token"),
+            patch(f"{module}.get_auth_token_refresher"),
+            patch(f"{module}.build_agentic_api_endpoint_from_env"),
+            patch(f"{module}.MCPClientFactory.setup_ab_mcp_client"),
+            patch(f"{module}.get_agentic_api_client"),
+            patch(f"{module}.JobManager"),
+            patch.object(server.checkpoint_service, "initialize"),
+            patch.object(server.checkpoint_service, "start_background_checkpointing"),
+        ):
+            init = asyncio.create_task(server.ensure_initialized(invoke))
+            assert await asyncio.to_thread(lookup_started.wait, 5)
+            await server.ensure_initialized(handshake)  # clears self.context mid-init
+            release_lookup.set()
+            await init
+
+        assert server.initialized is True
+        mock_set_running.assert_called_once_with("ws-1", "job-1", "ai-1")
+        assert server.context is not None and server.context.agent_id == "agent-1"
 
