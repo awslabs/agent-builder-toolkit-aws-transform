@@ -146,8 +146,6 @@ def raise_for_s3_error_response(status: int, text: str, is_managed_bucket: bool 
                 "a few minutes before trying again.",
             )
         # These are related to a subscription check / Verify Access To Product (VATP).
-        # https://w.amazon.com/bin/view/AWSAuth/APIAuth/ARC/Features/SubscriptionCheck/
-        # https://t.corp.amazon.com/V2117359621
         elif code == "AllAccessDisabled" or code == "InvalidPayer":
             raise UserBaseAgentError(
                 formatted_error,
