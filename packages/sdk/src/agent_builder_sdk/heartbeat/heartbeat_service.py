@@ -9,6 +9,7 @@ RUNNING, to signal liveness to the platform's health monitoring.
 
 import asyncio
 import logging
+import threading
 from typing import Optional
 
 from agent_builder_sdk.agentic_framework.agent_lifecycle import (
@@ -24,6 +25,8 @@ from agent_builder_sdk.server.server_models import AgentRuntimeContext
 logger = logging.getLogger(__name__)
 
 HEARTBEAT_INTERVAL_MINUTES = 5
+# How long stop() waits for a RUNNING write that is already on the wire.
+STOP_TIMEOUT_SECONDS = 10
 
 
 class HeartbeatService:
@@ -35,6 +38,9 @@ class HeartbeatService:
         self._context = context
         self._interval_seconds = interval_minutes * 60
         self._task: Optional[asyncio.Task] = None
+        # A beat checks _stopped under _write_lock right before its RUNNING write.
+        self._stopped = threading.Event()
+        self._write_lock = threading.Lock()
 
     async def start(self) -> None:
         """Check monitoring type and start heartbeat loop if HEARTBEAT is configured.
@@ -51,7 +57,13 @@ class HeartbeatService:
         logger.info(f"Heartbeat service started (interval: {self._interval_seconds}s)")
 
     async def stop(self) -> None:
-        """Stop the heartbeat background task."""
+        """Stop the heartbeat background task.
+
+        A beat that has not written yet skips its RUNNING write, and a write already in
+        flight is waited for (up to STOP_TIMEOUT_SECONDS), so the heartbeat does not
+        overwrite a status the caller sets next (such as STOPPED).
+        """
+        self._stopped.set()
         if self._task and not self._task.done():
             self._task.cancel()
             try:
@@ -59,7 +71,20 @@ class HeartbeatService:
             except asyncio.CancelledError:
                 # Cancellation is the expected shutdown path for the heartbeat task; nothing to clean up.
                 pass
+            # Cancelling does not stop a beat already running in its worker thread. If it has
+            # not written yet it sees _stopped and skips; wait out a write already on the wire.
+            if not await asyncio.to_thread(self._wait_for_write):
+                logger.warning("Heartbeat write still in flight after stop")
             logger.info("Heartbeat service stopped")
+
+    def _wait_for_write(self) -> bool:
+        # Bounded so a hung call cannot stall shutdown; a write slower than STOP_TIMEOUT_SECONDS
+        # can still land after the caller's next status update. Acquire and release in this
+        # thread, so a cancelled stop() cannot leave the lock held.
+        if not self._write_lock.acquire(timeout=STOP_TIMEOUT_SECONDS):
+            return False
+        self._write_lock.release()
+        return True
 
     def _should_enable(self) -> Optional[bool]:
         """Check if heartbeat monitoring is configured for this agent.
@@ -134,9 +159,13 @@ class HeartbeatService:
             logger.info(f"Agent status is {status}, skipping heartbeat")
             return
 
-        set_agent_running(
-            self._context.workspace_id,
-            self._context.job_id,
-            self._context.agent_instance_id,
-        )
+        with self._write_lock:
+            if self._stopped.is_set():
+                logger.info("Heartbeat service stopped, skipping heartbeat")
+                return
+            set_agent_running(
+                self._context.workspace_id,
+                self._context.job_id,
+                self._context.agent_instance_id,
+            )
         logger.info("Heartbeat sent successfully")

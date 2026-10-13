@@ -1989,7 +1989,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/heartbeat/heartbeat_service.py",
     "module": "agent_builder_sdk.heartbeat.heartbeat_service",
-    "docstring": "Stop the heartbeat background task.",
+    "docstring": "Stop the heartbeat background task.\n\nA beat that has not written yet skips its RUNNING write, and a write already in\nflight is waited for (up to STOP_TIMEOUT_SECONDS), so the heartbeat does not\noverwrite a status the caller sets next (such as STOPPED).",
     "signature": "async stop() -> None"
   },
   {

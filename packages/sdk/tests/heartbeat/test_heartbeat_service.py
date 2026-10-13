@@ -154,6 +154,65 @@ class TestStop:
         service = HeartbeatService(context)
         await service.stop()  # should not raise
 
+    @pytest.mark.asyncio
+    async def test_stop_mid_beat_skips_running_write(self, context):
+        """A beat still reading the status when stop() is called must not write RUNNING."""
+        service = HeartbeatService(context, interval_minutes=0)
+        reading, release, beat_done = threading.Event(), threading.Event(), threading.Event()
+        real_send = service._send_heartbeat
+
+        def slow_status(*_):
+            reading.set()
+            release.wait(5)
+            return "RUNNING"
+
+        def tracked_send():
+            try:
+                real_send()
+            finally:
+                beat_done.set()
+
+        with patch.object(service, "_should_enable", return_value=True), patch.object(
+            service, "_send_heartbeat", side_effect=tracked_send
+        ), patch(
+            "agent_builder_sdk.heartbeat.heartbeat_service.get_agent_status",
+            side_effect=slow_status,
+        ), patch(
+            "agent_builder_sdk.heartbeat.heartbeat_service.set_agent_running"
+        ) as mock_set_running:
+            await service.start()
+            await _wait_until(reading.is_set)
+            await service.stop()
+            release.set()
+            await _wait_until(beat_done.is_set)
+
+        mock_set_running.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_stop_waits_for_running_write_in_flight(self, context):
+        """stop() returns only after a RUNNING write already on the wire has finished."""
+        service = HeartbeatService(context, interval_minutes=0)
+        writing, release = threading.Event(), threading.Event()
+
+        def slow_write(*_):
+            writing.set()
+            release.wait(5)
+
+        with patch.object(service, "_should_enable", return_value=True), patch(
+            "agent_builder_sdk.heartbeat.heartbeat_service.get_agent_status",
+            return_value="RUNNING",
+        ), patch(
+            "agent_builder_sdk.heartbeat.heartbeat_service.set_agent_running",
+            side_effect=slow_write,
+        ):
+            await service.start()
+            await _wait_until(writing.is_set)
+            stopping = asyncio.create_task(service.stop())
+            await asyncio.sleep(0.1)
+            assert not stopping.done()  # still waiting for the write
+            release.set()
+            await asyncio.wait_for(stopping, timeout=5)
+
 
 class TestSendHeartbeat:
     """Test HeartbeatService._send_heartbeat."""
