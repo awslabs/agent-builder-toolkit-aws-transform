@@ -15,6 +15,15 @@ from agent_builder_sdk.custom_types.common_types import A2AMessage
 from agent_builder_sdk.server.stateless_agent_runtime_server import StatelessAgentRuntimeServer
 
 
+@pytest.fixture(autouse=True)
+def mock_heartbeat_service():
+    """Keep server tests off the heartbeat's API calls; HeartbeatService has its own tests."""
+    with mock.patch(
+        "agent_builder_sdk.server.stateless_agent_runtime_server.HeartbeatService", autospec=True
+    ) as heartbeat_cls:
+        yield heartbeat_cls
+
+
 @pytest.fixture
 def mock_subagent():
     """Mock subagent for testing."""
@@ -776,3 +785,28 @@ async def test_lifespan_no_error_without_heartbeat(stateless_agent_runtime_serve
     ):
         async with stateless_agent_runtime_server._lifespan(stateless_agent_runtime_server.app):
             pass  # should not raise
+
+
+@pytest.mark.asyncio
+async def test_finalize_twice_starts_one_heartbeat(
+    stateless_agent_runtime_server, mock_heartbeat_service
+):
+    """Setup can run twice (INVOKING poller + a later request); only one heartbeat loop starts."""
+    from agent_builder_sdk.server.server_models import AgentRuntimeContext
+
+    stateless_agent_runtime_server.context = AgentRuntimeContext(
+        workspace_id="test-workspace", job_id="test-job", agent_instance_id="test-agent"
+    )
+
+    with mock.patch.multiple(
+        "agent_builder_sdk.server.stateless_agent_runtime_server",
+        build_agentic_api_endpoint_from_env=mock.DEFAULT,
+        MCPClientFactory=mock.DEFAULT,
+        get_agentic_api_client=mock.DEFAULT,
+        JobManager=mock.DEFAULT,
+    ):
+        await stateless_agent_runtime_server._finalize_agent_setup("RUNNING")
+        await stateless_agent_runtime_server._finalize_agent_setup("RUNNING")
+
+    mock_heartbeat_service.assert_called_once()
+    mock_heartbeat_service.return_value.start.assert_awaited_once()

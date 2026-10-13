@@ -3,6 +3,8 @@
 """Tests for HeartbeatService."""
 
 import asyncio
+import threading
+import time
 from unittest.mock import Mock, patch
 
 import pytest
@@ -10,6 +12,16 @@ import pytest
 from agent_builder_sdk.custom_types.agent_registry_types import MonitoringType
 from agent_builder_sdk.heartbeat.heartbeat_service import HeartbeatService
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
+
+
+async def _wait_until(predicate, timeout=5.0):
+    """Poll predicate without blocking the event loop (the loop work runs in threads)."""
+
+    async def poll():
+        while not predicate():
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(poll(), timeout)
 
 
 @pytest.fixture
@@ -35,9 +47,35 @@ def context_no_agent_id():
 class TestShouldEnable:
     """Test HeartbeatService._should_enable."""
 
-    def test_returns_false_when_no_agent_id(self, context_no_agent_id):
+    @patch("agent_builder_sdk.heartbeat.heartbeat_service.get_agent_instance_manager_with_context")
+    def test_returns_false_when_agent_id_unknown(self, mock_get_manager, context_no_agent_id):
+        mock_get_manager.return_value.get_status.return_value = {"agentInstanceStatus": "RUNNING"}
         service = HeartbeatService(context_no_agent_id)
         assert service._should_enable() is False
+
+    @patch("agent_builder_sdk.heartbeat.heartbeat_service.get_agentic_api_client")
+    @patch("agent_builder_sdk.heartbeat.heartbeat_service.get_agent_registry")
+    @patch("agent_builder_sdk.heartbeat.heartbeat_service.get_agent_instance_manager_with_context")
+    def test_reads_agent_id_from_instance_when_missing(
+        self, mock_get_manager, mock_get_registry, mock_get_client, context_no_agent_id
+    ):
+        mock_get_manager.return_value.get_status.return_value = {
+            "agentId": "my-agent",
+            "agentVersion": "2.0",
+        }
+        mock_registry = Mock()
+        mock_registry._inject_request_context.side_effect = lambda d: {**d, "requestContext": {}}
+        mock_registry.client.get_agent_version.return_value = {
+            "configuration": {"monitoringType": MonitoringType.HEARTBEAT.value}
+        }
+        mock_get_registry.return_value = mock_registry
+
+        service = HeartbeatService(context_no_agent_id)
+        assert service._should_enable() is True
+        mock_get_manager.return_value.get_status.assert_called_once_with("agent-789")
+        mock_registry.client.get_agent_version.assert_called_once_with(
+            name="my-agent", version="2.0", requestContext={}
+        )
 
     @patch("agent_builder_sdk.heartbeat.heartbeat_service.get_agentic_api_client")
     @patch("agent_builder_sdk.heartbeat.heartbeat_service.get_agent_registry")
@@ -68,11 +106,11 @@ class TestShouldEnable:
 
     @patch("agent_builder_sdk.heartbeat.heartbeat_service.get_agentic_api_client")
     @patch("agent_builder_sdk.heartbeat.heartbeat_service.get_agent_registry")
-    def test_returns_false_on_exception(self, mock_get_registry, mock_get_client, context):
+    def test_returns_none_on_exception(self, mock_get_registry, mock_get_client, context):
         mock_get_registry.side_effect = Exception("connection error")
 
         service = HeartbeatService(context)
-        assert service._should_enable() is False
+        assert service._should_enable() is None
 
 
 class TestStart:
@@ -142,30 +180,81 @@ class TestSendHeartbeat:
         with pytest.raises(Exception, match="API error"):
             service._send_heartbeat()
 
+    @pytest.mark.parametrize("status", ["INVOKING", "INVOKED", "STOPPING", "UNRESPONSIVE"])
+    @patch("agent_builder_sdk.heartbeat.heartbeat_service.set_agent_running")
+    @patch("agent_builder_sdk.heartbeat.heartbeat_service.get_agent_status")
+    def test_skips_when_not_running(self, mock_get_status, mock_set_running, status, context):
+        mock_get_status.return_value = status
+        HeartbeatService(context)._send_heartbeat()
+        mock_set_running.assert_not_called()
+
 
 class TestHeartbeatLoop:
     """Test the background heartbeat loop."""
 
     @pytest.mark.asyncio
-    async def test_loop_calls_send_heartbeat(self, context):
+    async def test_loop_survives_send_failure(self, context):
         service = HeartbeatService(context, interval_minutes=0)  # 0 for fast test
 
         call_count = 0
 
-        def mock_send():
+        def flaky_send():
             nonlocal call_count
             call_count += 1
-            if call_count >= 2:
-                service._task.cancel()
+            if call_count == 1:
+                raise Exception("API error")
 
         with patch.object(service, "_should_enable", return_value=True), patch.object(
-            service, "_send_heartbeat", side_effect=mock_send
+            service, "_send_heartbeat", side_effect=flaky_send
         ):
             await service.start()
-            try:
-                await service._task
-            except asyncio.CancelledError:
-                # The test cancels the loop task itself; cancellation here is the expected exit.
-                pass
+            await _wait_until(lambda: call_count >= 2)
+            await service.stop()
 
-        assert call_count >= 2
+        assert call_count >= 2  # the loop kept beating after the first send raised
+
+    @pytest.mark.asyncio
+    async def test_unknown_type_is_rechecked_until_heartbeat(self, context):
+        service = HeartbeatService(context, interval_minutes=0)
+
+        with patch.object(
+            service, "_should_enable", side_effect=[None, None, True]
+        ) as mock_enable, patch.object(service, "_send_heartbeat") as mock_send:
+            await service.start()
+            await _wait_until(lambda: mock_send.called)
+            await service.stop()
+
+        assert mock_enable.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_loop_exits_when_type_resolves_to_not_heartbeat(self, context):
+        service = HeartbeatService(context, interval_minutes=0)
+
+        with patch.object(service, "_should_enable", side_effect=[None, None, False]), patch.object(
+            service, "_send_heartbeat"
+        ) as mock_send:
+            await service.start()
+            await asyncio.wait_for(service._task, timeout=5)
+
+        mock_send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_slow_send_does_not_block_event_loop(self, context):
+        service = HeartbeatService(context, interval_minutes=0)
+        in_flight = threading.Event()
+
+        def slow_send():
+            in_flight.set()
+            time.sleep(0.5)
+
+        with patch.object(service, "_should_enable", return_value=True), patch.object(
+            service, "_send_heartbeat", side_effect=slow_send
+        ):
+            await service.start()
+            await _wait_until(in_flight.is_set)
+            started = time.monotonic()
+            await asyncio.sleep(0.05)  # a concurrent coroutine must still get scheduled
+            elapsed = time.monotonic() - started
+            await service.stop()
+
+        assert elapsed < 0.3

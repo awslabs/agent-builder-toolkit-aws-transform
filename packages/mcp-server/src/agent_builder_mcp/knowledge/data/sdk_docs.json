@@ -1981,7 +1981,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/heartbeat/heartbeat_service.py",
     "module": "agent_builder_sdk.heartbeat.heartbeat_service",
-    "docstring": "Check monitoring type and start heartbeat loop if HEARTBEAT is configured.",
+    "docstring": "Check monitoring type and start heartbeat loop if HEARTBEAT is configured.\n\nIf the monitoring type can't be looked up yet, the loop starts anyway and\nre-checks it on each tick until it resolves.",
     "signature": "async start() -> None"
   },
   {

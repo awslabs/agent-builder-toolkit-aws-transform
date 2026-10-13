@@ -40,6 +40,15 @@ def context(monkeypatch):
         yield
 
 
+@pytest.fixture(autouse=True)
+def mock_heartbeat_service():
+    """Keep server tests off the heartbeat's API calls; HeartbeatService has its own tests."""
+    with patch(
+        "agent_builder_sdk.server.agent_runtime_server.HeartbeatService", autospec=True
+    ) as heartbeat_cls:
+        yield heartbeat_cls
+
+
 @pytest.fixture
 def mock_agent():
     return create_autospec(BaseAgent, spec_set=True, instance=True)
@@ -1090,6 +1099,16 @@ class TestAgentRuntimeServer:
             await agent_runtime_server._cleanup()
 
             mock_queue_stop.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_cleanup_stops_heartbeat_service(self, agent_runtime_server):
+        """Test _cleanup awaits heartbeat_service.stop()."""
+        agent_runtime_server.heartbeat_service = mock.AsyncMock()
+
+        with mock.patch.object(agent_runtime_server.queue, "stop"):
+            await agent_runtime_server._cleanup()
+
+        agent_runtime_server.heartbeat_service.stop.assert_awaited_once()
 
     def test_setup_routes_creates_endpoints(self, agent_runtime_server):
         """Test that setup_routes creates the expected endpoints."""

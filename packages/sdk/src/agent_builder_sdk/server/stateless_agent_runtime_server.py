@@ -226,9 +226,11 @@ class StatelessAgentRuntimeServer(BaseServer):
                     self.context.workspace_id, self.context.job_id, self.context.agent_instance_id
                 )
 
-            # Start heartbeat service (opt-in based on agent's MonitoringType)
-            self.heartbeat_service = HeartbeatService(self.context)
-            await self.heartbeat_service.start()
+            # Start heartbeat service (opt-in based on agent's MonitoringType).
+            # Setup can run twice here (INVOKING poller + a later request); start one loop only.
+            if self.heartbeat_service is None:
+                self.heartbeat_service = HeartbeatService(self.context)
+                await self.heartbeat_service.start()
             self.initialized = True
             logger.info("Agent initialization completed successfully")
 
