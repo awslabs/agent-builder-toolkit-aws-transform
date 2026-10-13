@@ -49,28 +49,17 @@ def should_use_prod_bedrock_capacity() -> bool:
 
 def get_bedrock_shared_capacity_role_arn(region: str) -> Optional[str]:
     """
-    Get the appropriate BedrockSharedCapacityRole ARN based on region.
+    Get the BedrockSharedCapacityRole ARN from the environment.
 
     Args:
-        region: AWS region name
+        region: AWS region name (used only in the log message)
 
     Returns:
-        Role ARN if available, None otherwise
+        Value of BEDROCK_SHARED_CAPACITY_ROLE_ARN if set, None otherwise
     """
     role_arn = os.getenv("BEDROCK_SHARED_CAPACITY_ROLE_ARN")
     if role_arn:
         logger.info(f"Using BedrockSharedCapacityRole ARN from environment: {role_arn}")
-        return role_arn
-
-    account_mappings = {
-        "us-east-1": "982081074531",  # Prod IAD account
-        "us-west-2": "982081074531",  # Use IAD account for PDX as per CDK logic
-    }
-
-    account_id = account_mappings.get(region)
-    if account_id:
-        role_arn = f"arn:aws:iam::{account_id}:role/BedrockSharedCapacityRole"
-        logger.info(f"Using BedrockSharedCapacityRole ARN for region {region}: {role_arn}")
         return role_arn
 
     logger.warning(f"No BedrockSharedCapacityRole ARN available for region: {region}")

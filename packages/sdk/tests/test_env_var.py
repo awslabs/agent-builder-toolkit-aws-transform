@@ -232,33 +232,11 @@ class TestGetBedrockSharedCapacityRoleArn:
             result = get_bedrock_shared_capacity_role_arn("us-east-1")
             assert result == test_arn
 
-    def test_returns_iad_arn_for_us_east_1(self):
-        """Test that function returns correct ARN for us-east-1 region."""
+    @pytest.mark.parametrize("region", ["us-east-1", "us-west-2", "eu-west-1"])
+    def test_returns_none_when_env_var_unset(self, region):
+        """Test that function returns None in every region when the env var is unset."""
         with mock.patch.dict(os.environ, {}, clear=True):
-            result = get_bedrock_shared_capacity_role_arn("us-east-1")
-            expected = "arn:aws:iam::982081074531:role/BedrockSharedCapacityRole"
-            assert result == expected
-
-    def test_returns_iad_arn_for_us_west_2(self):
-        """Test that function returns IAD account ARN for us-west-2 region."""
-        with mock.patch.dict(os.environ, {}, clear=True):
-            result = get_bedrock_shared_capacity_role_arn("us-west-2")
-            expected = "arn:aws:iam::982081074531:role/BedrockSharedCapacityRole"
-            assert result == expected
-
-    def test_returns_none_for_unsupported_region(self):
-        """Test that function returns None for unsupported regions."""
-        with mock.patch.dict(os.environ, {}, clear=True):
-            result = get_bedrock_shared_capacity_role_arn("eu-west-1")
-            assert result is None
-
-    def test_env_var_takes_precedence_over_region_mapping(self):
-        """Test that environment variable takes precedence over region-based mapping."""
-        custom_arn = "arn:aws:iam::999999999999:role/CustomRole"
-
-        with mock.patch.dict(os.environ, {"BEDROCK_SHARED_CAPACITY_ROLE_ARN": custom_arn}):
-            result = get_bedrock_shared_capacity_role_arn("us-east-1")
-            assert result == custom_arn
+            assert get_bedrock_shared_capacity_role_arn(region) is None
 
 
 class TestShouldUseProdBedrockCapacity:
