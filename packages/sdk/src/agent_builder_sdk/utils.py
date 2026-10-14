@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set
 
 from pydantic import BaseModel
 from strands.agent import AgentResult
+from strands.hooks import BeforeInvocationEvent, HookOrder, HookProvider, HookRegistry
 
 from agent_builder_sdk.custom_types.common_types import (
     A2AError,
@@ -224,12 +225,40 @@ def extract_text_from_strands_agent_response(response: AgentResult) -> str:
     """
     text_blocks = []
     for block in response.message["content"]:
+        if "reasoningContent" in block:
+            continue
         if text := block.get("text", "").strip():
             text_blocks.append(text)
         else:
             logger.warning("Encountered non-text content block in agent result: %s", block)
 
     return "\n".join(text_blocks).strip()
+
+
+class _StripReplayedThinking(HookProvider):
+    """Drop reasoning blocks from the history an invocation starts with.
+
+    Claude 5.5 models bind each thinking block to the system prompt, the tools and every
+    message before it; where that check is enforced, a replayed block whose prefix changed is
+    rejected with HTTP 400. The SDK reorders history (notifications are merged into user
+    conversations) and trims it (sliding window), so earlier turns' thinking can't be replayed
+    safely. Thinking produced during the invocation stays in place for its own tool loop.
+    """
+
+    def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
+        # SDK_LAST: run after hooks that swap in the history, such as ConversationHookProvider.
+        registry.add_callback(BeforeInvocationEvent, self._strip, order=HookOrder.SDK_LAST)
+
+    @staticmethod
+    def _strip(event: BeforeInvocationEvent) -> None:
+        # ponytail: also drops reasoning from append-only histories; keep it per conversation
+        # once the notification merge and the trimming are append-only.
+        messages = event.agent.messages
+        for i, message in enumerate(messages):
+            content = [block for block in message["content"] if "reasoningContent" not in block]
+            # A reasoning-only turn keeps its block: an empty message would break role alternation.
+            if content and len(content) < len(message["content"]):
+                messages[i] = {**message, "content": content}
 
 
 class TransformEndpointConfig:

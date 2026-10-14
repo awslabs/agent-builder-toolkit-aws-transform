@@ -40,7 +40,7 @@ from agent_builder_sdk.orchestrator_strands.evaluation.evaluate_agent_trajectory
     EvaluateAgent,
 )
 from agent_builder_sdk.orchestrator_strands.evaluation.evaluation_card import EvaluationCard
-from agent_builder_sdk.utils import combine_tools
+from agent_builder_sdk.utils import _StripReplayedThinking, combine_tools
 
 logger = logging.getLogger(__name__)
 
@@ -120,6 +120,7 @@ class _BaseOrchestrator(StrandsAgent):
             hooks=cast(List[Any], list(hooks)) if hooks else None,
             **kwargs,
         )
+        self.hooks.add_hook(_StripReplayedThinking())
 
         logger.info(f"Orchestrator initialized: model={model_id}")
 
