@@ -9,10 +9,13 @@ history with its thinking still attached.
 
 import hashlib
 import json
+from types import SimpleNamespace
 from unittest.mock import create_autospec
 
+from strands import tool
 from strands.agent.conversation_manager import SlidingWindowConversationManager
 from strands.models import Model
+from strands.types.exceptions import ContextWindowOverflowException
 
 from agent_builder_sdk.base_subagent.base_subagent import AsyncBaseSubagent
 from agent_builder_sdk.custom_types.orchestrator_agent_types import (
@@ -21,6 +24,7 @@ from agent_builder_sdk.custom_types.orchestrator_agent_types import (
 )
 from agent_builder_sdk.orchestrator_strands.base_orchestrator import AsyncBaseOrchestrator
 from agent_builder_sdk.orchestrator_strands.hooks import ConversationHookProvider
+from agent_builder_sdk.utils import _StripReplayedThinking
 
 
 def _prefix_signature(messages):
@@ -30,12 +34,25 @@ def _prefix_signature(messages):
     return hashlib.sha256(json.dumps(visible, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def _prefix_checking_model(thinking_only_replies=()):
-    """Fake model; prompts in ``thinking_only_replies`` get a content-filtered, thinking-only reply."""
+@tool
+def lookup() -> str:
+    """Return a large result."""
+    return "x" * 5000
+
+
+def _prefix_checking_model(thinking_only_replies=(), tool_calls=0, overflow_on_call=None):
+    """Fake model that checks thinking blocks like Bedrock does.
+
+    Prompts in ``thinking_only_replies`` get a content-filtered, thinking-only reply. The model
+    calls ``lookup`` until the history holds ``tool_calls`` tool results, and its call number
+    ``overflow_on_call`` fails with a context-window overflow.
+    """
     model = create_autospec(Model, spec_set=True, instance=True)
     model.stateful = False  # a mock attribute is truthy, and Strands clears history for stateful models
 
     async def stream(messages, *args, **kwargs):
+        if model.stream.call_count == overflow_on_call:
+            raise ContextWindowOverflowException("Input is too long for requested model")
         for i, message in enumerate(messages):
             assert message["content"], f"messages.{i}: content is empty"
             for block in message["content"]:
@@ -53,6 +70,13 @@ def _prefix_checking_model(thinking_only_replies=()):
         yield {"contentBlockStop": {}}
         if messages[-1]["content"][-1].get("text") in thinking_only_replies:
             yield {"messageStop": {"stopReason": "content_filtered"}}
+            return
+        if sum("toolResult" in block for m in messages for block in m["content"]) < tool_calls:
+            tool_use = {"toolUseId": f"t{model.stream.call_count}", "name": "lookup"}
+            yield {"contentBlockStart": {"start": {"toolUse": tool_use}}}
+            yield {"contentBlockDelta": {"delta": {"toolUse": {"input": "{}"}}}}
+            yield {"contentBlockStop": {}}
+            yield {"messageStop": {"stopReason": "tool_use"}}
             return
         yield {"contentBlockStart": {"start": {}}}
         yield {"contentBlockDelta": {"delta": {"text": "ok"}}}
@@ -101,3 +125,36 @@ async def test_subagent_replays_no_stale_thinking_after_trim():
         await subagent.process_message_async(text)
 
     assert subagent.model.stream.call_count == 3
+
+
+async def test_subagent_survives_context_overflow_inside_a_tool_loop():
+    subagent = AsyncBaseSubagent("", custom_tools=[lookup])
+    subagent.callback_handler = lambda *args, **kwargs: None
+    # Two tool calls, then the third model call overflows; Strands truncates a tool result and retries.
+    subagent.model = _prefix_checking_model(tool_calls=2, overflow_on_call=3)
+
+    await subagent.process_message_async("go")
+
+    assert subagent.model.stream.call_count == 4
+
+
+def test_strip_rewrites_only_messages_with_thinking_in_place():
+    thinking = {"reasoningContent": {"reasoningText": {"text": "", "signature": "sig"}}}
+    user = {"role": "user", "content": [{"text": "u1"}]}
+    messages = [
+        user,
+        {"role": "assistant", "content": [thinking]},
+        {"role": "user", "content": [{"text": "u2"}]},
+        {"role": "assistant", "content": [thinking, {"text": "a2"}]},
+    ]
+    agent = SimpleNamespace(messages=messages)
+
+    _StripReplayedThinking._strip(SimpleNamespace(agent=agent))
+
+    assert agent.messages is messages and messages[0] is user
+    assert [m["content"] for m in messages] == [
+        [{"text": "u1"}],
+        [{"text": "[blank text]"}],
+        [{"text": "u2"}],
+        [{"text": "a2"}],
+    ]
