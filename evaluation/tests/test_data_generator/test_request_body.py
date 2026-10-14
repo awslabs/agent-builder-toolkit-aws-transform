@@ -42,6 +42,21 @@ def test_cli_fails_when_no_tests_are_generated(tmp_path, monkeypatch):
     assert exit_info.value.code == 1
 
 
+def test_cli_analyze_only_fails_when_analysis_fails(tmp_path, monkeypatch):
+    (tmp_path / "README.md").write_text("An agent that books meetings.")
+    argv = ["cli", "--source-context", str(tmp_path), "--output", str(tmp_path / "out"), "--analyze-only"]
+    monkeypatch.setattr(sys, "argv", argv)
+    failed = {
+        "domain_understanding": {"error": "The provided model identifier is invalid."},
+        "complexity_distribution": {"distribution": {}},
+    }
+    with patch.object(cli, "IntelligentTestGenerator"), patch.object(cli, "DomainAnalyzer") as analyzer:
+        analyzer.return_value.analyze_test_samples.return_value = failed
+        with pytest.raises(SystemExit) as exit_info:
+            cli.main()
+    assert exit_info.value.code == 1
+
+
 @pytest.mark.parametrize("cls", [IntelligentTestGenerator, DomainAnalyzer])
 def test_response_text_skips_leading_thinking_block(cls):
     with patch("boto3.client"):

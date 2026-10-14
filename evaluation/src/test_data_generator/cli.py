@@ -239,6 +239,10 @@ Examples:
 
             analysis_file = output_path / "domain_analysis.json"
             analyzer.save_analysis(analysis, str(analysis_file))
+            # The analyzer logs and swallows Bedrock and parse errors into these keys.
+            if {"error", "raw_response"} & analysis["domain_understanding"].keys():
+                logger.error(f"FAIL: Domain analysis failed; see the errors above and {analysis_file}")
+                sys.exit(1)
 
             logger.info(f"\n{'=' * 80}")
             logger.info("ANALYSIS COMPLETE")
