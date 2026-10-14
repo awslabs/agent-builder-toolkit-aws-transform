@@ -560,7 +560,12 @@ Be thorough and specific. This analysis will guide automated test generation."""
         )
 
         response_body = json.loads(response['body'].read())
-        return response_body['content'][0]['text']
+        # Models with adaptive thinking can lead with a thinking block; keep only text.
+        return "".join(
+            block.get("text", "")
+            for block in response_body["content"]
+            if block.get("type", "text") == "text"
+        )
 
     def _parse_analysis_response(self, response: str) -> Dict[str, Any]:
         """Parse LLM analysis response."""

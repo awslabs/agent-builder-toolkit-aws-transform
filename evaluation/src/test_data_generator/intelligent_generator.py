@@ -440,7 +440,12 @@ Generate exactly {count} complete test cases now:"""
         )
 
         response_body = json.loads(response['body'].read())
-        return response_body['content'][0]['text']
+        # Models with adaptive thinking can lead with a thinking block; keep only text.
+        return "".join(
+            block.get("text", "")
+            for block in response_body["content"]
+            if block.get("type", "text") == "text"
+        )
 
     def _parse_generation_response(self, response: str) -> List[Dict[str, Any]]:
         """Parse LLM generation response."""
