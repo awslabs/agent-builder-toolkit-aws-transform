@@ -22,13 +22,12 @@ def _sent_body(obj, content=({"type": "text", "text": "ok"},)):
     return json.loads(obj.bedrock.invoke_model.call_args.kwargs["body"])
 
 
-@pytest.mark.parametrize("temperature", [None, 0.5])
-def test_generator_sends_temperature_only_when_set(temperature):
+@pytest.mark.parametrize("kwargs", [{}, {"temperature": None}, {"temperature": 0.5}])
+def test_generator_sends_temperature_only_when_set(kwargs):
     with patch("boto3.client"):
-        generator = IntelligentTestGenerator(
-            region_name="us-west-2", model_id=MODEL_ID, temperature=temperature
-        )
+        generator = IntelligentTestGenerator(region_name="us-west-2", model_id=MODEL_ID, **kwargs)
     body = _sent_body(generator)
+    temperature = kwargs.get("temperature")
     assert ("temperature" in body) == (temperature is not None)
     assert body.get("temperature") == temperature
 

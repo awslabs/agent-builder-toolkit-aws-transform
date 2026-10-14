@@ -536,12 +536,12 @@ Be thorough and specific. This analysis will guide automated test generation."""
 
         return prompt
 
-    def _call_bedrock(self, prompt: str, max_tokens: int = 8000) -> str:
+    def _call_bedrock(self, prompt: str, max_tokens: int = 16000) -> str:
         """Call Bedrock API.
 
         Args:
             prompt: The prompt to send
-            max_tokens: Maximum tokens for response (default: 8000)
+            max_tokens: Maximum tokens for response, thinking included (default: 16000)
 
         Returns:
             Response text from the model
@@ -560,6 +560,8 @@ Be thorough and specific. This analysis will guide automated test generation."""
         )
 
         response_body = json.loads(response['body'].read())
+        if response_body.get("stop_reason") in ("max_tokens", "refusal"):
+            logger.warning(f"Bedrock response stopped early ({response_body['stop_reason']}); output may be incomplete")
         # Models with adaptive thinking can lead with a thinking block; keep only text.
         return "".join(
             block.get("text", "")

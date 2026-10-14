@@ -440,6 +440,8 @@ Generate exactly {count} complete test cases now:"""
         )
 
         response_body = json.loads(response['body'].read())
+        if response_body.get("stop_reason") in ("max_tokens", "refusal"):
+            logger.warning(f"Bedrock response stopped early ({response_body['stop_reason']}); output may be incomplete")
         # Models with adaptive thinking can lead with a thinking block; keep only text.
         return "".join(
             block.get("text", "")
