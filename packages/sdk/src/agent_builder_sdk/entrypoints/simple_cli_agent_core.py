@@ -107,7 +107,7 @@ def main():
             # Pass in your system prompt here
             system_prompt=get_prompt_with_name("test_orchestrator_prompt"),
             custom_tools=[research_topic],
-            model_id="us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+            model_id="us.anthropic.claude-sonnet-5-5",
             trace_attributes=trace_attributes,  # Enable tracing,
             with_base_guardrails=args.base_guardrail,
             metrics_config=metric_config,

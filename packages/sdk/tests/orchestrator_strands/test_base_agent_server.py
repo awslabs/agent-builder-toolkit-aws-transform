@@ -84,7 +84,7 @@ class TestBaseAgentServer:
         assert server.system_prompt == "Test prompt"
         assert server.custom_tools == []
         assert server.custom_mcp_clients == []
-        assert server.model_id == "anthropic.claude-sonnet-4-5-20250929-v1:0"
+        assert server.model_id == "anthropic.claude-sonnet-5-5"
         mock_validate.assert_called_once()
         mock_refresher.assert_called_once()
         mock_tracing.assert_called_once_with("local")

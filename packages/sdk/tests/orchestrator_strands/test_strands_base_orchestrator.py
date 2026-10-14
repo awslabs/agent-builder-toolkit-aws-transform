@@ -51,7 +51,7 @@ def async_orchestrator():
 def test_initialization_defaults(orchestrator):
     """Test orchestrator initialization with default parameters."""
     assert orchestrator.system_prompt == "Test prompt"
-    assert orchestrator.model_id == "anthropic.claude-sonnet-4-5-20250929-v1:0"
+    assert orchestrator.model_id == "anthropic.claude-sonnet-5-5"
     assert orchestrator.region_name == "us-east-1"
     assert orchestrator.custom_tools == []
     assert hasattr(orchestrator, "model")
@@ -305,7 +305,7 @@ def test_initialize_bedrock_model_default_credentials(mock_factory, mock_model):
 
     # Verify factory was called with default parameters
     mock_factory.assert_called_once_with(
-        model_id="anthropic.claude-sonnet-4-5-20250929-v1:0",
+        model_id="anthropic.claude-sonnet-5-5",
         region_name="us-east-1",
         guardrail_id=None,
         guardrail_version=None,

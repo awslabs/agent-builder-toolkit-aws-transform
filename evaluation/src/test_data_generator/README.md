@@ -94,8 +94,7 @@ Optional:
   --complexity LEVEL       Generate specific complexity: simple, medium, or complex
   --diversity FACTOR       Diversity 0-1: 0=similar, 1=very diverse (default: 0.8)
   --region REGION          AWS region (default: us-west-2)
-  --model-id MODEL         Bedrock model ID (default: claude-opus-4-5)
-  --temperature TEMP       Generation temperature 0-1 (default: 0.8)
+  --model-id MODEL         Bedrock model ID (default: us.anthropic.claude-opus-5-5)
   --analyze-only           Only analyze domain, don't generate
   --no-deduplicate         Disable test name deduplication
   --no-ensure-complex      Disable ensuring 20% complex tests
@@ -171,8 +170,7 @@ source_context = loader.load('/path/to/your/source/')
 
 generator = IntelligentTestGenerator(
     region_name='us-west-2',
-    model_id='us.anthropic.claude-opus-4-5-20251101-v1:0',
-    temperature=0.8
+    model_id='us.anthropic.claude-opus-5-5'
 )
 
 # Generate from source context only
