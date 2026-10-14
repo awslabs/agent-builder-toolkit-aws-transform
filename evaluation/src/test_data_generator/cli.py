@@ -148,13 +148,6 @@ Examples:
     )
 
     parser.add_argument(
-        '--temperature',
-        type=float,
-        default=None,
-        help='Sampling temperature (0-1, default: unset; Claude Opus 4.7 and later reject it)'
-    )
-
-    parser.add_argument(
         '--analyze-only',
         action='store_true',
         help='Only analyze domain, do not generate tests'
@@ -231,8 +224,7 @@ Examples:
         # Initialize generator
         generator = IntelligentTestGenerator(
             region_name=args.region,
-            model_id=args.model_id,
-            temperature=args.temperature
+            model_id=args.model_id
         )
 
         if args.analyze_only:
@@ -277,6 +269,11 @@ Examples:
                 deduplicate=not args.no_deduplicate,
                 ensure_complex_tests=not args.no_ensure_complex
             )
+
+            if not generated_tests:
+                # Bedrock errors are logged per batch and swallowed; don't report them as success.
+                logger.error("FAIL: No test cases were generated; see the errors above")
+                sys.exit(1)
 
             logger.info(f"\n{'=' * 80}")
             logger.info("GENERATION COMPLETE")

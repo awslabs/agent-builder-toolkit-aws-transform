@@ -4,9 +4,11 @@
 
 import io
 import json
+import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+from test_data_generator import cli
 from test_data_generator.domain_analyzer import DomainAnalyzer
 from test_data_generator.intelligent_generator import IntelligentTestGenerator
 
@@ -22,21 +24,22 @@ def _sent_body(obj, content=({"type": "text", "text": "ok"},)):
     return json.loads(obj.bedrock.invoke_model.call_args.kwargs["body"])
 
 
-@pytest.mark.parametrize("kwargs", [{}, {"temperature": None}, {"temperature": 0.5}])
-def test_generator_sends_temperature_only_when_set(kwargs):
+@pytest.mark.parametrize("cls", [IntelligentTestGenerator, DomainAnalyzer])
+def test_sends_no_sampling_parameters(cls):
     with patch("boto3.client"):
-        generator = IntelligentTestGenerator(region_name="us-west-2", model_id=MODEL_ID, **kwargs)
-    body = _sent_body(generator)
-    temperature = kwargs.get("temperature")
-    assert ("temperature" in body) == (temperature is not None)
-    assert body.get("temperature") == temperature
+        obj = cls(region_name="us-west-2", model_id=MODEL_ID)
+    assert not {"temperature", "top_p", "top_k"} & _sent_body(obj).keys()
 
 
-def test_domain_analyzer_sends_no_sampling_parameters():
-    with patch("boto3.client"):
-        analyzer = DomainAnalyzer(region_name="us-west-2", model_id=MODEL_ID)
-    body = _sent_body(analyzer)
-    assert not {"temperature", "top_p", "top_k"} & body.keys()
+def test_cli_fails_when_no_tests_are_generated(tmp_path, monkeypatch):
+    (tmp_path / "README.md").write_text("An agent that books meetings.")
+    argv = ["cli", "--source-context", str(tmp_path), "--output", str(tmp_path / "out")]
+    monkeypatch.setattr(sys, "argv", argv)
+    with patch.object(cli, "IntelligentTestGenerator") as generator:
+        generator.return_value.generate_test_cases.return_value = []
+        with pytest.raises(SystemExit) as exit_info:
+            cli.main()
+    assert exit_info.value.code == 1
 
 
 @pytest.mark.parametrize("cls", [IntelligentTestGenerator, DomainAnalyzer])

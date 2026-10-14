@@ -95,7 +95,6 @@ Optional:
   --diversity FACTOR       Diversity 0-1: 0=similar, 1=very diverse (default: 0.8)
   --region REGION          AWS region (default: us-west-2)
   --model-id MODEL         Bedrock model ID (default: us.anthropic.claude-opus-5-5)
-  --temperature TEMP       Sampling temperature 0-1 (default: unset; Claude Opus 4.7+ rejects it)
   --analyze-only           Only analyze domain, don't generate
   --no-deduplicate         Disable test name deduplication
   --no-ensure-complex      Disable ensuring 20% complex tests
