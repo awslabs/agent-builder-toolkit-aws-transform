@@ -143,15 +143,15 @@ Examples:
 
     parser.add_argument(
         '--model-id',
-        default='us.anthropic.claude-opus-4-5-20251101-v1:0',
-        help='Bedrock model ID (default: Claude Opus 4.5)'
+        default='us.anthropic.claude-opus-5-5',
+        help='Bedrock model ID (default: Claude Opus 5.5)'
     )
 
     parser.add_argument(
         '--temperature',
         type=float,
-        default=0.8,
-        help='Generation temperature (0-1, default: 0.8)'
+        default=None,
+        help='Sampling temperature (0-1, default: unset; Claude Opus 4.7 and later reject it)'
     )
 
     parser.add_argument(

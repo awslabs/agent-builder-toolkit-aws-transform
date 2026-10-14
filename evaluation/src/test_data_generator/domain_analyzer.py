@@ -552,7 +552,6 @@ Be thorough and specific. This analysis will guide automated test generation."""
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.3  # Lower for analysis consistency
         })
 
         response = self.bedrock.invoke_model(

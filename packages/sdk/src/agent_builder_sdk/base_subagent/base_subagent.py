@@ -41,7 +41,7 @@ class _BaseSubagent(StrandsAgent):
         excluded_tool_names: Optional[Set[str]] = None,
         excluded_mcp_tool_names: Optional[Set[str]] = None,
         region_name: str = "us-east-1",
-        model_id: str = "anthropic.claude-sonnet-4-5-20250929-v1:0",
+        model_id: str = "anthropic.claude-sonnet-5-5",
         model: Union[Model, str, None] = None,
         metrics_config: Optional[MetricsConfig] = None,
         **kwargs,
@@ -175,7 +175,7 @@ class BaseSubagent(_BaseSubagent, BaseAgent[Union[str, ProcessMessageRequest], A
 
             agent = BaseSubagent(
                 system_prompt="You are a helpful assistant.",
-                model_id="anthropic.claude-sonnet-4-5-20250929-v1:0"
+                model_id="anthropic.claude-sonnet-5-5"
             )
             result = agent.process_message("Hello, how can you help me?")
             print(result.message)

@@ -66,7 +66,7 @@ class _BaseOrchestrator(StrandsAgent):
         excluded_tool_names: Optional[Set[str]] = None,
         excluded_mcp_tool_names: Optional[Set[str]] = None,
         region_name: str = "us-east-1",
-        model_id: str = "anthropic.claude-sonnet-4-5-20250929-v1:0",
+        model_id: str = "anthropic.claude-sonnet-5-5",
         model: Union[Model, str, None] = None,
         evaluation_card: Optional[EvaluationCard] = None,
         metrics_config: Optional[MetricsConfig] = None,
@@ -281,7 +281,7 @@ class BaseOrchestrator(_BaseOrchestrator, BaseAgent[ProcessMessageRequest, Agent
 
             orchestrator = BaseOrchestrator(
                 system_prompt="You are an orchestrator managing multiple agents.",
-                model_id="anthropic.claude-sonnet-4-5-20250929-v1:0"
+                model_id="anthropic.claude-sonnet-5-5"
             )
 
             request = ProcessMessageRequest(

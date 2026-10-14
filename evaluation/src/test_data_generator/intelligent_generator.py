@@ -21,14 +21,15 @@ class IntelligentTestGenerator:
         self,
         region_name: str,
         model_id: str,
-        temperature: float = 0.8
+        temperature: Optional[float] = None
     ):
         """Initialize intelligent test generator.
 
         Args:
             region_name: AWS region for Bedrock
             model_id: Model ID for generation
-            temperature: Temperature for creative generation (0-1)
+            temperature: Sampling temperature (0-1). Leave unset for Claude Opus 4.7
+                and later, which reject sampling parameters.
         """
         self.region_name = region_name
         self.model_id = model_id
@@ -422,14 +423,16 @@ Generate exactly {count} complete test cases now:"""
 
     def _call_bedrock(self, prompt: str) -> str:
         """Call Bedrock API."""
-        body = json.dumps({
+        request = {
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": 16000,  # Large for multiple test cases
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "temperature": self.temperature
-        })
+        }
+        if self.temperature is not None:
+            request["temperature"] = self.temperature
+        body = json.dumps(request)
 
         response = self.bedrock.invoke_model(
             modelId=self.model_id,
