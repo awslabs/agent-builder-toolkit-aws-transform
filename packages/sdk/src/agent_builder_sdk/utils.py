@@ -253,12 +253,14 @@ class _StripReplayedThinking(HookProvider):
     def _strip(event: BeforeInvocationEvent) -> None:
         # ponytail: also drops reasoning from append-only histories; keep it per conversation
         # once the notification merge and the trimming are append-only.
-        messages = event.agent.messages
-        for i, message in enumerate(messages):
+        stripped = []
+        for message in event.agent.messages:
             content = [block for block in message["content"] if "reasoningContent" not in block]
-            # A reasoning-only turn keeps its block: an empty message would break role alternation.
-            if content and len(content) < len(message["content"]):
-                messages[i] = {**message, "content": content}
+            # Drop turns with nothing left, such as a content-filtered reply that is only
+            # thinking: Bedrock rejects empty messages but accepts consecutive user messages.
+            if content:
+                stripped.append({**message, "content": content})
+        event.agent.messages[:] = stripped
 
 
 class TransformEndpointConfig:

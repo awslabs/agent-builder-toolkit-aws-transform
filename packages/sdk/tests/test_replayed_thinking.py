@@ -30,12 +30,14 @@ def _prefix_signature(messages):
     return hashlib.sha256(json.dumps(visible, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def _prefix_checking_model():
+def _prefix_checking_model(thinking_only_replies=()):
+    """Fake model; prompts in ``thinking_only_replies`` get a content-filtered, thinking-only reply."""
     model = create_autospec(Model, spec_set=True, instance=True)
     model.stateful = False  # a mock attribute is truthy, and Strands clears history for stateful models
 
     async def stream(messages, *args, **kwargs):
         for i, message in enumerate(messages):
+            assert message["content"], f"messages.{i}: content is empty"
             for block in message["content"]:
                 if "reasoningContent" in block:
                     signature = block["reasoningContent"]["reasoningText"]["signature"]
@@ -49,6 +51,9 @@ def _prefix_checking_model():
             }
         }
         yield {"contentBlockStop": {}}
+        if messages[-1]["content"][-1].get("text") in thinking_only_replies:
+            yield {"messageStop": {"stopReason": "content_filtered"}}
+            return
         yield {"contentBlockStart": {"start": {}}}
         yield {"contentBlockDelta": {"delta": {"text": "ok"}}}
         yield {"contentBlockStop": {}}
@@ -63,6 +68,19 @@ async def test_orchestrator_with_notifications_replays_no_stale_thinking(tmp_pat
     orchestrator.callback_handler = lambda *args, **kwargs: None
     orchestrator.model = _prefix_checking_model()
     # Added after construction on purpose: the strip must still run after the history swap.
+    orchestrator.hooks.add_hook(ConversationHookProvider(storage_dir=str(tmp_path)))
+
+    user, notification = ConversationContext(user_id="user"), ConversationContext()
+    for text, context in [("u1", user), ("n1", notification), ("u2", user), ("u3", user)]:
+        await orchestrator.process_message_async(ProcessMessageRequest(text, context))
+
+    assert orchestrator.model.stream.call_count == 4
+
+
+async def test_orchestrator_recovers_from_a_thinking_only_reply(tmp_path):
+    orchestrator = AsyncBaseOrchestrator("")
+    orchestrator.callback_handler = lambda *args, **kwargs: None
+    orchestrator.model = _prefix_checking_model(thinking_only_replies={"u2"})
     orchestrator.hooks.add_hook(ConversationHookProvider(storage_dir=str(tmp_path)))
 
     user, notification = ConversationContext(user_id="user"), ConversationContext()
