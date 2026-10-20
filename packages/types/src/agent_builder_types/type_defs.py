@@ -38,6 +38,7 @@ from .literals import (
     HitlTaskTypeType,
     IngestionStatusType,
     JobStatusType,
+    MonitoringTypeType,
     OwnerTypeType,
     PlanStepStatusType,
     PutJobPlanStatusType,
@@ -64,6 +65,7 @@ __all__ = (
     "AccountConnectionTypeDef",
     "AcknowledgeDeletionRequestRequestTypeDef",
     "AgentConfigurationTypeDef",
+    "AgentCoreConfigurationTypeDef",
     "AgentInputPayloadTypeDef",
     "AgentInstanceSummaryTypeDef",
     "AgentMetadataSummaryTypeDef",
@@ -86,6 +88,7 @@ __all__ = (
     "CloseHitlTaskResponseTypeDef",
     "CompleteArtifactUploadRequestRequestTypeDef",
     "CompleteArtifactUploadResponseTypeDef",
+    "ComputeConfigurationTypeDef",
     "ConnectorSummaryDataTypeDef",
     "ContentDigestTypeDef",
     "CopyArtifactRequestRequestTypeDef",
@@ -101,6 +104,7 @@ __all__ = (
     "CreateWorklogRequestRequestTypeDef",
     "DeleteJobPlanStepRequestRequestTypeDef",
     "DeregisterKnowledgeBaseDocumentRequestRequestTypeDef",
+    "EngagementTagTypeDef",
     "EntityTypeDef",
     "FileMetadataTypeDef",
     "FilterAttributeTypeDef",
@@ -123,8 +127,6 @@ __all__ = (
     "GetTaskResponseTypeDef",
     "GetTemporaryCredentialsForConnectorRequestRequestTypeDef",
     "GetTemporaryCredentialsForConnectorResponseTypeDef",
-    "GetTemporaryCredentialsForRoleRequestRequestTypeDef",
-    "GetTemporaryCredentialsForRoleResponseTypeDef",
     "GetUsageRequestRequestTypeDef",
     "GetUsageResponseTypeDef",
     "HierarchicalChunkingConfigurationTypeDef",
@@ -143,6 +145,7 @@ __all__ = (
     "JobPlanStepNodeTypeDef",
     "JobPlanStepTypeDef",
     "JobPlanTreeTypeDef",
+    "LegacyComputeConfigurationTypeDef",
     "LimitDefinitionTypeDef",
     "ListAgentFilterTypeDef",
     "ListAgentInstancesRequestRequestTypeDef",
@@ -160,14 +163,14 @@ __all__ = (
     "ListJobPlanStepsResponseTypeDef",
     "ListWorklogsRequestRequestTypeDef",
     "ListWorklogsResponseTypeDef",
-    "MetadataContextTypeDef",
+    "MDEConfigurationTypeDef",
     "MeteredAmountTypeDef",
     "MeteringAttributeTypeDef",
     "MeteringUsageTypeDef",
     "PaginatorConfigTypeDef",
     "PlanStepMappingTypeDef",
     "PlanStepUpdateTypeDef",
-    "PreProdTestOperationRequestRequestTypeDef",
+    "ProvisionedComputeConfigurationTypeDef",
     "PublishMeteringEventRequestRequestTypeDef",
     "PutJobPlanModeTypeDef",
     "PutJobPlanRequestRequestTypeDef",
@@ -177,6 +180,7 @@ __all__ = (
     "RegisterKnowledgeBaseDocumentRequestRequestTypeDef",
     "RequestContextTypeDef",
     "ResponseMetadataTypeDef",
+    "RestoreAgentRequestRequestTypeDef",
     "RetrievalConfigurationTypeDef",
     "RetrievalFilterTypeDef",
     "RetrievalQueryTypeDef",
@@ -193,8 +197,6 @@ __all__ = (
     "SendMessageResponseTypeDef",
     "StartHitlTaskRequestRequestTypeDef",
     "StartHitlTaskResponseTypeDef",
-    "StartJobRequestRequestTypeDef",
-    "StartJobResponseTypeDef",
     "StartKnowledgeBaseIngestionRequestRequestTypeDef",
     "StartKnowledgeBaseIngestionResponseTypeDef",
     "StatusDetailsTypeDef",
@@ -202,7 +204,6 @@ __all__ = (
     "StepIdFilterTypeDef",
     "StopAgentRequestRequestTypeDef",
     "TemporaryCredentialsTypeDef",
-    "TestOperationRequestRequestTypeDef",
     "TimeFilterTypeDef",
     "UpdateAgentInstanceRequestRequestTypeDef",
     "UpdateJobPlanStepRequestRequestTypeDef",
@@ -229,12 +230,33 @@ AcknowledgeDeletionRequestRequestTypeDef = TypedDict(
     },
 )
 
-AgentConfigurationTypeDef = TypedDict(
-    "AgentConfigurationTypeDef",
+_RequiredAgentConfigurationTypeDef = TypedDict(
+    "_RequiredAgentConfigurationTypeDef",
     {
         "shortDescription": str,
         "agentCard": Dict[str, Any],
     },
+)
+_OptionalAgentConfigurationTypeDef = TypedDict(
+    "_OptionalAgentConfigurationTypeDef",
+    {
+        "monitoringType": MonitoringTypeType,
+        "computeConfiguration": "ComputeConfigurationTypeDef",
+    },
+    total=False,
+)
+
+
+class AgentConfigurationTypeDef(_RequiredAgentConfigurationTypeDef, _OptionalAgentConfigurationTypeDef):
+    pass
+
+
+AgentCoreConfigurationTypeDef = TypedDict(
+    "AgentCoreConfigurationTypeDef",
+    {
+        "runtimeArn": str,
+    },
+    total=False,
 )
 
 AgentInputPayloadTypeDef = TypedDict(
@@ -263,9 +285,7 @@ _OptionalAgentInstanceSummaryTypeDef = TypedDict(
 )
 
 
-class AgentInstanceSummaryTypeDef(
-    _RequiredAgentInstanceSummaryTypeDef, _OptionalAgentInstanceSummaryTypeDef
-):
+class AgentInstanceSummaryTypeDef(_RequiredAgentInstanceSummaryTypeDef, _OptionalAgentInstanceSummaryTypeDef):
     pass
 
 
@@ -360,9 +380,7 @@ _OptionalArtifactAgentFilterTypeDef = TypedDict(
 )
 
 
-class ArtifactAgentFilterTypeDef(
-    _RequiredArtifactAgentFilterTypeDef, _OptionalArtifactAgentFilterTypeDef
-):
+class ArtifactAgentFilterTypeDef(_RequiredArtifactAgentFilterTypeDef, _OptionalArtifactAgentFilterTypeDef):
     pass
 
 
@@ -381,9 +399,7 @@ _OptionalArtifactCategoryFilterTypeDef = TypedDict(
 )
 
 
-class ArtifactCategoryFilterTypeDef(
-    _RequiredArtifactCategoryFilterTypeDef, _OptionalArtifactCategoryFilterTypeDef
-):
+class ArtifactCategoryFilterTypeDef(_RequiredArtifactCategoryFilterTypeDef, _OptionalArtifactCategoryFilterTypeDef):
     pass
 
 
@@ -427,6 +443,7 @@ _RequiredArtifactTypeDef = TypedDict(
 _OptionalArtifactTypeDef = TypedDict(
     "_OptionalArtifactTypeDef",
     {
+        "jobId": str,
         "artifactLabel": str,
         "fileMetadata": "FileMetadataTypeDef",
         "sizeInBytes": int,
@@ -475,9 +492,7 @@ _OptionalArtifactWorkspaceFilterTypeDef = TypedDict(
 )
 
 
-class ArtifactWorkspaceFilterTypeDef(
-    _RequiredArtifactWorkspaceFilterTypeDef, _OptionalArtifactWorkspaceFilterTypeDef
-):
+class ArtifactWorkspaceFilterTypeDef(_RequiredArtifactWorkspaceFilterTypeDef, _OptionalArtifactWorkspaceFilterTypeDef):
     pass
 
 
@@ -522,9 +537,7 @@ _OptionalChunkingConfigurationTypeDef = TypedDict(
 )
 
 
-class ChunkingConfigurationTypeDef(
-    _RequiredChunkingConfigurationTypeDef, _OptionalChunkingConfigurationTypeDef
-):
+class ChunkingConfigurationTypeDef(_RequiredChunkingConfigurationTypeDef, _OptionalChunkingConfigurationTypeDef):
     pass
 
 
@@ -575,6 +588,15 @@ CompleteArtifactUploadResponseTypeDef = TypedDict(
     },
 )
 
+ComputeConfigurationTypeDef = TypedDict(
+    "ComputeConfigurationTypeDef",
+    {
+        "legacyComputeConfiguration": "LegacyComputeConfigurationTypeDef",
+        "provisionedComputeConfiguration": "ProvisionedComputeConfigurationTypeDef",
+    },
+    total=False,
+)
+
 _RequiredConnectorSummaryDataTypeDef = TypedDict(
     "_RequiredConnectorSummaryDataTypeDef",
     {
@@ -584,6 +606,7 @@ _RequiredConnectorSummaryDataTypeDef = TypedDict(
 _OptionalConnectorSummaryDataTypeDef = TypedDict(
     "_OptionalConnectorSummaryDataTypeDef",
     {
+        "workspaceId": str,
         "connectorName": str,
         "description": str,
         "connectorType": str,
@@ -593,9 +616,7 @@ _OptionalConnectorSummaryDataTypeDef = TypedDict(
 )
 
 
-class ConnectorSummaryDataTypeDef(
-    _RequiredConnectorSummaryDataTypeDef, _OptionalConnectorSummaryDataTypeDef
-):
+class ConnectorSummaryDataTypeDef(_RequiredConnectorSummaryDataTypeDef, _OptionalConnectorSummaryDataTypeDef):
     pass
 
 
@@ -687,7 +708,6 @@ _OptionalCreateArtifactUploadUrlRequestRequestTypeDef = TypedDict(
         "label": str,
         "planStepId": str,
         "visibility": VisibilityType,
-        "metadata": "MetadataContextTypeDef",
         "fileMetadata": "FileMetadataTypeDef",
     },
     total=False,
@@ -840,6 +860,26 @@ DeregisterKnowledgeBaseDocumentRequestRequestTypeDef = TypedDict(
     },
 )
 
+_RequiredEngagementTagTypeDef = TypedDict(
+    "_RequiredEngagementTagTypeDef",
+    {
+        "key": str,
+        "value": str,
+    },
+)
+_OptionalEngagementTagTypeDef = TypedDict(
+    "_OptionalEngagementTagTypeDef",
+    {
+        "workloadType": str,
+    },
+    total=False,
+)
+
+
+class EngagementTagTypeDef(_RequiredEngagementTagTypeDef, _OptionalEngagementTagTypeDef):
+    pass
+
+
 EntityTypeDef = TypedDict(
     "EntityTypeDef",
     {
@@ -953,7 +993,6 @@ GetArtifactMetadataResponseTypeDef = TypedDict(
     {
         "artifact": "ArtifactTypeDef",
         "isS3ObjectPresent": "IsS3ObjectPresentTypeDef",
-        "metadata": "MetadataContextTypeDef",
         "ResponseMetadata": "ResponseMetadataTypeDef",
     },
 )
@@ -969,6 +1008,7 @@ GetConnectorRequestRequestTypeDef = TypedDict(
 GetConnectorResponseTypeDef = TypedDict(
     "GetConnectorResponseTypeDef",
     {
+        "workspaceId": str,
         "connectorName": str,
         "description": str,
         "connectorType": str,
@@ -1010,9 +1050,7 @@ _OptionalGetJobRequestRequestTypeDef = TypedDict(
 )
 
 
-class GetJobRequestRequestTypeDef(
-    _RequiredGetJobRequestRequestTypeDef, _OptionalGetJobRequestRequestTypeDef
-):
+class GetJobRequestRequestTypeDef(_RequiredGetJobRequestRequestTypeDef, _OptionalGetJobRequestRequestTypeDef):
     pass
 
 
@@ -1056,9 +1094,7 @@ _OptionalGetTaskRequestRequestTypeDef = TypedDict(
 )
 
 
-class GetTaskRequestRequestTypeDef(
-    _RequiredGetTaskRequestRequestTypeDef, _OptionalGetTaskRequestRequestTypeDef
-):
+class GetTaskRequestRequestTypeDef(_RequiredGetTaskRequestRequestTypeDef, _OptionalGetTaskRequestRequestTypeDef):
     pass
 
 
@@ -1100,23 +1136,6 @@ GetTemporaryCredentialsForConnectorResponseTypeDef = TypedDict(
         "temporaryCredentials": "TemporaryCredentialsTypeDef",
         "connectorConfiguration": Dict[str, str],
         "targetRegion": str,
-        "ResponseMetadata": "ResponseMetadataTypeDef",
-    },
-)
-
-GetTemporaryCredentialsForRoleRequestRequestTypeDef = TypedDict(
-    "GetTemporaryCredentialsForRoleRequestRequestTypeDef",
-    {
-        "requestContext": "RequestContextTypeDef",
-        "hitlTaskId": str,
-    },
-)
-
-GetTemporaryCredentialsForRoleResponseTypeDef = TypedDict(
-    "GetTemporaryCredentialsForRoleResponseTypeDef",
-    {
-        "temporaryCredentials": "TemporaryCredentialsTypeDef",
-        "roleArn": str,
         "ResponseMetadata": "ResponseMetadataTypeDef",
     },
 )
@@ -1305,6 +1324,7 @@ JobInfoTypeDef = TypedDict(
         "clientSource": str,
         "clientAppId": str,
         "softDeleted": bool,
+        "tags": List["EngagementTagTypeDef"],
     },
     total=False,
 )
@@ -1368,6 +1388,15 @@ JobPlanTreeTypeDef = TypedDict(
     "JobPlanTreeTypeDef",
     {
         "nodes": List["JobPlanStepNodeTypeDef"],
+    },
+    total=False,
+)
+
+LegacyComputeConfigurationTypeDef = TypedDict(
+    "LegacyComputeConfigurationTypeDef",
+    {
+        "endpoint": str,
+        "region": str,
     },
     total=False,
 )
@@ -1621,11 +1650,10 @@ ListWorklogsResponseTypeDef = TypedDict(
     },
 )
 
-MetadataContextTypeDef = TypedDict(
-    "MetadataContextTypeDef",
+MDEConfigurationTypeDef = TypedDict(
+    "MDEConfigurationTypeDef",
     {
-        "schemaVersion": str,
-        "content": Dict[str, Any],
+        "maxRuntimeMinutes": int,
     },
     total=False,
 )
@@ -1697,11 +1725,13 @@ class PlanStepUpdateTypeDef(_RequiredPlanStepUpdateTypeDef, _OptionalPlanStepUpd
     pass
 
 
-PreProdTestOperationRequestRequestTypeDef = TypedDict(
-    "PreProdTestOperationRequestRequestTypeDef",
+ProvisionedComputeConfigurationTypeDef = TypedDict(
+    "ProvisionedComputeConfigurationTypeDef",
     {
-        "requestContext": "RequestContextTypeDef",
+        "mdeConfiguration": "MDEConfigurationTypeDef",
+        "agentCoreConfiguration": "AgentCoreConfigurationTypeDef",
     },
+    total=False,
 )
 
 _RequiredPublishMeteringEventRequestRequestTypeDef = TypedDict(
@@ -1834,6 +1864,31 @@ ResponseMetadataTypeDef = TypedDict(
     },
 )
 
+_RequiredRestoreAgentRequestRequestTypeDef = TypedDict(
+    "_RequiredRestoreAgentRequestRequestTypeDef",
+    {
+        "requestContext": "RequestContextTypeDef",
+        "agentId": str,
+        "agentInstanceId": str,
+        "agentType": AgentTypeType,
+    },
+)
+_OptionalRestoreAgentRequestRequestTypeDef = TypedDict(
+    "_OptionalRestoreAgentRequestRequestTypeDef",
+    {
+        "agentVersion": str,
+        "idempotencyToken": str,
+    },
+    total=False,
+)
+
+
+class RestoreAgentRequestRequestTypeDef(
+    _RequiredRestoreAgentRequestRequestTypeDef, _OptionalRestoreAgentRequestRequestTypeDef
+):
+    pass
+
+
 RetrievalConfigurationTypeDef = TypedDict(
     "RetrievalConfigurationTypeDef",
     {
@@ -1892,9 +1947,7 @@ _OptionalRetrievalResultLocationTypeDef = TypedDict(
 )
 
 
-class RetrievalResultLocationTypeDef(
-    _RequiredRetrievalResultLocationTypeDef, _OptionalRetrievalResultLocationTypeDef
-):
+class RetrievalResultLocationTypeDef(_RequiredRetrievalResultLocationTypeDef, _OptionalRetrievalResultLocationTypeDef):
     pass
 
 
@@ -2051,35 +2104,6 @@ StartHitlTaskResponseTypeDef = TypedDict(
     },
 )
 
-_RequiredStartJobRequestRequestTypeDef = TypedDict(
-    "_RequiredStartJobRequestRequestTypeDef",
-    {
-        "requestContext": "RequestContextTypeDef",
-    },
-)
-_OptionalStartJobRequestRequestTypeDef = TypedDict(
-    "_OptionalStartJobRequestRequestTypeDef",
-    {
-        "idempotencyToken": str,
-    },
-    total=False,
-)
-
-
-class StartJobRequestRequestTypeDef(
-    _RequiredStartJobRequestRequestTypeDef, _OptionalStartJobRequestRequestTypeDef
-):
-    pass
-
-
-StartJobResponseTypeDef = TypedDict(
-    "StartJobResponseTypeDef",
-    {
-        "status": JobStatusType,
-        "ResponseMetadata": "ResponseMetadataTypeDef",
-    },
-)
-
 _RequiredStartKnowledgeBaseIngestionRequestRequestTypeDef = TypedDict(
     "_RequiredStartKnowledgeBaseIngestionRequestRequestTypeDef",
     {
@@ -2186,9 +2210,7 @@ _OptionalStopAgentRequestRequestTypeDef = TypedDict(
 )
 
 
-class StopAgentRequestRequestTypeDef(
-    _RequiredStopAgentRequestRequestTypeDef, _OptionalStopAgentRequestRequestTypeDef
-):
+class StopAgentRequestRequestTypeDef(_RequiredStopAgentRequestRequestTypeDef, _OptionalStopAgentRequestRequestTypeDef):
     pass
 
 
@@ -2198,13 +2220,6 @@ TemporaryCredentialsTypeDef = TypedDict(
         "awsTemporaryCredentials": "AwsTemporaryCredentialsTypeDef",
     },
     total=False,
-)
-
-TestOperationRequestRequestTypeDef = TypedDict(
-    "TestOperationRequestRequestTypeDef",
-    {
-        "requestContext": "RequestContextTypeDef",
-    },
 )
 
 TimeFilterTypeDef = TypedDict(

@@ -4,13 +4,16 @@
 Abstract base server interface.
 """
 
+import json
 import logging
 import os
+import uuid
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Optional
 
 from fastapi import FastAPI
+from fastapi.responses import StreamingResponse
 from starlette_context import context as request_context
 from strands.telemetry import StrandsTelemetry
 
@@ -19,6 +22,11 @@ from agent_builder_sdk.custom_types.common_types import (
     A2AErrorCode,
     A2AMessage,
     InvocationRequest,
+)
+from agent_builder_sdk.custom_types.orchestrator_agent_types import (
+    A2AContext,
+    ConversationContext,
+    ProcessMessageRequest,
 )
 from agent_builder_sdk.custom_types.response_types import SendMessageOutput
 from agent_builder_sdk.custom_types.server_types import (
@@ -29,10 +37,21 @@ from agent_builder_sdk.custom_types.server_types import (
 )
 from agent_builder_sdk.custom_types.task_types import A2ATask, GetTaskRequest, GetTaskResponse
 from agent_builder_sdk.env_var import get_initial_agent_runtime_context_from_env
+from agent_builder_sdk.interfaces import StreamingCapable
 from agent_builder_sdk.messages.message_handler import MessageHandler
 from agent_builder_sdk.notification.notification_handler import NotificationHandler
+from agent_builder_sdk.orchestrator_strands.conversation.constants import (
+    MessageSourceType,
+    classify_source,
+)
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
+from agent_builder_sdk.streaming.a2a_frame_utils import STATE_FAILED
+from agent_builder_sdk.streaming.raw_a2a_emitter import status_update
 from agent_builder_sdk.task_handler import TaskHandler
+from agent_builder_sdk.utils import extract_message_info
+
+if TYPE_CHECKING:
+    from agent_builder_sdk.streaming.config import StreamingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +66,9 @@ class BaseServer(ABC):
     task_handler: Optional[TaskHandler]
     message_handler: Optional[MessageHandler]
     tracing: Optional[str]
+    # Streaming opt-in switch, shared by all servers: None = off. A subclass that supports
+    # streaming sets it (AgentRuntimeServer does in __init__) and overrides _build_streaming_runtime.
+    streaming_config: Optional["StreamingConfig"] = None
 
     @abstractmethod
     async def initialize_agent(self, auth_token: Optional[str] = None) -> None:
@@ -142,8 +164,9 @@ class BaseServer(ABC):
                 "authorizationToken": init_context.get("authorizationToken"),
             }
 
-        elif method == JsonRpcMethods.MESSAGE_SEND:
-            # Method 4: A2A metadata (message/send)
+        elif method in (JsonRpcMethods.MESSAGE_SEND, JsonRpcMethods.MESSAGE_STREAM):
+            # Method 4: A2A metadata (message/send and its streaming counterpart
+            # message/stream — same message shape, same AgentInitializationContext).
             message = params.get("message", {})
             metadata = message.get("metadata", {})
             init_context = metadata.get("ATX_A2A.AgentInitializationContext", {})
@@ -163,6 +186,13 @@ class BaseServer(ABC):
                 init_request.get("agentInstanceId"),
             ]
         ):
+            # Extract locale from invocationContext.userMetadata (injected by Compute AgentCoreMapper)
+            invocation_context = params.get("invocationContext", {})
+            user_metadata = invocation_context.get("userMetadata", {})
+            locale = user_metadata.get("invocationUserCurrentLocale")
+            if locale:
+                logger.info("Locale configured: %s", locale)
+
             # Set context in class
             self.context = AgentRuntimeContext(
                 workspace_id=init_request["workspaceId"],
@@ -172,6 +202,7 @@ class BaseServer(ABC):
                 agent_version=init_request.get("agentVersion"),
                 tenant_account_id=init_request.get("tenantAccountId"),
                 initial_auth_token=init_request.get("authorizationToken"),
+                locale=locale,
             )
 
             # Initialize with token
@@ -259,6 +290,167 @@ class BaseServer(ABC):
                 raise Exception(f"Message send failed: {send_result.error.message}")
             return send_result.result.to_dict() if send_result.result else None
 
+    def _setup_streaming(self) -> None:
+        """Stand up streaming if opted in. Called once during init by every server.
+
+        No-op when off (streaming_config is None), so a server that doesn't support streaming
+        does nothing. When on, delegates the concrete runtime (pool, shared client, hooks) to
+        _build_streaming_runtime, which the supporting server overrides.
+        """
+        if self.streaming_config is None:
+            return
+        self._build_streaming_runtime()
+
+    def _build_streaming_runtime(self) -> None:
+        """Build the concrete streaming runtime (pool, shared MCP client, per-agent hooks).
+
+        Overridden by servers that support streaming. The base raises so a server that sets a
+        streaming_config without implementing the runtime fails fast at init, not mid-stream.
+        """
+        raise NotImplementedError("This server does not support streaming")
+
+    async def _get_agent_for_streaming(self, source_id: str, source_type: MessageSourceType):
+        """Return the agent instance to serve a streaming turn for ``source_id``.
+
+        Overridden per server type. The base raises so a server that hasn't opted into
+        streaming rejects the request rather than serving it silently.
+        """
+        raise NotImplementedError("This server does not support streaming")
+
+    def _get_streaming_config(self) -> Optional["StreamingConfig"]:
+        """The streaming config shaping this turn's emitted categories, or None when off."""
+        return self.streaming_config
+
+    @asynccontextmanager
+    async def _streaming_turn_lease(self, source_id: str) -> AsyncIterator[None]:
+        """Hold a lease for the full duration of a streaming turn so the server can protect
+        the source's agent from eviction while it streams. Base is a no-op; servers with an
+        evictable per-source agent pool override this to mark the source in-flight."""
+        yield
+
+    async def _handle_streaming(self, params: Dict[str, Any]) -> StreamingResponse:
+        """Serve one message/stream turn as an SSE stream of A2A frames.
+
+        Parses the A2A message (same shape as message/send), resolves the ready agent,
+        and streams ``process_message_stream`` — each A2A frame becomes one
+        ``data: {json}\\n\\n`` SSE event. Runs inline (no request queue): the connection
+        is held for the whole turn.
+        """
+        # message/stream is only valid when this server opted into streaming. Reject before any
+        # parsing/logging (and before the SSE response is returned) so it surfaces as a JSON-RPC
+        # error to the caller rather than wasted work or a broken/empty stream.
+        if self.streaming_config is None:
+            raise ValueError("This server does not support streaming (no StreamingConfig set)")
+
+        message = A2AMessage(**params.get("message", {}))
+
+        # Build the agent input identically to the message/send path: reuse
+        # extract_message_info (the single source of truth) so the SAME A2A message produces
+        # the SAME agent input on both paths. message/send serializes the full parts list
+        # (text + data + file, first part's "kind"->"type" normalized) and passes
+        # json.dumps(parts); message/stream must too, or data/file parts (e.g. attachments)
+        # would reach the agent on message/send but silently vanish on message/stream.
+        message_info = extract_message_info(InvocationRequest(message))
+        message_body = json.dumps(message_info.parts)
+        user_id, sender = message_info.user_id, message_info.sender
+
+        conv_context = ConversationContext(
+            user_id=user_id,
+            agent_instance_id=sender,
+            a2a_context=A2AContext(context_id=message.contextId, task_id=message.taskId),
+        )
+
+        # Key the per-source agent by the SAME classification a turn is processed with
+        # (neutral helper — no dependency on any concrete agent class).
+        source_id, source_type = classify_source(conv_context)
+
+        # A stable conversation id derived from the caller's identity (this agent is
+        # job-scoped, so a user's turns share one conversation) — it becomes the wire
+        # threadId. The task/run id is minted by the agent (the A2A server owns Task ids),
+        # not taken from the request. The response-persist leg routes on message.contextId
+        # (carried on conv_context), independently of these wire ids.
+        conversation_id = self._build_conversation_id(user_id)
+        logger.info(
+            "Streaming turn: source_type=%s userId=%s agentInstanceId=%s conversation=%s context=%s",
+            source_type.value,
+            user_id,
+            sender,
+            conversation_id,
+            message.contextId,
+        )
+        agent = await self._get_agent_for_streaming(source_id, source_type)
+
+        # contextId requirement is the agent's policy, not the transport's: an orchestrator
+        # persists its reply to Chat keyed by contextId, so it requires one; a sub-agent replies
+        # to another agent and does not. Raise before the SSE response starts so a missing-required
+        # contextId surfaces as a JSON-RPC error to the caller, not a user-visible stream frame.
+        if (
+            isinstance(agent, StreamingCapable)
+            and agent.requires_context_id()
+            and not message.contextId
+        ):
+            raise ValueError("contextId is required for a streaming (message/stream) turn")
+
+        req = ProcessMessageRequest(message_body, conv_context)
+
+        streaming_config = self._get_streaming_config()
+
+        async def gen():
+            # Track the turn's wire ids so a fallback terminal (below) can reuse them.
+            task_id: Optional[str] = None
+            context_id_seen: Optional[str] = None
+            # Hold the in-flight lease for the WHOLE turn so the source's per-user agent can't
+            # be idle-evicted mid-stream (no-op unless the server has an evictable pool).
+            async with self._streaming_turn_lease(source_id):
+                # cfg is passed only when the server has one, so the orchestrator keeps its
+                # DEFAULT_STREAMING_CONFIG default otherwise (base servers have no config).
+                stream_kwargs = {} if streaming_config is None else {"cfg": streaming_config}
+                try:
+                    async for frame in agent.process_message_stream(
+                        req, conversation_id=conversation_id, **stream_kwargs
+                    ):
+                        if task_id is None:
+                            task_id = frame.get("id") or frame.get("taskId")
+                        if context_id_seen is None:
+                            context_id_seen = frame.get("contextId")
+                        # default=str is a serialization backstop: a stray non-serializable value
+                        # degrades to its repr instead of aborting the stream with no terminal.
+                        yield f"data: {json.dumps(frame, default=str)}\n\n"
+                except Exception:
+                    # A failure escaping process_message_stream (or the serialize/yield above) would
+                    # otherwise drop the connection with NO terminal frame — the client can't tell a
+                    # clean finish from a crash. Emit one terminal failed frame so every stream ends
+                    # with a terminal, whatever went wrong. (Serialization errors are now prevented
+                    # upstream by the emitter's projection + default=str; this guards the rest.)
+                    logger.exception(
+                        "Streaming turn failed during emission; emitting terminal failed frame"
+                    )
+                    # Reuse the turn's task/context ids; carry no message (DataPart shape is
+                    # path-specific — raw A2A vs AG-UI), the failed/final state is enough to end.
+                    terminal = status_update(
+                        task_id or str(uuid.uuid4()), context_id_seen, STATE_FAILED, final=True
+                    )
+                    yield f"data: {json.dumps(terminal)}\n\n"
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
+    def _build_conversation_id(self, user_id: Optional[str]) -> str:
+        """Build a stable id for the user's conversation on a streaming turn, so every turn
+        of one conversation groups together on the client.
+
+        ``<userId>[#<workspaceId>[#<jobId>]]`` — these are the identity parts that reliably
+        reach the agent on the wire (userId from source-information, workspace/job from the
+        init context). workspace/job are appended only when present, and job only when a
+        workspace is (a job never exists without its workspace). This is a job-scoped agent,
+        so userId + workspace + job uniquely identifies the conversation.
+        """
+        parts = [user_id or ""]
+        if self.context and self.context.workspace_id:
+            parts.append(self.context.workspace_id)
+            if self.context.job_id:
+                parts.append(self.context.job_id)
+        return "#".join(parts)
+
     async def handle_tasks_get(self, params: Dict[str, Any]) -> A2ATask | A2AError:
         """Handle tasks/get - common implementation."""
         task_id = params.get("id")
@@ -304,9 +496,13 @@ class BaseServer(ABC):
             """
             return {"status": "Healthy" if self.stop_requested else "HealthyBusy"}
 
-        @self.app.post("/invocations")
-        async def handle_invocations(request: Dict[str, Any]) -> Dict[str, Any]:
-            """Handle both AgentCore JSON-RPC and MDE notification requests."""
+        @self.app.post("/invocations", response_model=None)
+        async def handle_invocations(request: Dict[str, Any]) -> Dict[str, Any] | StreamingResponse:
+            """Handle AgentCore JSON-RPC, MDE notifications, and message/stream (SSE).
+
+            ``response_model=None``: the return is either a JSON dict or a
+            StreamingResponse, which FastAPI cannot build a response model from.
+            """
             if request_context.exists() and self.is_jsonrpc_request(request):
                 request_context["rpc"] = {
                     "request": {
@@ -320,6 +516,12 @@ class BaseServer(ABC):
                 logger.debug(f"Full request details: {request}")
 
                 await self.ensure_initialized(request)
+
+                # message/stream is a streaming turn: it needs an SSE StreamingResponse,
+                # not a JSON-RPC dict, so it is peeled off before handle_jsonrpc. Every
+                # other method (message/send, tasks/get, notify, ...) is unchanged.
+                if request.get("method") == JsonRpcMethods.MESSAGE_STREAM:
+                    return await self._handle_streaming(request.get("params") or {})
 
                 if self.is_jsonrpc_request(request):
                     return await self.handle_jsonrpc(request)
@@ -359,6 +561,15 @@ class BaseServer(ABC):
         async def get_task_rest(request: GetTaskRequest) -> GetTaskResponse:
             """REST endpoint for task retrieval (MDE mode - agent already initialized)."""
             return await self.get_task(request)
+
+        @self.app.post("/message/stream", response_model=None)
+        async def message_stream_rest(request: Dict[str, Any]) -> StreamingResponse:
+            """REST endpoint for streaming (MDE mode). Same params shape as the AgentCore
+            message/stream method; delegates to the shared _handle_streaming helper.
+
+            ``response_model=None``: returns a StreamingResponse (SSE), not a model.
+            """
+            return await self._handle_streaming(request.get("params") or request)
 
     async def handle_mde_notification(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """Handle MDE notification - implementation varies by server type."""

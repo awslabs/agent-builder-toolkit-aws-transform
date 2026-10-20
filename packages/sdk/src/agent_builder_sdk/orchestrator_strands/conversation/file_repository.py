@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import tempfile
-from collections import defaultdict
+import threading
 from datetime import datetime
 from typing import Any, Dict, List, Optional, TypedDict, cast
 
@@ -25,6 +25,7 @@ from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     conversation_source_id,
     conversation_source_type,
 )
+from agent_builder_sdk.utils import reconcile_dangling_tool_uses
 
 
 # Type definitions for serialization
@@ -34,6 +35,19 @@ class SerializedConversations(TypedDict):
 
 
 logger = logging.getLogger(__name__)
+
+
+def _interrupt_pending(agent: Agent) -> bool:
+    """Whether Strands is holding an interrupt for this agent.
+
+    A toolUse waiting on an interrupt response is not dangling — Strands replays the tool and
+    appends the real toolResult on resume — so repairing it would put two results after one
+    toolUse and make the resume request invalid.
+
+    Reads Strands-private state because no public accessor exists; if that attribute is renamed
+    this reports no interrupt, which repairs as it did before the guard existed.
+    """
+    return bool(getattr(getattr(agent, "_interrupt_state", None), "activated", False))
 
 
 class FileMultiSourceConversationRepository(ConversationRepository):
@@ -60,20 +74,19 @@ class FileMultiSourceConversationRepository(ConversationRepository):
         # Create storage directory if it doesn't exist
         os.makedirs(self.storage_dir, exist_ok=True)
 
+        # Guards the in-memory conversation maps + file writes. Reentrant because
+        # add_message_for_agent() calls save() while holding it. Uncontended (and thus
+        # ~free) when a single event loop drives the repo (async orchestrator); load-
+        # bearing when one repo instance is shared across concurrent streaming agents
+        # AND a sync orchestrator runs the buffered turn in a separate thread
+        # (asyncio.to_thread), where two threads could otherwise interleave a save().
+        self._lock = threading.RLock()
+
         # Initialize conversation storage
         # Using a structure: {source_type: {source_id: [ConversationMessage]}}
         self.conversations: Dict[str, Dict[str, List[ConversationMessage]]] = {
             MessageSourceType.USER.value: {},
             MessageSourceType.SUBAGENT.value: {},
-            MessageSourceType.NOTIFICATION.value: {DEFAULT_SOURCE_ID: []},
-        }
-
-        # List returned by get_conversation_history_for_agent
-        # Store in this dict to ensure the same source always gets the same list instance
-        # Using a structure: {source_type: {source_id: [Message]}}
-        self._messages: dict[str, dict[str, list[Message]]] = {
-            MessageSourceType.USER.value: defaultdict(list),
-            MessageSourceType.SUBAGENT.value: defaultdict(list),
             MessageSourceType.NOTIFICATION.value: {DEFAULT_SOURCE_ID: []},
         }
 
@@ -116,19 +129,20 @@ class FileMultiSourceConversationRepository(ConversationRepository):
         """
         source_type, source_id = self._get_source_info(agent)
 
-        # Ensure the source_id exists in the conversations dictionary
-        source_type_str = source_type.value
-        if source_id not in self.conversations[source_type_str]:
-            self.conversations[source_type_str][source_id] = []
+        with self._lock:
+            # Ensure the source_id exists in the conversations dictionary
+            source_type_str = source_type.value
+            if source_id not in self.conversations[source_type_str]:
+                self.conversations[source_type_str][source_id] = []
 
-        # Convert to our custom message type
-        conversation_message = ConversationMessage.from_message(message)
+            # Convert to our custom message type
+            conversation_message = ConversationMessage.from_message(message)
 
-        # Add the message to the appropriate conversation
-        self.conversations[source_type_str][source_id].append(conversation_message)
+            # Add the message to the appropriate conversation
+            self.conversations[source_type_str][source_id].append(conversation_message)
 
-        # Save conversation state
-        self.save()
+            # Save conversation state
+            self.save()
 
     def get_conversation_history_for_agent(self, agent: Agent) -> List[Message]:
         """
@@ -142,32 +156,39 @@ class FileMultiSourceConversationRepository(ConversationRepository):
         """
         source_type, source_id = self._get_source_info(agent)
 
-        # Ensure the same source uses the same list instance
-        history = self._messages[source_type.value][source_id]
-        # Clear the list to avoid duplicates after the persisted conversation is appended
-        history.clear()
+        with self._lock:
+            # Build a FRESH list each call. This list is handed to Strands as
+            # agent.messages and mutated by the framework OUTSIDE this lock during the
+            # invocation, so it must not be an instance shared across agents: when one
+            # repository is shared by several agents for the same source (e.g. the
+            # shared singleton agent that serves message/send and a per-user streaming
+            # agent, both for the same user), aliasing one list would let two concurrent
+            # invocations clear/append each other's in-flight history. The durable store
+            # (self.conversations) stays serialized by _lock; the returned list is only a
+            # per-invocation working copy.
+            history: List[Message] = []
 
-        # Get the source-specific conversation
-        source_type_str = source_type.value
-        if source_id in self.conversations[source_type_str]:
-            # Convert ConversationMessage objects to Strands Message objects
-            source_messages = [
-                msg.to_message() for msg in self.conversations[source_type_str][source_id]
-            ]
-            history.extend(source_messages)
+            source_type_str = source_type.value
+            if source_id in self.conversations[source_type_str]:
+                history.extend(
+                    msg.to_message() for msg in self.conversations[source_type_str][source_id]
+                )
 
-        # For users, also include notifications
-        if source_type == MessageSourceType.USER:
-            # Convert ConversationMessage objects to Strands Message objects
-            notifications = [
-                msg.to_message()
-                for msg in self.conversations[MessageSourceType.NOTIFICATION.value][
-                    DEFAULT_SOURCE_ID
-                ]
-            ]
-            history.extend(notifications)
+            # Repair before the notification merge: a toolResult must sit in the message
+            # immediately after its toolUse, and notifications append past that point.
+            if not _interrupt_pending(agent):
+                history = reconcile_dangling_tool_uses(history)
 
-        return history
+            # For users, also include notifications
+            if source_type == MessageSourceType.USER:
+                history.extend(
+                    msg.to_message()
+                    for msg in self.conversations[MessageSourceType.NOTIFICATION.value][
+                        DEFAULT_SOURCE_ID
+                    ]
+                )
+
+            return history
 
     def _read_file(self, path: str) -> Dict[str, Any]:
         """Read JSON file."""
@@ -200,29 +221,30 @@ class FileMultiSourceConversationRepository(ConversationRepository):
     def save(self) -> None:
         """Save the conversations to disk."""
         try:
-            # Create a serializable representation of the conversations
-            serializable_conversations: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+            with self._lock:
+                # Create a serializable representation of the conversations
+                serializable_conversations: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
 
-            for source_type_str, source_dict in self.conversations.items():
-                serializable_conversations[source_type_str] = {}
+                for source_type_str, source_dict in self.conversations.items():
+                    serializable_conversations[source_type_str] = {}
 
-                for source_id, messages in source_dict.items():
-                    # Convert each ConversationMessage to a serializable format
-                    serializable_conversations[source_type_str][source_id] = [
-                        msg.to_dict() for msg in messages
-                    ]
+                    for source_id, messages in source_dict.items():
+                        # Convert each ConversationMessage to a serializable format
+                        serializable_conversations[source_type_str][source_id] = [
+                            msg.to_dict() for msg in messages
+                        ]
 
-            # Save to disk
-            file_path = os.path.join(self.storage_dir, "conversations.json")
+                # Save to disk
+                file_path = os.path.join(self.storage_dir, "conversations.json")
 
-            # Save with metadata
-            self._write_file(
-                file_path,
-                {
-                    "conversations": serializable_conversations,
-                    "saved_at": datetime.now().isoformat(),
-                },
-            )
+                # Save with metadata
+                self._write_file(
+                    file_path,
+                    {
+                        "conversations": serializable_conversations,
+                        "saved_at": datetime.now().isoformat(),
+                    },
+                )
 
             logger.info(f"Saved conversations to disk at {file_path}")
         except Exception as e:
@@ -249,24 +271,28 @@ class FileMultiSourceConversationRepository(ConversationRepository):
             # Restore conversations
             serialized_conversations = data.get("conversations", {})
 
-            # Convert serialized data back to ConversationMessage objects
-            for source_type_str, source_dict in serialized_conversations.items():
-                if source_type_str not in self.conversations:
-                    self.conversations[source_type_str] = {}
+            with self._lock:
+                # Convert serialized data back to ConversationMessage objects
+                for source_type_str, source_dict in serialized_conversations.items():
+                    if source_type_str not in self.conversations:
+                        self.conversations[source_type_str] = {}
 
-                for source_id, messages in source_dict.items():
-                    self.conversations[source_type_str][source_id] = [
-                        ConversationMessage.from_dict(msg) for msg in messages
-                    ]
+                    for source_id, messages in source_dict.items():
+                        self.conversations[source_type_str][source_id] = [
+                            ConversationMessage.from_dict(msg) for msg in messages
+                        ]
 
-            # Ensure all required source types exist
-            for source_type in MessageSourceType:
-                if source_type.value not in self.conversations:
-                    self.conversations[source_type.value] = {}
+                # Ensure all required source types exist
+                for source_type in MessageSourceType:
+                    if source_type.value not in self.conversations:
+                        self.conversations[source_type.value] = {}
 
-            # Ensure notifications have a default source_id
-            if DEFAULT_SOURCE_ID not in self.conversations[MessageSourceType.NOTIFICATION.value]:
-                self.conversations[MessageSourceType.NOTIFICATION.value][DEFAULT_SOURCE_ID] = []
+                # Ensure notifications have a default source_id
+                if (
+                    DEFAULT_SOURCE_ID
+                    not in self.conversations[MessageSourceType.NOTIFICATION.value]
+                ):
+                    self.conversations[MessageSourceType.NOTIFICATION.value][DEFAULT_SOURCE_ID] = []
 
             # Log when the data was last saved
             saved_at = data.get("saved_at", "unknown time")

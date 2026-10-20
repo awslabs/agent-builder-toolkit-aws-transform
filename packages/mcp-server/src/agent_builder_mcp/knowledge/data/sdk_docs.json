@@ -114,8 +114,8 @@
     "file": "agent_builder_sdk/agent_factory.py",
     "module": "agent_builder_sdk.agent_factory",
     "docstring": "Create a AsyncBaseOrchestrator instance with full memory and conversation support.\n\nThis function creates a fully-featured orchestrator with:\n- Episodic memory for storing agent experiences\n- Conversation tracking across multiple sources\n- Memory tools for agent self-reflection\n- Lifecycle hooks for conversation and memory events\n\nArgs:\n    mcp_client: Optional MCP client for tool integration\n    storage_dir: Directory for agent data storage\n    system_prompt: Custom system prompt, defaults to test_orchestrator_prompt\n    custom_tools: Optional list of additional custom tools to add to the orchestrator\n    model_id: Optional model ID for Bedrock inference\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)\n    metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)\n\nReturns:\n    Configured AsyncBaseOrchestrator instance with memory, hooks, and tools",
-    "signature": "create_default_async_orchestrator(mcp_client: Optional[MCPClient] = None, storage_dir: str = '/tmp/orchestrator_agent', system_prompt: Optional[str] = None, custom_tools: Optional[list[Any]] = None, model_id: str = 'anthropic.claude-sonnet-4-5-20250929-v1:0', model: Union[Model, str, None] = None, with_base_guardrails: bool = False, metrics_config: Optional[MetricsConfig] = None) -> AsyncBaseOrchestrator",
-    "description": "Parameters:\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  system_prompt: Optional[str] (default=None) - Custom system prompt, defaults to test_orchestrator_prompt\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the orchestrator\n  model_id: str (default='anthropic.claude-sonnet-4-5-20250929-v1:0') - Optional model ID for Bedrock inference\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string (takes precedence over model_id)\n  with_base_guardrails: bool (default=False)\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)"
+    "signature": "create_default_async_orchestrator(mcp_client: Optional[MCPClient] = None, storage_dir: str = '/tmp/orchestrator_agent', system_prompt: Optional[str] = None, custom_tools: Optional[list[Any]] = None, model_id: str = 'anthropic.claude-sonnet-4-5-20250929-v1:0', model: Union[Model, str, None] = None, boto_client_config: Optional[BotocoreConfig] = None, with_base_guardrails: bool = False, metrics_config: Optional[MetricsConfig] = None, locale: Optional[str] = None, conversation_repository: Optional[FileMultiSourceConversationRepository] = None, memory_manager: Optional[MemoryManager] = None) -> AsyncBaseOrchestrator",
+    "description": "Parameters:\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  system_prompt: Optional[str] (default=None) - Custom system prompt, defaults to test_orchestrator_prompt\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the orchestrator\n  model_id: str (default='anthropic.claude-sonnet-4-5-20250929-v1:0') - Optional model ID for Bedrock inference\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string (takes precedence over model_id)\n  boto_client_config: Optional[BotocoreConfig] (default=None)\n  with_base_guardrails: bool (default=False)\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)\n  locale: Optional[str] (default=None)\n  conversation_repository: Optional[FileMultiSourceConversationRepository] (default=None)\n  memory_manager: Optional[MemoryManager] (default=None)"
   },
   {
     "name": "create_default_async_orchestrator_with_subagent",
@@ -123,16 +123,16 @@
     "file": "agent_builder_sdk/agent_factory.py",
     "module": "agent_builder_sdk.agent_factory",
     "docstring": "Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.\n\nThis function creates a fully-featured orchestrator with:\n- Episodic memory for storing agent experiences\n- Conversation tracking across multiple sources\n- Memory tools for agent self-reflection\n- Lifecycle hooks for conversation and memory events\n- Subagent tools for communication and discovery (mocked)\n- Agent skills support via Strands AgentSkills plugin (when enable_skills=True)\n- Experimental code execution support (when enable_code_execution=True)\n\nArgs:\n    system_prompt: Custom system prompt for the orchestrator\n    mcp_client: Optional MCP client for tool integration\n    storage_dir: Directory for agent data storage\n    custom_tools: Optional list of additional custom tools to add to the orchestrator\n    model_id: Optional model ID for Bedrock inference\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)\n    with_base_guardrails: Whether to add base guardrail prompts\n    trace_attributes: Optional trace attributes for observability\n    excluded_mcp_tool_names: Set of MCP tool names to exclude\n    metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)\n    enable_skills: Enable agent skills via the Strands AgentSkills plugin.\n        When True, creates an AgentSkills plugin that registers a skills tool\n        and auto-injects skill metadata into the system prompt.\n    skills_dir: Directory containing skills. If None, uses STRANDS_SKILLS_DIR env var\n        or defaults to ./skills\n    enable_code_execution: Enable experimental local Python code execution tool.\n        WARNING: Code executes locally without sandboxing. Use with caution.\n        For sandboxed execution, AgentCore Code Interpreter integration is planned.\n\nReturns:\n    Configured AsyncBaseOrchestrator instance with memory, hooks, and tools\n\nExample:\n    # Enable skills and code execution\n    agent = create_default_async_orchestrator_with_subagent(\n        system_prompt=\"You are a helpful assistant.\",\n        enable_skills=True,\n        skills_dir=\"./my_skills\",\n        enable_code_execution=True,\n    )",
-    "signature": "create_default_async_orchestrator_with_subagent(system_prompt: str, mcp_client: Optional[MCPClient] = None, storage_dir: str = '/tmp/orchestrator_agent', custom_tools: Optional[list[Any]] = None, model_id: str = 'anthropic.claude-sonnet-4-5-20250929-v1:0', model: Union[Model, str, None] = None, with_base_guardrails: bool = False, trace_attributes: Optional[dict[str, Any]] = None, excluded_mcp_tool_names: Optional[Set[str]] = None, metrics_config: Optional[MetricsConfig] = None, enable_skills: bool = False, skills_dir: Optional[str] = None, enable_code_execution: bool = False) -> AsyncBaseOrchestrator",
-    "description": "Parameters:\n  system_prompt: str (required) - Custom system prompt for the orchestrator\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the orchestrator\n  model_id: str (default='anthropic.claude-sonnet-4-5-20250929-v1:0') - Optional model ID for Bedrock inference\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string (takes precedence over model_id)\n  with_base_guardrails: bool (default=False) - Whether to add base guardrail prompts\n  trace_attributes: Optional[dict[str, Any]] (default=None) - Optional trace attributes for observability\n  excluded_mcp_tool_names: Optional[Set[str]] (default=None) - Set of MCP tool names to exclude\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)\n  enable_skills: bool (default=False) - Enable agent skills via the Strands AgentSkills plugin. When True, creates an AgentSkills plugin that registers a skills tool and auto-injects skill metadata into the system prompt.\n  skills_dir: Optional[str] (default=None) - Directory containing skills. If None, uses STRANDS_SKILLS_DIR env var or defaults to ./skills\n  enable_code_execution: bool (default=False) - Enable experimental local Python code execution tool."
+    "signature": "create_default_async_orchestrator_with_subagent(system_prompt: str, mcp_client: Optional[MCPClient] = None, storage_dir: str = '/tmp/orchestrator_agent', custom_tools: Optional[list[Any]] = None, model_id: str = 'anthropic.claude-sonnet-4-5-20250929-v1:0', model: Union[Model, str, None] = None, boto_client_config: Optional[BotocoreConfig] = None, with_base_guardrails: bool = False, trace_attributes: Optional[dict[str, Any]] = None, excluded_mcp_tool_names: Optional[Set[str]] = None, metrics_config: Optional[MetricsConfig] = None, enable_skills: bool = False, skills_dir: Optional[str] = None, enable_code_execution: bool = False, locale: Optional[str] = None, conversation_repository: Optional[FileMultiSourceConversationRepository] = None, memory_manager: Optional[MemoryManager] = None) -> AsyncBaseOrchestrator",
+    "description": "Parameters:\n  system_prompt: str (required) - Custom system prompt for the orchestrator\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the orchestrator\n  model_id: str (default='anthropic.claude-sonnet-4-5-20250929-v1:0') - Optional model ID for Bedrock inference\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string (takes precedence over model_id)\n  boto_client_config: Optional[BotocoreConfig] (default=None)\n  with_base_guardrails: bool (default=False) - Whether to add base guardrail prompts\n  trace_attributes: Optional[dict[str, Any]] (default=None) - Optional trace attributes for observability\n  excluded_mcp_tool_names: Optional[Set[str]] (default=None) - Set of MCP tool names to exclude\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)\n  enable_skills: bool (default=False) - Enable agent skills via the Strands AgentSkills plugin. When True, creates an AgentSkills plugin that registers a skills tool and auto-injects skill metadata into the system prompt.\n  skills_dir: Optional[str] (default=None) - Directory containing skills. If None, uses STRANDS_SKILLS_DIR env var or defaults to ./skills\n  enable_code_execution: bool (default=False) - Enable experimental local Python code execution tool.\n  locale: Optional[str] (default=None)\n  conversation_repository: Optional[FileMultiSourceConversationRepository] (default=None)\n  memory_manager: Optional[MemoryManager] (default=None)"
   },
   {
     "name": "create_default_async_subagent",
     "kind": "function",
     "file": "agent_builder_sdk/agent_factory.py",
     "module": "agent_builder_sdk.agent_factory",
-    "docstring": "Create an AsyncBaseSubagent instance with minimal configuration.\n\nThis function creates a lightweight subagent without memory or conversation tracking.\n\nArgs:\n    mcp_client: Optional MCP client for tool integration\n    system_prompt: Custom system prompt, defaults to simple assistant prompt\n    model: Optional Strands Model instance or model ID string\n    custom_tools: Optional list of additional custom tools to add to the subagent\n    metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)\n\nReturns:\n    Configured AsyncBaseSubagent instance",
-    "signature": "create_default_async_subagent(system_prompt: str, mcp_client: Optional[MCPClient] = None, model: Union[Model, str, None] = None, custom_tools: Optional[list[Any]] = None, metrics_config: Optional[MetricsConfig] = None) -> AsyncBaseSubagent",
+    "docstring": "Create an AsyncBaseSubagent instance with minimal configuration.\n\nThis function creates a lightweight subagent without memory or conversation tracking.\n\nArgs:\n    mcp_client: Optional MCP client for tool integration\n    system_prompt: Custom system prompt, defaults to simple assistant prompt\n    model: Optional Strands Model instance or model ID string\n    custom_tools: Optional list of additional custom tools to add to the subagent\n    metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)\n    **kwargs: Compatibility shim — accepted and ignored. A runtime server calls every agent\n        factory with the *same* keyword arguments, and with streaming enabled that set includes\n        ``conversation_repository`` / ``memory_manager`` (the shared stores an orchestrator\n        needs). A sub-agent is stateless and uses neither, but the factory must still accept\n        them or the server's call would raise ``TypeError``; ``**kwargs`` absorbs them so one\n        call signature works for both agent types.\n\nReturns:\n    Configured AsyncBaseSubagent instance",
+    "signature": "create_default_async_subagent(system_prompt: str, mcp_client: Optional[MCPClient] = None, model: Union[Model, str, None] = None, custom_tools: Optional[list[Any]] = None, metrics_config: Optional[MetricsConfig] = None, **kwargs: Any) -> AsyncBaseSubagent",
     "description": "Parameters:\n  system_prompt: str (required) - Custom system prompt, defaults to simple assistant prompt\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the subagent\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)"
   },
   {
@@ -141,8 +141,8 @@
     "file": "agent_builder_sdk/agent_factory.py",
     "module": "agent_builder_sdk.agent_factory",
     "docstring": "Create a BaseOrchestrator instance with full memory and conversation support.\n\nThis function creates a fully-featured orchestrator with:\n- Episodic memory for storing agent experiences\n- Conversation tracking across multiple sources\n- Memory tools for agent self-reflection\n- Lifecycle hooks for conversation and memory events\n\nIf your application has a running asyncio event loop, then use create_default_async_orchestrator\ninstead. See BaseOrchestrators's documentation.\n\nArgs:\n    mcp_client: Optional MCP client for tool integration\n    storage_dir: Directory for agent data storage\n    system_prompt: Custom system prompt, defaults to test_orchestrator_prompt\n    custom_tools: Optional list of additional custom tools to add to the orchestrator\n    model_id: Optional model ID for Bedrock inference\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)\n    metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)\n\nReturns:\n    Configured BaseOrchestrator instance with memory, hooks, and tools",
-    "signature": "create_default_orchestrator(mcp_client: Optional[MCPClient] = None, storage_dir: str = '/tmp/orchestrator_agent', system_prompt: Optional[str] = None, custom_tools: Optional[list[Any]] = None, model_id: str = 'anthropic.claude-sonnet-4-5-20250929-v1:0', model: Union[Model, str, None] = None, with_base_guardrails: bool = False, trace_attributes: Optional[dict[str, Any]] = None, metrics_config: Optional[MetricsConfig] = None) -> BaseOrchestrator",
-    "description": "Parameters:\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  system_prompt: Optional[str] (default=None) - Custom system prompt, defaults to test_orchestrator_prompt\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the orchestrator\n  model_id: str (default='anthropic.claude-sonnet-4-5-20250929-v1:0') - Optional model ID for Bedrock inference\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string (takes precedence over model_id)\n  with_base_guardrails: bool (default=False)\n  trace_attributes: Optional[dict[str, Any]] (default=None)\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)"
+    "signature": "create_default_orchestrator(mcp_client: Optional[MCPClient] = None, storage_dir: str = '/tmp/orchestrator_agent', system_prompt: Optional[str] = None, custom_tools: Optional[list[Any]] = None, model_id: str = 'anthropic.claude-sonnet-4-5-20250929-v1:0', model: Union[Model, str, None] = None, boto_client_config: Optional[BotocoreConfig] = None, with_base_guardrails: bool = False, trace_attributes: Optional[dict[str, Any]] = None, metrics_config: Optional[MetricsConfig] = None, locale: Optional[str] = None, conversation_repository: Optional[FileMultiSourceConversationRepository] = None, memory_manager: Optional[MemoryManager] = None) -> BaseOrchestrator",
+    "description": "Parameters:\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  system_prompt: Optional[str] (default=None) - Custom system prompt, defaults to test_orchestrator_prompt\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the orchestrator\n  model_id: str (default='anthropic.claude-sonnet-4-5-20250929-v1:0') - Optional model ID for Bedrock inference\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string (takes precedence over model_id)\n  boto_client_config: Optional[BotocoreConfig] (default=None)\n  with_base_guardrails: bool (default=False)\n  trace_attributes: Optional[dict[str, Any]] (default=None)\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)\n  locale: Optional[str] (default=None)\n  conversation_repository: Optional[FileMultiSourceConversationRepository] (default=None)\n  memory_manager: Optional[MemoryManager] (default=None)"
   },
   {
     "name": "create_default_orchestrator_with_subagent",
@@ -150,16 +150,16 @@
     "file": "agent_builder_sdk/agent_factory.py",
     "module": "agent_builder_sdk.agent_factory",
     "docstring": "Create a BaseOrchestrator instance with full memory and conversation support and subagent tools.\n\nThis function creates a fully-featured orchestrator with:\n- Episodic memory for storing agent experiences\n- Conversation tracking across multiple sources\n- Memory tools for agent self-reflection\n- Lifecycle hooks for conversation and memory events\n- Subagent tools for communication and discovery (mocked)\n\nIf your application has a running asyncio event loop, then use\ncreate_default_async_orchestrator_with_subagent instead. See BaseOrchestrator's documentation.\n\nArgs:\n    mcp_client: Optional MCP client for tool integration\n    storage_dir: Directory for agent data storage\n    system_prompt: Custom system prompt, defaults to test_orchestrator_prompt\n    custom_tools: Optional list of additional custom tools to add to the orchestrator\n    model_id: Optional model ID for Bedrock inference\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)\n    metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)\n\nReturns:\n    Configured BaseOrchestrator instance with memory, hooks, and tools",
-    "signature": "create_default_orchestrator_with_subagent(system_prompt: str, mcp_client: Optional[MCPClient] = None, storage_dir: str = '/tmp/orchestrator_agent', custom_tools: Optional[list[Any]] = None, model_id: str = 'anthropic.claude-sonnet-4-5-20250929-v1:0', model: Union[Model, str, None] = None, with_base_guardrails: bool = False, metrics_config: Optional[MetricsConfig] = None) -> BaseOrchestrator",
-    "description": "Parameters:\n  system_prompt: str (required) - Custom system prompt, defaults to test_orchestrator_prompt\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the orchestrator\n  model_id: str (default='anthropic.claude-sonnet-4-5-20250929-v1:0') - Optional model ID for Bedrock inference\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string (takes precedence over model_id)\n  with_base_guardrails: bool (default=False)\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)"
+    "signature": "create_default_orchestrator_with_subagent(system_prompt: str, mcp_client: Optional[MCPClient] = None, storage_dir: str = '/tmp/orchestrator_agent', custom_tools: Optional[list[Any]] = None, model_id: str = 'anthropic.claude-sonnet-4-5-20250929-v1:0', model: Union[Model, str, None] = None, boto_client_config: Optional[BotocoreConfig] = None, with_base_guardrails: bool = False, metrics_config: Optional[MetricsConfig] = None, locale: Optional[str] = None, conversation_repository: Optional[FileMultiSourceConversationRepository] = None, memory_manager: Optional[MemoryManager] = None) -> BaseOrchestrator",
+    "description": "Parameters:\n  system_prompt: str (required) - Custom system prompt, defaults to test_orchestrator_prompt\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the orchestrator\n  model_id: str (default='anthropic.claude-sonnet-4-5-20250929-v1:0') - Optional model ID for Bedrock inference\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string (takes precedence over model_id)\n  boto_client_config: Optional[BotocoreConfig] (default=None)\n  with_base_guardrails: bool (default=False)\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)\n  locale: Optional[str] (default=None)\n  conversation_repository: Optional[FileMultiSourceConversationRepository] (default=None)\n  memory_manager: Optional[MemoryManager] (default=None)"
   },
   {
     "name": "create_default_subagent",
     "kind": "function",
     "file": "agent_builder_sdk/agent_factory.py",
     "module": "agent_builder_sdk.agent_factory",
-    "docstring": "Create a BaseSubagent instance with minimal configuration.\n\nThis function creates a lightweight subagent without memory or conversation tracking.\n\nIf your application has a running asyncio event loop, then use create_default_async_subagent\ninstead. See BaseSubagent's documentation.\n\nArgs:\n    mcp_client: Optional MCP client for tool integration\n    system_prompt: Custom system prompt, defaults to simple assistant prompt\n    model: Optional Strands Model instance or model ID string\n    custom_tools: Optional list of additional custom tools to add to the subagent\n    metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)\n\nReturns:\n    Configured BaseSubagent instance",
-    "signature": "create_default_subagent(system_prompt: str, mcp_client: Optional[MCPClient] = None, model: Union[Model, str, None] = None, custom_tools: Optional[list[Any]] = None, metrics_config: Optional[MetricsConfig] = None) -> BaseSubagent",
+    "docstring": "Create a BaseSubagent instance with minimal configuration.\n\nThis function creates a lightweight subagent without memory or conversation tracking.\n\nIf your application has a running asyncio event loop, then use create_default_async_subagent\ninstead. See BaseSubagent's documentation.\n\nArgs:\n    mcp_client: Optional MCP client for tool integration\n    system_prompt: Custom system prompt, defaults to simple assistant prompt\n    model: Optional Strands Model instance or model ID string\n    custom_tools: Optional list of additional custom tools to add to the subagent\n    metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)\n    **kwargs: Compatibility shim — accepted and ignored. A runtime server calls every agent\n        factory with the *same* keyword arguments, and with streaming enabled that set includes\n        ``conversation_repository`` / ``memory_manager`` (the shared stores an orchestrator\n        needs). A sub-agent is stateless and uses neither, but the factory must still accept\n        them or the server's call would raise ``TypeError``; ``**kwargs`` absorbs them so one\n        call signature works for both agent types.\n\nReturns:\n    Configured BaseSubagent instance",
+    "signature": "create_default_subagent(system_prompt: str, mcp_client: Optional[MCPClient] = None, model: Union[Model, str, None] = None, custom_tools: Optional[list[Any]] = None, metrics_config: Optional[MetricsConfig] = None, **kwargs: Any) -> BaseSubagent",
     "description": "Parameters:\n  system_prompt: str (required) - Custom system prompt, defaults to simple assistant prompt\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the subagent\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)"
   },
   {
@@ -193,8 +193,8 @@
     "file": "agent_builder_sdk/agentic_framework/a2a_manager.py",
     "module": "agent_builder_sdk.agentic_framework.a2a_manager",
     "docstring": "Manager for A2A protocol operations (SendMessage, GetTask).",
-    "signature": "A2AManager()",
-    "description": "Extends: AgenticApiHelper\n\nMethods:\n  send_message(agent_instance_id: str, message: A2AMessage) -> Dict[str, Any]\n  send_task(agent_instance_id: str, task: A2ATask) -> Dict[str, Any]\n  get_task(task_id: str, agent_instance_id: str) -> Dict[str, Any]"
+    "signature": "A2AManager(streaming_client: Any = None, **kwargs: Any) -> None",
+    "description": "Extends: AgenticApiHelper\n\nParameters:\n  streaming_client: Any (default=None)\n\nMethods:\n  send_message(agent_instance_id: str, message: A2AMessage) -> Dict[str, Any]\n  stream_send_message(agent_instance_id: str, message: A2AMessage) -> Iterator[Dict[str, Any]]\n  send_task(agent_instance_id: str, task: A2ATask) -> Dict[str, Any]\n  get_task(task_id: str, agent_instance_id: str) -> Dict[str, Any]"
   },
   {
     "name": "A2AManager.get_task",
@@ -221,6 +221,14 @@
     "signature": "send_task(agent_instance_id: str, task: A2ATask) -> Dict[str, Any]"
   },
   {
+    "name": "A2AManager.stream_send_message",
+    "kind": "method",
+    "file": "agent_builder_sdk/agentic_framework/a2a_manager.py",
+    "module": "agent_builder_sdk.agentic_framework.a2a_manager",
+    "docstring": "Send a message via the A2A ConverseStream API and stream the reply as A2A frames.\n\nThe streaming counterpart of ``send_message``: instead of one buffered reply, the callee's\nresponse comes back as a live SSE stream of A2A frames, which this returns as an iterator of\nframe dicts (parsed by ``sse_reader``).\n\nArgs:\n    agent_instance_id: The agent instance ID to send the message to\n    message: The A2AMessage object to send\n\nReturns:\n    An iterator of A2A frame dicts. NOTE: the ``converse_stream`` call is issued eagerly, but\n    frames (and any mid-stream transport error, e.g. a dropped connection) surface while\n    iterating, not at call time.\n\nRaises:\n    ClientError: If the initial ConverseStream call fails.\n    ValueError: If this manager was built without a streaming client.",
+    "signature": "stream_send_message(agent_instance_id: str, message: A2AMessage) -> Iterator[Dict[str, Any]]"
+  },
+  {
     "name": "get_a2a_manager",
     "kind": "function",
     "file": "agent_builder_sdk/agentic_framework/a2a_manager.py",
@@ -236,7 +244,7 @@
     "module": "agent_builder_sdk.agentic_framework.agent_lifecycle",
     "docstring": "Manages agent instance lifecycle operations.",
     "signature": "AgentInstanceManager(**kwargs)",
-    "description": "Extends: AgenticApiHelper\n\nMethods:\n  list_agent_instances(requester_agent_instance_id: Optional[str] = None) -> dict\n  get_status(agent_instance_id: str) -> dict\n  update_status(agent_instance_id: str, status: str, status_reason: Optional[str] = None, agent_output: Optional[str] = None) -> dict\n  stop_agent(agent_instance_id: str) -> dict\n  set_running(agent_instance_id: str) -> dict\n  set_stopped(agent_instance_id: str, reason: Optional[str] = None) -> dict\n  set_failed(agent_instance_id: str, reason: Optional[str] = None) -> dict\n  is_invoked() -> bool"
+    "description": "Extends: AgenticApiHelper\n\nMethods:\n  list_agent_instances(requester_agent_instance_id: Optional[str] = None) -> dict\n  get_status(agent_instance_id: str) -> dict\n  update_status(agent_instance_id: str, status: str, status_reason: Optional[str] = None, agent_output: Optional[str] = None) -> dict\n  stop_agent(agent_instance_id: str) -> dict\n  set_running(agent_instance_id: str) -> dict\n  set_stopped(agent_instance_id: str, reason: Optional[str] = None) -> dict\n  set_failed(agent_instance_id: str, reason: Optional[str] = None) -> dict\n  set_idle(agent_instance_id: str, reason: Optional[str] = None) -> dict\n  restore(agent_id: str, agent_type: str) -> dict\n  is_invoked() -> bool"
   },
   {
     "name": "AgentInstanceManager.get_status",
@@ -263,12 +271,28 @@
     "signature": "list_agent_instances(requester_agent_instance_id: Optional[str] = None) -> dict"
   },
   {
+    "name": "AgentInstanceManager.restore",
+    "kind": "method",
+    "file": "agent_builder_sdk/agentic_framework/agent_lifecycle.py",
+    "module": "agent_builder_sdk.agentic_framework.agent_lifecycle",
+    "docstring": "Trigger agent restoration for session chaining.\n\nArgs:\n    agent_id: The agent identifier\n    agent_type: The agent type (ORCHESTRATOR_AGENT / SUB_AGENT)\n\nReturns:\n    dict: Response from the RestoreAgent API",
+    "signature": "restore(agent_id: str, agent_type: str) -> dict"
+  },
+  {
     "name": "AgentInstanceManager.set_failed",
     "kind": "method",
     "file": "agent_builder_sdk/agentic_framework/agent_lifecycle.py",
     "module": "agent_builder_sdk.agentic_framework.agent_lifecycle",
     "docstring": "Set agent instance status to FAILED.",
     "signature": "set_failed(agent_instance_id: str, reason: Optional[str] = None) -> dict"
+  },
+  {
+    "name": "AgentInstanceManager.set_idle",
+    "kind": "method",
+    "file": "agent_builder_sdk/agentic_framework/agent_lifecycle.py",
+    "module": "agent_builder_sdk.agentic_framework.agent_lifecycle",
+    "docstring": "Set agent instance status to IDLE.",
+    "signature": "set_idle(agent_instance_id: str, reason: Optional[str] = None) -> dict"
   },
   {
     "name": "AgentInstanceManager.set_running",
@@ -348,6 +372,15 @@
     "description": "Parameters:\n  requester_agent_instance_id: Optional[str] (default=None) - Optional ID to filter agents by requester. The requester is the agent instance that invoked the underlying agent."
   },
   {
+    "name": "idle_base_orchestrator_agent_instance",
+    "kind": "function",
+    "file": "agent_builder_sdk/agentic_framework/agent_lifecycle.py",
+    "module": "agent_builder_sdk.agentic_framework.agent_lifecycle",
+    "docstring": "Set base orchestrator instance to IDLE using environment variables.",
+    "signature": "idle_base_orchestrator_agent_instance(reason: Optional[str] = None) -> bool",
+    "description": "Parameters:\n  reason: Optional[str] (default=None)"
+  },
+  {
     "name": "initialize_agent_instance",
     "kind": "function",
     "file": "agent_builder_sdk/agentic_framework/agent_lifecycle.py",
@@ -364,6 +397,15 @@
     "docstring": "Initialize base orchestrator instance with provided context.\nReturn if agent is set to RUNNING",
     "signature": "initialize_base_orchestrator_agent_instance(workspace_id: str, job_id: str, agent_instance_id: str) -> bool",
     "description": "Parameters:\n  workspace_id: str (required)\n  job_id: str (required)\n  agent_instance_id: str (required)"
+  },
+  {
+    "name": "restore_agent",
+    "kind": "function",
+    "file": "agent_builder_sdk/agentic_framework/agent_lifecycle.py",
+    "module": "agent_builder_sdk.agentic_framework.agent_lifecycle",
+    "docstring": "Call RestoreAgent API to trigger session chaining.\n\nInvokes a new agent instance that restores from the current instance checkpoint,\nenabling seamless continuation across compute session boundaries.\nThe restored instance uses the same agent version as the running job.\n\nArgs:\n    workspace_id: The workspace ID\n    job_id: The job ID\n    agent_instance_id: The current agent instance ID to restore from\n    agent_id: The agent identifier\n    agent_type: The agent type (ORCHESTRATOR_AGENT / SUB_AGENT)",
+    "signature": "restore_agent(workspace_id: str, job_id: str, agent_instance_id: str, agent_id: str, agent_type: str) -> None",
+    "description": "Parameters:\n  workspace_id: str (required) - The workspace ID\n  job_id: str (required) - The job ID\n  agent_instance_id: str (required) - The current agent instance ID to restore from\n  agent_id: str (required) - The agent identifier\n  agent_type: str (required) - The agent type (ORCHESTRATOR_AGENT / SUB_AGENT)"
   },
   {
     "name": "set_agent_running",
@@ -397,9 +439,9 @@
     "kind": "function",
     "file": "agent_builder_sdk/agentic_framework/agent_lifecycle.py",
     "module": "agent_builder_sdk.agentic_framework.agent_lifecycle",
-    "docstring": "Wait for agent status to exit INVOKING state.\n\nArgs:\n    workspace_id: The workspace ID\n    job_id: The job ID\n    agent_instance_id: The agent instance ID\n    timeout: Maximum time to wait in seconds (default: 10)\n\nReturns:\n    Final agent status after waiting (could be RUNNING, INVOKED, etc.)",
+    "docstring": "Wait for agent status to exit INVOKING state.\n\nArgs:\n    workspace_id: The workspace ID\n    job_id: The job ID\n    agent_instance_id: The agent instance ID\n    timeout: Maximum time to wait in seconds\n\nReturns:\n    Final agent status after waiting (could be RUNNING, INVOKED, etc.)",
     "signature": "async wait_for_agent_non_invoking(workspace_id: str, job_id: str, agent_instance_id: str, timeout: int = 10) -> str",
-    "description": "Parameters:\n  workspace_id: str (required) - The workspace ID\n  job_id: str (required) - The job ID\n  agent_instance_id: str (required) - The agent instance ID\n  timeout: int (default=10) - Maximum time to wait in seconds (default: 10)"
+    "description": "Parameters:\n  workspace_id: str (required) - The workspace ID\n  job_id: str (required) - The job ID\n  agent_instance_id: str (required) - The agent instance ID\n  timeout: int (default=10) - Maximum time to wait in seconds"
   },
   {
     "name": "AgentRegistry",
@@ -520,7 +562,7 @@
     "module": "agent_builder_sdk.agentic_framework.artifact_store",
     "docstring": "Manages artifact storage operations.",
     "signature": "ArtifactStore()",
-    "description": "Extends: AgenticApiHelper\n\nMethods:\n  list_artifacts(agent_instance_id: str, category: CategoryType | None = None) -> abt.ListArtifactsResponseTypeDef\n  upload_artifact(content: bytes, digest: str, artifact_id: str | None = None, category_type: CategoryTypeType | None = None, file_type: FileTypeType | None = None, plan_step_id: str | None = None, label: str | None = None) -> str\n  download_artifact(artifact_id: str, destination_file_path: str) -> None"
+    "description": "Extends: AgenticApiHelper\n\nMethods:\n  list_artifacts(agent_instance_id: str, category: CategoryType | None = None, next_token: str | None = None, max_results: int | None = None) -> abt.ListArtifactsResponseTypeDef\n  upload_artifact(content: bytes, digest: str, artifact_id: str | None = None, category_type: CategoryTypeType | None = None, file_type: FileTypeType | None = None, plan_step_id: str | None = None, label: str | None = None) -> str\n  download_artifact(artifact_id: str, destination_file_path: str) -> None"
   },
   {
     "name": "ArtifactStore.download_artifact",
@@ -535,8 +577,8 @@
     "kind": "method",
     "file": "agent_builder_sdk/agentic_framework/artifact_store.py",
     "module": "agent_builder_sdk.agentic_framework.artifact_store",
-    "docstring": "List artifacts by agent instance ID and category type.",
-    "signature": "list_artifacts(agent_instance_id: str, category: CategoryType | None = None) -> abt.ListArtifactsResponseTypeDef"
+    "docstring": "List artifacts for an agent, newest first, optionally capped at max_results.",
+    "signature": "list_artifacts(agent_instance_id: str, category: CategoryType | None = None, next_token: str | None = None, max_results: int | None = None) -> abt.ListArtifactsResponseTypeDef"
   },
   {
     "name": "ArtifactStore.upload_artifact",
@@ -551,9 +593,18 @@
     "kind": "function",
     "file": "agent_builder_sdk/agentic_framework/client_factory.py",
     "module": "agent_builder_sdk.agentic_framework.client_factory",
-    "docstring": "Create boto3 client for AWS Transform Agentic API.\n\nArgs:\n    stage: Environment stage (defaults to env var)\n    region: AWS region (defaults to env var)\n    endpoint_url: Direct endpoint URL (overrides stage/region)\n    max_retries: Maximum retries for API calls\n    timeout: Timeout in seconds\n\nReturns:\n    Configured boto3 client",
-    "signature": "create_agentic_api_client(stage: Optional[str] = None, region: Optional[str] = None, endpoint_url: Optional[str] = None, max_retries: int = 3, timeout: int = 30) -> BaseClient",
-    "description": "Parameters:\n  stage: Optional[str] (default=None) - Environment stage (defaults to env var)\n  region: Optional[str] (default=None) - AWS region (defaults to env var)\n  endpoint_url: Optional[str] (default=None) - Direct endpoint URL (overrides stage/region)\n  max_retries: int (default=3) - Maximum retries for API calls\n  timeout: int (default=30) - Timeout in seconds"
+    "docstring": "Create boto3 client for AWS Transform Agentic API.\n\nArgs:\n    stage: Environment stage (defaults to env var)\n    region: AWS region (defaults to env var)\n    endpoint_url: Direct endpoint URL (overrides stage/region)\n    max_retries: Maximum retries for API calls\n    connect_timeout: TCP connect timeout in seconds\n    read_timeout: Read timeout in seconds\n\nReturns:\n    Configured boto3 client",
+    "signature": "create_agentic_api_client(stage: Optional[str] = None, region: Optional[str] = None, endpoint_url: Optional[str] = None, max_retries: int = 3, connect_timeout: int = 5, read_timeout: int = 30) -> BaseClient",
+    "description": "Parameters:\n  stage: Optional[str] (default=None) - Environment stage (defaults to env var)\n  region: Optional[str] (default=None) - AWS region (defaults to env var)\n  endpoint_url: Optional[str] (default=None) - Direct endpoint URL (overrides stage/region)\n  max_retries: int (default=3) - Maximum retries for API calls\n  connect_timeout: int (default=5) - TCP connect timeout in seconds\n  read_timeout: int (default=30) - Read timeout in seconds"
+  },
+  {
+    "name": "create_streaming_agentic_api_client",
+    "kind": "function",
+    "file": "agent_builder_sdk/agentic_framework/client_factory.py",
+    "module": "agent_builder_sdk.agentic_framework.client_factory",
+    "docstring": "Create boto3 client for the ATX ConverseStream (streaming) agentic API.\n\nMirrors ``create_agentic_api_client`` — same stage/region/endpoint_url resolution and\nthe same host — but targets the ``transformagentsstreamingservice`` service and uses a\nlarge read timeout so the long-lived SSE body isn't cut off mid-stream.\n\nArgs:\n    stage: Environment stage (defaults to env var)\n    region: AWS region (defaults to env var)\n    endpoint_url: Direct endpoint URL (overrides stage/region)\n    max_retries: Maximum retries for API calls\n    connect_timeout: TCP connect timeout in seconds\n    read_timeout: Per-read idle timeout in seconds, reset on every SSE chunk. This is not\n        a cap on total turn length and should outlast the platform streaming turn cap.\n\nReturns:\n    Configured boto3 client for the streaming service.",
+    "signature": "create_streaming_agentic_api_client(stage: Optional[str] = None, region: Optional[str] = None, endpoint_url: Optional[str] = None, max_retries: int = 3, connect_timeout: int = 5, read_timeout: int = 10 * 60) -> BaseClient",
+    "description": "Parameters:\n  stage: Optional[str] (default=None) - Environment stage (defaults to env var)\n  region: Optional[str] (default=None) - AWS region (defaults to env var)\n  endpoint_url: Optional[str] (default=None) - Direct endpoint URL (overrides stage/region)\n  max_retries: int (default=3) - Maximum retries for API calls\n  connect_timeout: int (default=5) - TCP connect timeout in seconds\n  read_timeout: int (default=10 * 60) - Per-read idle timeout in seconds, reset on every SSE chunk. This is not a cap on total turn length and should outlast the platform streaming turn cap."
   },
   {
     "name": "get_agentic_api_client",
@@ -562,6 +613,15 @@
     "module": "agent_builder_sdk.agentic_framework.client_factory",
     "docstring": "Get cached agentic API client.",
     "signature": "get_agentic_api_client() -> TransformAgenticServiceClient",
+    "description": ""
+  },
+  {
+    "name": "get_streaming_agentic_api_client",
+    "kind": "function",
+    "file": "agent_builder_sdk/agentic_framework/client_factory.py",
+    "module": "agent_builder_sdk.agentic_framework.client_factory",
+    "docstring": "Get cached streaming (ConverseStream) agentic API client.",
+    "signature": "get_streaming_agentic_api_client() -> BaseClient",
     "description": ""
   },
   {
@@ -705,7 +765,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/agentic_framework/job_manager.py",
     "module": "agent_builder_sdk.agentic_framework.job_manager",
-    "docstring": "Update job status.\n\nArgs:\n    status: The new job status\n    status_info: Optional status information\n\nReturns:\n    dict: Response from the API\n\nRaises:\n    Exception: If there's an error updating the job status",
+    "docstring": "Update job status.\n\nArgs:\n    status: The new job status\n    status_info: Optional status information\n\nReturns:\n    dict: Response from the API, or an empty dict if the update was\n        skipped because the job is already in a terminal state.\n\nRaises:\n    Exception: If there's an error updating the job status",
     "signature": "update_job_status(status: JobStatus, status_info: Optional[Dict[str, Any]] = None) -> dict"
   },
   {
@@ -724,7 +784,15 @@
     "module": "agent_builder_sdk.base_subagent.base_subagent",
     "docstring": "An asynchronous version of BaseSubagent.\n\nIf your application has a running asyncio event loop, then use this class, not BaseSubagent.\nThe equivalent of process_message is process_message_async.",
     "signature": "AsyncBaseSubagent()",
-    "description": "Extends: _BaseSubagent, AsyncBaseAgent[Union[str, ProcessMessageRequest], AgentResult]\n\nMethods:\n  async process_message_async(message: Union[str, ProcessMessageRequest]) -> AgentResult"
+    "description": "Extends: _BaseSubagent, AsyncBaseAgent[Union[str, ProcessMessageRequest], AgentResult], StreamingCapable\n\nMethods:\n  async process_message_async(message: Union[str, ProcessMessageRequest]) -> AgentResult\n  async process_message_stream(request: ProcessMessageRequest, conversation_id: str, cfg: StreamingConfig = DEFAULT_STREAMING_CONFIG) -> AsyncIterator[Dict[str, Any]]\n  get_streaming_hook_providers(cfg: StreamingConfig) -> List[HookProvider]\n  requires_context_id() -> bool"
+  },
+  {
+    "name": "AsyncBaseSubagent.get_streaming_hook_providers",
+    "kind": "method",
+    "file": "agent_builder_sdk/base_subagent/base_subagent.py",
+    "module": "agent_builder_sdk.base_subagent.base_subagent",
+    "docstring": "No hooks: a sub-agent's reply goes to another agent, not persisted to Chat.",
+    "signature": "get_streaming_hook_providers(cfg: StreamingConfig) -> List[HookProvider]"
   },
   {
     "name": "AsyncBaseSubagent.process_message_async",
@@ -733,6 +801,22 @@
     "module": "agent_builder_sdk.base_subagent.base_subagent",
     "docstring": "Asynchronously process a message and return the agent's response.\n\nArgs:\n    message: Either a string message or a ProcessMessageRequest object.\n            If a string is provided, it will be wrapped in a ProcessMessageRequest with empty context.\n\nReturns:\n    AgentResult containing:\n    - stop_reason: Why processing stopped ('end_turn', 'tool_use', 'max_tokens', etc.)\n    - message: Agent's response with content (List[ContentBlock]) and role\n    - metrics: Performance metrics from processing\n    - state: Additional event loop state information\n\n    See: https://strandsagents.com/latest/documentation/docs/api-reference/agent/#strands.agent.agent_result.AgentResult",
     "signature": "async process_message_async(message: Union[str, ProcessMessageRequest]) -> AgentResult"
+  },
+  {
+    "name": "AsyncBaseSubagent.process_message_stream",
+    "kind": "method",
+    "file": "agent_builder_sdk/base_subagent/base_subagent.py",
+    "module": "agent_builder_sdk.base_subagent.base_subagent",
+    "docstring": "Stream a turn as raw A2A frames (agent-to-agent, no AG-UI).\n\nThe streaming counterpart of ``process_message_async`` for a sub-agent. Drives Strands\n``stream_async`` and yields raw A2A frames (Strands event carried verbatim in each frame's\nDataPart — see ``raw_a2a_emitter``): a ``task`` opener, a ``working`` status-update per\nevent, then a terminal ``completed`` (or ``failed`` on error). Unlike the orchestrator's\n``_stream_message_async``, this is deliberately trimmed — no suggestion scope, no\npersist-to-chat, no AG-UI translation, no a2a ContextVars — because the consumer is another\nagent, not the WebApp.\n\n``conversation_id`` is accepted for signature parity with the orchestrator's streaming\nentry (the server's ``_handle_streaming`` passes it); the sub-agent is stateless and does\nnot thread it into history. A concurrent invocation on the same agent instance raises\nStrands ``ConcurrencyException``; it is surfaced as a terminal failed frame rather than\nescaping. ``cfg`` bounds the turn (``turn_timeout_seconds``).\n\nThis method owns only the terminal-failure framing; the turn itself runs in\n``_run_streaming_turn``. The connection has already returned 200 + SSE headers, so every\nfailure is surfaced as a terminal ``failed`` frame instead of a truncated stream (detail\nstays in the log). The turn-timeout case is handled inside ``_run_streaming_turn`` because\nit needs the timeout scope to confirm expiry.",
+    "signature": "async process_message_stream(request: ProcessMessageRequest, conversation_id: str, cfg: StreamingConfig = DEFAULT_STREAMING_CONFIG) -> AsyncIterator[Dict[str, Any]]"
+  },
+  {
+    "name": "AsyncBaseSubagent.requires_context_id",
+    "kind": "method",
+    "file": "agent_builder_sdk/base_subagent/base_subagent.py",
+    "module": "agent_builder_sdk.base_subagent.base_subagent",
+    "docstring": "No Chat routing, so contextId is optional.",
+    "signature": "requires_context_id() -> bool"
   },
   {
     "name": "BaseSubagent",
@@ -816,7 +900,7 @@
     "module": "agent_builder_sdk.checkpoint.checkpoint_manager",
     "docstring": "Manages checkpoint operations based on triggers.",
     "signature": "CheckpointManager(checkpoint_repository: CheckpointRepository, trigger: CheckpointTrigger)",
-    "description": "Parameters:\n  checkpoint_repository: CheckpointRepository (required)\n  trigger: CheckpointTrigger (required)\n\nMethods:\n  attempt_checkpoint() -> bool\n  force_checkpoint() -> bool"
+    "description": "Parameters:\n  checkpoint_repository: CheckpointRepository (required)\n  trigger: CheckpointTrigger (required)\n\nMethods:\n  attempt_checkpoint() -> bool\n  force_checkpoint() -> bool\n  restore_checkpoint(artifact_id: str) -> bool"
   },
   {
     "name": "CheckpointManager.attempt_checkpoint",
@@ -835,13 +919,21 @@
     "signature": "force_checkpoint() -> bool"
   },
   {
+    "name": "CheckpointManager.restore_checkpoint",
+    "kind": "method",
+    "file": "agent_builder_sdk/checkpoint/checkpoint_manager.py",
+    "module": "agent_builder_sdk.checkpoint.checkpoint_manager",
+    "docstring": "Roll back to a specific checkpoint, serialized against background checkpointing.",
+    "signature": "restore_checkpoint(artifact_id: str) -> bool"
+  },
+  {
     "name": "CheckpointRepository",
     "kind": "class",
     "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
     "docstring": "Manages agent checkpointing operations.",
-    "signature": "CheckpointRepository(workspace_id: str, job_id: str, agent_instance_id: str, checkpoint_location: Optional[str] = None, client=None, auto_check_state_object: Optional[bool] = False)",
-    "description": "Parameters:\n  workspace_id: str (required)\n  job_id: str (required)\n  agent_instance_id: str (required)\n  checkpoint_location: Optional[str] (default=None)\n  client (default=None)\n  auto_check_state_object: Optional[bool] (default=False)\n\nMethods:\n  is_restore_verified() -> bool\n  create_checkpoint(location: Optional[str] = None, agent_state: Optional[IAgentState] = None) -> Optional[str]\n  update_checkpoint(existing_checkpoint: ArtifactTypeDef | None = None, location: Optional[str] = None) -> bool\n  retrieve_checkpoint(destination_path: str) -> None\n  list_checkpoint() -> list[ArtifactTypeDef]\n  restore_if_available() -> bool"
+    "signature": "CheckpointRepository(workspace_id: str, job_id: str, agent_instance_id: str, checkpoint_location: Optional[str] = None, client=None, auto_check_state_object: Optional[bool] = False, max_checkpoints: Optional[int] = None)",
+    "description": "Parameters:\n  workspace_id: str (required)\n  job_id: str (required)\n  agent_instance_id: str (required)\n  checkpoint_location: Optional[str] (default=None)\n  client (default=None)\n  auto_check_state_object: Optional[bool] (default=False)\n  max_checkpoints: Optional[int] (default=None)\n\nMethods:\n  is_restore_verified() -> bool\n  create_checkpoint(location: Optional[str] = None, agent_state: Optional[IAgentState] = None) -> Optional[str]\n  update_checkpoint(existing_checkpoint: ArtifactTypeDef | None = None, location: Optional[str] = None) -> bool\n  retrieve_checkpoint(destination_path: str, artifact_id: Optional[str] = None) -> None\n  save_multi_checkpoint() -> bool\n  list_restorable_checkpoints() -> list[ArtifactTypeDef]\n  restore_checkpoint(artifact_id: str, destination_path: Optional[str] = None) -> None\n  list_checkpoint(limit: Optional[int] = None) -> list[ArtifactTypeDef]\n  restore_if_available() -> bool"
   },
   {
     "name": "CheckpointRepository.create_checkpoint",
@@ -864,8 +956,24 @@
     "kind": "method",
     "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
-    "docstring": "List available checkpoints for this agent (should be 0 or 1).",
-    "signature": "list_checkpoint() -> list[ArtifactTypeDef]"
+    "docstring": "STATE checkpoint artifacts for this agent, newest first.\n\nThe store returns artifacts in descending sort key order, so a limit\nfetches only the newest N instead of every artifact. A page can be short\nbecause of server side filtering, so keep paging until limit is met.",
+    "signature": "list_checkpoint(limit: Optional[int] = None) -> list[ArtifactTypeDef]"
+  },
+  {
+    "name": "CheckpointRepository.list_restorable_checkpoints",
+    "kind": "method",
+    "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
+    "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
+    "docstring": "Newest checkpoints first, capped at max_checkpoints.\n\nSorts the small fetched set so the artifactId tiebreak keeps same second\nentries deterministic.",
+    "signature": "list_restorable_checkpoints() -> list[ArtifactTypeDef]"
+  },
+  {
+    "name": "CheckpointRepository.restore_checkpoint",
+    "kind": "method",
+    "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
+    "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
+    "docstring": "Restore a specific past checkpoint by artifact id.",
+    "signature": "restore_checkpoint(artifact_id: str, destination_path: Optional[str] = None) -> None"
   },
   {
     "name": "CheckpointRepository.restore_if_available",
@@ -881,7 +989,15 @@
     "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
     "docstring": "Download and extract checkpoint.",
-    "signature": "retrieve_checkpoint(destination_path: str) -> None"
+    "signature": "retrieve_checkpoint(destination_path: str, artifact_id: Optional[str] = None) -> None"
+  },
+  {
+    "name": "CheckpointRepository.save_multi_checkpoint",
+    "kind": "method",
+    "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
+    "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
+    "docstring": "Append a new checkpoint rather than overwriting the previous one.",
+    "signature": "save_multi_checkpoint() -> bool"
   },
   {
     "name": "CheckpointRepository.update_checkpoint",
@@ -907,7 +1023,7 @@
     "module": "agent_builder_sdk.checkpoint.checkpoint_service",
     "docstring": "Manages checkpoint lifecycle for agent runtime.",
     "signature": "CheckpointService(storage_dir: str, strategy: Optional[CheckpointStrategy] = None, interval: int = 30)",
-    "description": "Parameters:\n  storage_dir: str (required) - Base directory for checkpoint storage\n  strategy: Optional[CheckpointStrategy] (default=None) - Checkpoint strategy enum (optional)\n  interval: int (default=30) - Checkpoint interval - turns or minutes (default: 30)\n\nMethods:\n  initialize(context: AgentRuntimeContext) -> None\n  create_callback() -> Optional[Callable]\n  async start_background_checkpointing() -> None\n  async shutdown() -> None"
+    "description": "Parameters:\n  storage_dir: str (required) - Base directory for checkpoint storage\n  strategy: Optional[CheckpointStrategy] (default=None) - Checkpoint strategy enum (optional)\n  interval: int (default=30) - Checkpoint interval in turns or minutes\n\nMethods:\n  initialize(context: AgentRuntimeContext) -> None\n  create_callback() -> Optional[Callable]\n  async start_background_checkpointing() -> None\n  async shutdown() -> None"
   },
   {
     "name": "CheckpointService.create_callback",
@@ -1149,6 +1265,15 @@
     "docstring": "Setup tracing based on tracing type configuration.",
     "signature": "setup_tracing(tracing_type: str)",
     "description": "Parameters:\n  tracing_type: str (required)"
+  },
+  {
+    "name": "validate_send_message_timeout",
+    "kind": "function",
+    "file": "agent_builder_sdk/constants.py",
+    "module": "agent_builder_sdk.constants",
+    "docstring": "Return ``timeout``, logging a warning if it exceeds MAX_SEND_MESSAGE_TIMEOUT_SECONDS.\n\nThe value is kept as configured so existing agents keep working. A value above the maximum means\nthe platform can cut the call off before the agent's acknowledgment arrives.",
+    "signature": "validate_send_message_timeout(timeout: int) -> int",
+    "description": "Parameters:\n  timeout: int (required)"
   },
   {
     "name": "AgentCapabilities",
@@ -1747,6 +1872,15 @@
     "description": ""
   },
   {
+    "name": "get_max_checkpoints",
+    "kind": "function",
+    "file": "agent_builder_sdk/env_var.py",
+    "module": "agent_builder_sdk.env_var",
+    "docstring": "Max retained checkpoints, or None for single checkpoint mode.\n\nNone when unset, non integer, or not above 1. Values above the cap are clamped.",
+    "signature": "get_max_checkpoints() -> Optional[int]",
+    "description": ""
+  },
+  {
     "name": "has_mde_environment",
     "kind": "function",
     "file": "agent_builder_sdk/env_var.py",
@@ -1799,6 +1933,15 @@
     "docstring": "",
     "signature": "validate_required_env_vars()",
     "description": ""
+  },
+  {
+    "name": "AuthTokenUnavailableError",
+    "kind": "class",
+    "file": "agent_builder_sdk/errors.py",
+    "module": "agent_builder_sdk.errors",
+    "docstring": "The agent auth token could not be read from the credentials file.\n\nMay be transient: the token is written by a separate refresh process, so a read that\nfinds the file unreadable or without the token key can succeed on a later attempt, and\nretrieve_auth_token re-reads a bounded number of times before raising this. A missing\nenv var or missing file is treated as configuration and is not retried.\nAlso subclasses ValueError, which this used to be raised as, so existing callers that\ncatch ValueError keep working.",
+    "signature": "AuthTokenUnavailableError()",
+    "description": "Extends: InternalBaseAgentError, ValueError"
   },
   {
     "name": "BaseAgentError",
@@ -2000,6 +2143,48 @@
     "module": "agent_builder_sdk.interfaces",
     "docstring": "Process a message request and return a structured response.\n\nThe default implementation creates an asyncio event loop in another\nthread (taken from a thread pool), and then runs process_message_async\nwithin. If your application already has a running event loop, then you\nshould use process_message_async instead.\n\nArgs:\n    request: The message request containing the message content and\n            conversation context.\n\nReturns:\n    A structured response containing the agent result",
     "signature": "process_message(request: T) -> R"
+  },
+  {
+    "name": "StreamingCapable",
+    "kind": "class",
+    "file": "agent_builder_sdk/interfaces.py",
+    "module": "agent_builder_sdk.interfaces",
+    "docstring": "Capability contract for agents that support streaming (message/stream).\n\nAn agent declares \"I can stream\" by inheriting this; not inheriting means not supported\n(e.g. the sync agents don't). Inheriting means implementing every method below, so the\nserver can drive a streaming turn and read the agent's streaming policy without knowing\nthe concrete agent type. Streaming is async-only, so this lives only on async agents.",
+    "signature": "StreamingCapable()",
+    "description": "Extends: ABC\n\nMethods:\n  process_message_stream(request: 'ProcessMessageRequest', conversation_id: str, cfg: 'StreamingConfig') -> AsyncIterator[Dict[str, Any]]\n  get_streaming_hook_providers(cfg: 'StreamingConfig') -> 'List[HookProvider]'\n  requires_context_id() -> bool"
+  },
+  {
+    "name": "StreamingCapable.get_streaming_hook_providers",
+    "kind": "method",
+    "file": "agent_builder_sdk/interfaces.py",
+    "module": "agent_builder_sdk.interfaces",
+    "docstring": "Hooks to attach to a per-turn streaming agent (e.g. response persistence). Empty if none.",
+    "signature": "get_streaming_hook_providers(cfg: 'StreamingConfig') -> 'List[HookProvider]'"
+  },
+  {
+    "name": "StreamingCapable.process_message_stream",
+    "kind": "method",
+    "file": "agent_builder_sdk/interfaces.py",
+    "module": "agent_builder_sdk.interfaces",
+    "docstring": "Stream one turn as A2A frames.",
+    "signature": "process_message_stream(request: 'ProcessMessageRequest', conversation_id: str, cfg: 'StreamingConfig') -> AsyncIterator[Dict[str, Any]]"
+  },
+  {
+    "name": "StreamingCapable.requires_context_id",
+    "kind": "method",
+    "file": "agent_builder_sdk/interfaces.py",
+    "module": "agent_builder_sdk.interfaces",
+    "docstring": "Whether a streaming turn must carry a contextId (the reply-routing key).",
+    "signature": "requires_context_id() -> bool"
+  },
+  {
+    "name": "get_locale_instruction",
+    "kind": "function",
+    "file": "agent_builder_sdk/locale_utils.py",
+    "module": "agent_builder_sdk.locale_utils",
+    "docstring": "Return a system prompt instruction for the given locale.\n\nReturns empty string for English, None, or unknown locales.\nAgents must explicitly call this method to opt in to locale-aware responses.",
+    "signature": "get_locale_instruction(locale: Optional[str]) -> str",
+    "description": "Parameters:\n  locale: Optional[str] (required)"
   },
   {
     "name": "configure_logging",
@@ -2657,8 +2842,8 @@
     "file": "agent_builder_sdk/messages/message_handler.py",
     "module": "agent_builder_sdk.messages.message_handler",
     "docstring": "Handles A2A message processing operations with extension handler support.\n\nProcesses incoming A2A messages through configured extension handlers (e.g., acknowledgment)\nbefore routing to agent processing. Extension handlers can intercept requests to provide\nimmediate responses while allowing background processing to continue.\n\nExtension Negotiation:\n- Parses extension URIs from incoming message.extensions\n- Matches against supported extension handlers by URI\n- Logs supported extensions that are processed\n- Logs and ignores unsupported extensions",
-    "signature": "MessageHandler(queue: Optional[QueueService] = None, agent: Optional[AnyBaseAgent[str, AgentResult]] = None, timeout: int = 28, delayed_timeout: int = 300, extension_handlers: Optional[Sequence[BaseExtensionHandler]] = None, task_manager: Optional[TaskManager] = None)",
-    "description": "Parameters:\n  queue: Optional[QueueService] (default=None) - QueueService for orchestrator agents (optional, mutually exclusive with agent)\n  agent: Optional[AnyBaseAgent[str, AgentResult]] (default=None) - BaseAgent for direct processing (optional, mutually exclusive with queue)\n  timeout: int (default=28) - Request timeout in seconds\n  delayed_timeout: int (default=300) - Extended timeout for delayed responses\n  extension_handlers: Optional[Sequence[BaseExtensionHandler]] (default=None) - List of extension handlers for processing A2A extensions (e.g., acknowledgment)\n  task_manager: Optional[TaskManager] (default=None) - TaskManager for task creation and management (optional, experimental)\n\nMethods:\n  async send_message(request: InvocationRequest) -> SendMessageOutput"
+    "signature": "MessageHandler(queue: Optional[QueueService] = None, agent: Optional[AnyBaseAgent[str, AgentResult]] = None, timeout: int = DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS, delayed_timeout: int = DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS, extension_handlers: Optional[Sequence[BaseExtensionHandler]] = None, task_manager: Optional[TaskManager] = None)",
+    "description": "Parameters:\n  queue: Optional[QueueService] (default=None) - QueueService for orchestrator agents (optional, mutually exclusive with agent)\n  agent: Optional[AnyBaseAgent[str, AgentResult]] (default=None) - BaseAgent for direct processing (optional, mutually exclusive with queue)\n  timeout: int (default=DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS) - Request timeout in seconds. Above MAX_SEND_MESSAGE_TIMEOUT_SECONDS (28s) logs a warning\n  delayed_timeout: int (default=DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS) - Extended timeout for delayed responses\n  extension_handlers: Optional[Sequence[BaseExtensionHandler]] (default=None) - List of extension handlers for processing A2A extensions (e.g., acknowledgment)\n  task_manager: Optional[TaskManager] (default=None) - TaskManager for task creation and management (optional, experimental)\n\nMethods:\n  async send_message(request: InvocationRequest) -> SendMessageOutput"
   },
   {
     "name": "MessageHandler.send_message",
@@ -2905,7 +3090,15 @@
     "module": "agent_builder_sdk.orchestrator_strands.base_orchestrator",
     "docstring": "An asynchronous version of BaseOrchestrator.\n\nIf your application has a running asyncio event loop, then use this class, not BaseOrchestrator.\nThe equivalent of process_message is process_message_async.\n\nTool Context:\n    Tools decorated with @tool(context=True) receive a ToolContext object with:\n    - invocation_state: Dict containing kwargs passed to invoke_with_source_async/process_message_async\n      - a2a_context: A2AContext object with context_id for A2A messaging (if provided)\n      - Additional custom kwargs can be passed through invoke_kwargs",
     "signature": "AsyncBaseOrchestrator()",
-    "description": "Extends: _BaseOrchestrator, AsyncBaseAgent[ProcessMessageRequest, AgentResult]\n\nMethods:\n  messages() -> Messages\n  messages(messages: Messages) -> None\n  async process_message_async(request: ProcessMessageRequest) -> AgentResult\n  async invoke_with_source_async(message: str, source_id: str, source_type: MessageSourceType, **kwargs) -> AgentResult"
+    "description": "Extends: _BaseOrchestrator, AsyncBaseAgent[ProcessMessageRequest, AgentResult], StreamingCapable\n\nMethods:\n  messages() -> Messages\n  messages(messages: Messages) -> None\n  async process_message_async(request: ProcessMessageRequest) -> AgentResult\n  async invoke_with_source_async(message: str, source_id: str, source_type: MessageSourceType, **kwargs) -> AgentResult\n  async process_message_stream(request: ProcessMessageRequest, conversation_id: str, cfg: StreamingConfig = DEFAULT_STREAMING_CONFIG) -> AsyncIterator[Dict[str, Any]]\n  get_streaming_hook_providers(cfg: StreamingConfig) -> List[HookProvider]\n  requires_context_id() -> bool"
+  },
+  {
+    "name": "AsyncBaseOrchestrator.get_streaming_hook_providers",
+    "kind": "method",
+    "file": "agent_builder_sdk/orchestrator_strands/base_orchestrator.py",
+    "module": "agent_builder_sdk.orchestrator_strands.base_orchestrator",
+    "docstring": "Persist each streamed turn back to Chat (the buffered path persists via its return\nvalue; a stream has none, so the agent persists its own reply).",
+    "signature": "get_streaming_hook_providers(cfg: StreamingConfig) -> List[HookProvider]"
   },
   {
     "name": "AsyncBaseOrchestrator.invoke_with_source_async",
@@ -2940,6 +3133,22 @@
     "signature": "async process_message_async(request: ProcessMessageRequest) -> AgentResult"
   },
   {
+    "name": "AsyncBaseOrchestrator.process_message_stream",
+    "kind": "method",
+    "file": "agent_builder_sdk/orchestrator_strands/base_orchestrator.py",
+    "module": "agent_builder_sdk.orchestrator_strands.base_orchestrator",
+    "docstring": "Stream a turn as A2A frames. The streaming counterpart of process_message_async:\nsame source classification, but delegates to _stream_message_async instead of\ninvoke_with_source_async.",
+    "signature": "async process_message_stream(request: ProcessMessageRequest, conversation_id: str, cfg: StreamingConfig = DEFAULT_STREAMING_CONFIG) -> AsyncIterator[Dict[str, Any]]"
+  },
+  {
+    "name": "AsyncBaseOrchestrator.requires_context_id",
+    "kind": "method",
+    "file": "agent_builder_sdk/orchestrator_strands/base_orchestrator.py",
+    "module": "agent_builder_sdk.orchestrator_strands.base_orchestrator",
+    "docstring": "contextId is the key Chat routes the persisted reply by.",
+    "signature": "requires_context_id() -> bool"
+  },
+  {
     "name": "BaseOrchestrator",
     "kind": "class",
     "file": "agent_builder_sdk/orchestrator_strands/base_orchestrator.py",
@@ -2972,6 +3181,15 @@
     "docstring": "Types of message sources.",
     "signature": "MessageSourceType()",
     "description": "Extends: str, Enum"
+  },
+  {
+    "name": "classify_source",
+    "kind": "function",
+    "file": "agent_builder_sdk/orchestrator_strands/conversation/constants.py",
+    "module": "agent_builder_sdk.orchestrator_strands.conversation.constants",
+    "docstring": "Resolve (source_id, source_type) from a request context.\n\nAgent-type-neutral: it maps context fields to a source id + type, used both to key the\nstreaming per-source agent pool and by the orchestrator's own turn processing.",
+    "signature": "classify_source(context: 'ConversationContext') -> Tuple[str, 'MessageSourceType']",
+    "description": "Parameters:\n  context: 'ConversationContext' (required)"
   },
   {
     "name": "FileMultiSourceConversationRepository",
@@ -3340,7 +3558,7 @@
     "module": "agent_builder_sdk.orchestrator_strands.tools.send_message_tools",
     "docstring": "Send message tools for communicating with other agents via ATX platform.",
     "signature": "SendMessageTools()",
-    "description": "Methods:\n  send_message_to_subagent(subagent_instance_id: str, message: str)\n  async async_send_message_to_subagent(subagent_instance_id: str, message: str)"
+    "description": "Methods:\n  send_message_to_subagent(subagent_instance_id: str, message: str)\n  async async_send_message_to_subagent(subagent_instance_id: str, message: str)\n  async stream_message_to_subagent(subagent_instance_id: str, message: str) -> str\n  async send_message_to_subagent_and_relay(subagent_instance_id: str, message: str, tool_context: ToolContext) -> AsyncIterator[Any]"
   },
   {
     "name": "SendMessageTools.async_send_message_to_subagent",
@@ -3355,8 +3573,24 @@
     "kind": "method",
     "file": "agent_builder_sdk/orchestrator_strands/tools/send_message_tools.py",
     "module": "agent_builder_sdk.orchestrator_strands.tools.send_message_tools",
-    "docstring": "Send a message to a subagent.\n\nArgs:\n    subagent_instance_id: The ID of the subagent to send the message to\n    message: The text message to send to the subagent\n\nReturns:\n    Response from the subagent\n\nExample:\n    response = send_message_to_subagent(\"subagent-123\", \"What is the status?\")",
+    "docstring": "Send a message to a subagent and get its reply back so YOU keep working.\n\nUse this to ask a subagent something and then act on its reply yourself (reason over it,\ncall more tools, compose your own answer). The reply comes back as this tool's result and\nyour turn continues; nothing is streamed to the user. The reply is fetched in one blocking\ncall (no incremental progress).\n\nArgs:\n    subagent_instance_id: The ID of the subagent to send the message to\n    message: The text message to send to the subagent\n\nReturns:\n    Response from the subagent\n\nExample:\n    response = send_message_to_subagent(\"subagent-123\", \"What is the status?\")",
     "signature": "send_message_to_subagent(subagent_instance_id: str, message: str)"
+  },
+  {
+    "name": "SendMessageTools.send_message_to_subagent_and_relay",
+    "kind": "method",
+    "file": "agent_builder_sdk/orchestrator_strands/tools/send_message_tools.py",
+    "module": "agent_builder_sdk.orchestrator_strands.tools.send_message_tools",
+    "docstring": "Send a message to a subagent and stream its answer LIVE to the user as YOUR final answer.\n\nUse this ONLY when the subagent's answer IS the answer the user should receive and you have\nnothing to add — you are just the channel. The subagent's reply streams to the user in real\ntime and this ENDS your turn: you will NOT get to respond again (its reply is still recorded\nin your context).\n\nIf instead you need to read the subagent's answer and then keep working (reason over it, call\nmore tools, or compose your own reply), use a tool that returns the answer to you rather than\nrelaying it.\n\nArgs:\n    subagent_instance_id: The ID of the subagent to send the message to\n    message: The text message to send to the subagent\n\nReturns:\n    The subagent's final answer (which becomes your final answer to the user), or an error\n    description if the subagent failed or did not respond in time — in which case your turn\n    continues normally.\n\nExample:\n    answer = await send_message_to_subagent_and_relay(\"subagent-123\", \"Weather in NYC?\")",
+    "signature": "async send_message_to_subagent_and_relay(subagent_instance_id: str, message: str, tool_context: ToolContext) -> AsyncIterator[Any]"
+  },
+  {
+    "name": "SendMessageTools.stream_message_to_subagent",
+    "kind": "method",
+    "file": "agent_builder_sdk/orchestrator_strands/tools/send_message_tools.py",
+    "module": "agent_builder_sdk.orchestrator_strands.tools.send_message_tools",
+    "docstring": "Stream a subagent's reply, aggregate its final answer, and return it so YOU keep working.\n\nUse this to ask a subagent something and then act on its reply yourself (reason over it,\ncall more tools, compose your own answer). You get the full aggregated answer back as this\ntool's result and your turn continues; nothing is streamed to the user.\n\nArgs:\n    subagent_instance_id: The ID of the subagent to send the message to\n    message: The text message to send to the subagent\n\nReturns:\n    The subagent's aggregated final-answer text, or a short error description (this tool never\n    raises) if the subagent failed, timed out, was truncated, or returned no content — in\n    which case you continue normally and decide the next step.\n\nExample:\n    answer = await stream_message_to_subagent(\"subagent-123\", \"Summarize the log.\")",
+    "signature": "async stream_message_to_subagent(subagent_instance_id: str, message: str) -> str"
   },
   {
     "name": "SubagentRegistryTools",
@@ -3472,8 +3706,8 @@
     "file": "agent_builder_sdk/server/agent_runtime_server.py",
     "module": "agent_builder_sdk.server.agent_runtime_server",
     "docstring": "Agent Runtime Server compatible with multiple agent execution environments.\n\nProvides JSON-RPC endpoints for agent communication, message processing, and health monitoring.\nSupports both Bedrock AgentCore runtime protocols and ATX internal messaging formats.\nIncludes support for extension handlers to process A2A extensions like acknowledgments.",
-    "signature": "AgentRuntimeServer(agent_factory: 'AgentFactory', host: str = '0.0.0.0', port: int = 8080, storage_dir: str = '/tmp/agent_runtime', binary_location: str = '/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp', mcp_client: Optional[MCPClient] = None, queue_storage_path: Optional[str] = None, timeout: int = 28, delayed_timeout: int = 300, token_refresh_buffer: int = 40, token_refreshed_event: Optional['EventType'] = None, checkpoint_strategy: Optional[CheckpointStrategy] = None, checkpoint_interval: int = 30, auto_transition_job_to_executing: bool = True, extension_handlers: Optional[Sequence[BaseExtensionHandler]] = None, task_manager_factory: Optional[Callable[..., TaskManager]] = None, notification_processors: Optional[Dict[NotificationType, NotificationProcessor]] = None, tracing: Optional[str] = None)",
-    "description": "Extends: BaseServer\n\nParameters:\n  agent_factory: 'AgentFactory' (required) - Factory function for creating custom agents (required)\n  host: str (default='0.0.0.0') - Server host address (default: \"0.0.0.0\")\n  port: int (default=8080) - Server port (default: 8080)\n  storage_dir: str (default='/tmp/agent_runtime') - Directory for agent data storage\n  binary_location: str (default='/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp') - Path to the MCP binary for tool integration (used if mcp_client not provided)\n  mcp_client: Optional[MCPClient] (default=None) - Pre-configured MCPClient instance (optional). If provided, takes precedence over binary_location.\n  queue_storage_path: Optional[str] (default=None) - DEPRECATED - use storage_dir instead (backward compatibility only)\n  timeout: int (default=28) - Timeout in seconds for waiting for synchronous responses\n  delayed_timeout: int (default=300) - Timeout in seconds for waiting for asynchronous responses after\n  token_refresh_buffer: int (default=40) - Buffer in seconds before token expiration to refresh (default: 40)\n  token_refreshed_event: Optional['EventType'] (default=None) - Callback event that is signaled after each successful token refresh. The refresh process calls ``.set()`` once the new token has been written. The consumer should call ``.wait()`` to block until the signal arrives, then call ``.clear()`` to reset the event.\n  checkpoint_strategy: Optional[CheckpointStrategy] (default=None) - Checkpoint strategy enum (optional)\n  checkpoint_interval: int (default=30) - Checkpoint interval - turns or minutes (default: 30)\n  auto_transition_job_to_executing: bool (default=True) - Automatically transition job from ASSESSING to EXECUTING on agent initialization (default: True)\n  extension_handlers: Optional[Sequence[BaseExtensionHandler]] (default=None) - List of extension handlers that will be used by the MessageHandler for processing A2A extensions (e.g., acknowledgment)\n  task_manager_factory: Optional[Callable[..., TaskManager]] (default=None) - Factory function for creating TaskManager. Can accept **kwargs for maximum flexibility.\n  notification_processors: Optional[Dict[NotificationType, NotificationProcessor]] (default=None) - Dict mapping NotificationType to NotificationProcessor instances for custom notification handling (optional).\n  tracing: Optional[str] (default=None) - Type of tracing to use (cloudwatch or local) (optional)\n\nMethods:\n  async initialize_agent(auth_token: Optional[str] = None) -> None\n  async handle_mde_notification(request: Dict[str, Any]) -> Dict[str, Any]\n  async handle_stop(params: Dict[str, Any]) -> Dict[str, Any]\n  start() -> None"
+    "signature": "AgentRuntimeServer(agent_factory: 'AgentFactory', host: str = '0.0.0.0', port: int = 8080, storage_dir: str = '/tmp/agent_runtime', binary_location: str = '/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp', mcp_client: Optional[MCPClient] = None, queue_storage_path: Optional[str] = None, timeout: int = DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS, delayed_timeout: int = DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS, token_refresh_buffer: int = 40, token_refreshed_event: Optional['EventType'] = None, checkpoint_strategy: Optional[CheckpointStrategy] = None, checkpoint_interval: int = 30, auto_transition_job_to_executing: bool = True, extension_handlers: Optional[Sequence[BaseExtensionHandler]] = None, task_manager_factory: Optional[Callable[..., TaskManager]] = None, notification_processors: Optional[Dict[NotificationType, NotificationProcessor]] = None, tracing: Optional[str] = None, streaming_config: Optional['StreamingConfig'] = None)",
+    "description": "Extends: BaseServer\n\nParameters:\n  agent_factory: 'AgentFactory' (required) - Factory function for creating custom agents (required)\n  host: str (default='0.0.0.0') - Server host address\n  port: int (default=8080) - Server port\n  storage_dir: str (default='/tmp/agent_runtime') - Base directory for all agent runtime data\n  binary_location: str (default='/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp') - Path to the MCP binary for tool integration (used if mcp_client not provided)\n  mcp_client: Optional[MCPClient] (default=None) - Pre-configured MCPClient instance (optional). If provided, takes precedence over binary_location.\n  queue_storage_path: Optional[str] (default=None) - DEPRECATED - use storage_dir instead (backward compatibility only)\n  timeout: int (default=DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS) - Timeout in seconds for waiting for synchronous message/send responses. Defaults to DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS (28s). A value above MAX_SEND_MESSAGE_TIMEOUT_SECONDS\n  delayed_timeout: int (default=DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS) - Timeout in seconds for waiting for asynchronous responses, applied after the synchronous ``timeout`` window expires\n  token_refresh_buffer: int (default=40) - Buffer in seconds before token expiration to refresh\n  token_refreshed_event: Optional['EventType'] (default=None) - Callback event that is signaled after each successful token refresh. The refresh process calls ``.set()`` once the new token has been written. The consumer should call ``.wait()`` to block until the signal arrives, then call ``.clear()`` to reset the event.\n  checkpoint_strategy: Optional[CheckpointStrategy] (default=None) - Checkpoint strategy enum (optional)\n  checkpoint_interval: int (default=30) - Checkpoint interval in turns or minutes\n  auto_transition_job_to_executing: bool (default=True) - Automatically transition job from ASSESSING to EXECUTING on agent initialization\n  extension_handlers: Optional[Sequence[BaseExtensionHandler]] (default=None) - List of extension handlers that will be used by the MessageHandler for processing A2A extensions (e.g., acknowledgment)\n  task_manager_factory: Optional[Callable[..., TaskManager]] (default=None) - Factory function for creating TaskManager. Can accept **kwargs for maximum flexibility.\n  notification_processors: Optional[Dict[NotificationType, NotificationProcessor]] (default=None) - Dict mapping NotificationType to NotificationProcessor instances for custom notification handling (optional).\n  tracing: Optional[str] (default=None) - Type of tracing to use (cloudwatch or local) (optional)\n  streaming_config: Optional['StreamingConfig'] (default=None) - Opt-in to streaming (message/stream). None (default) means the server does not serve message/stream and behaves exactly as before. Passing a\n\nMethods:\n  async initialize_agent(auth_token: Optional[str] = None) -> None\n  async handle_mde_notification(request: Dict[str, Any]) -> Dict[str, Any]\n  async handle_stop(params: Dict[str, Any]) -> Dict[str, Any]\n  start() -> None"
   },
   {
     "name": "AgentRuntimeServer.handle_mde_notification",
@@ -3488,7 +3722,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/server/agent_runtime_server.py",
     "module": "agent_builder_sdk.server.agent_runtime_server",
-    "docstring": "Handle stop agent request for orchestrator agents.\n\nAttempts to stop all subagents first, then stops the orchestrator agent.\nThe orchestrator shutdown proceeds regardless of subagent shutdown failures.\nEach shutdown operation is retried up to 3 times with exponential backoff.\n\nArgs:\n    params: Request parameters containing agentInstanceId\n\nReturns:\n    Dict containing:\n        - message: Summary of shutdown results\n        - agentInstanceId: The orchestrator agent instance ID\n        - failedSubagents: List of subagent IDs that failed to stop\n\nRaises:\n    ValueError: If agentInstanceId is missing from params",
+    "docstring": "Handle stop agent request for orchestrator agents.\n\nAttempts to stop all subagents first, then stops the orchestrator agent.\nThe orchestrator shutdown proceeds regardless of subagent shutdown failures.\nEach shutdown operation is retried with exponential backoff (see shutdown_with_retry).\n\nArgs:\n    params: Request parameters containing agentInstanceId\n\nReturns:\n    Dict containing:\n        - message: Summary of shutdown results\n        - agentInstanceId: The orchestrator agent instance ID\n        - failedSubagents: List of subagent IDs that failed to stop\n\nRaises:\n    ValueError: If agentInstanceId is missing from params",
     "signature": "async handle_stop(params: Dict[str, Any]) -> Dict[str, Any]"
   },
   {
@@ -3679,7 +3913,15 @@
     "module": "agent_builder_sdk.server.server_models",
     "docstring": "Agent runtime context containing workspace, job, and instance identifiers.",
     "signature": "AgentRuntimeContext()",
-    "description": ""
+    "description": "Methods:\n  get_locale_instruction() -> str"
+  },
+  {
+    "name": "AgentRuntimeContext.get_locale_instruction",
+    "kind": "method",
+    "file": "agent_builder_sdk/server/server_models.py",
+    "module": "agent_builder_sdk.server.server_models",
+    "docstring": "Return a system prompt instruction for the agent's current locale.",
+    "signature": "get_locale_instruction() -> str"
   },
   {
     "name": "StatelessAgentRuntimeServer",
@@ -3688,7 +3930,7 @@
     "module": "agent_builder_sdk.server.stateless_agent_runtime_server",
     "docstring": "Stateless Agent Runtime Server compatible with multiple agent execution environments.\n\nProvides JSON-RPC endpoints for agent communication, message processing, and health monitoring.\nSupports both Bedrock AgentCore runtime protocols and ATX internal messaging formats.",
     "signature": "StatelessAgentRuntimeServer(agent_factory: Callable[..., AnyBaseAgent[str, AgentResult]], host: str = '0.0.0.0', port: int = 8080, binary_location: str = '/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp', storage_dir: str = '/tmp/orchestrator_agent', auto_transition_job_to_executing: bool = True, tracing: Optional[str] = None)",
-    "description": "Extends: BaseServer\n\nParameters:\n  agent_factory: Callable[..., AnyBaseAgent[str, AgentResult]] (required) - Factory function for creating custom agents (required)\n  host: str (default='0.0.0.0') - Server host address (default: \"0.0.0.0\")\n  port: int (default=8080) - Server port (default: 8080)\n  binary_location: str (default='/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp') - Path to the MCP binary for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  auto_transition_job_to_executing: bool (default=True) - Automatically transition job from ASSESSING to EXECUTING on agent initialization (default: True)\n  tracing: Optional[str] (default=None) - Type of tracing to use (optional)\n\nMethods:\n  async initialize_agent(auth_token: Optional[str] = None) -> None\n  async handle_mde_notification(request: Dict[str, Any]) -> Dict[str, Any]\n  start() -> None"
+    "description": "Extends: BaseServer\n\nParameters:\n  agent_factory: Callable[..., AnyBaseAgent[str, AgentResult]] (required) - Factory function for creating custom agents (required)\n  host: str (default='0.0.0.0') - Server host address\n  port: int (default=8080) - Server port\n  binary_location: str (default='/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp') - Path to the MCP binary for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  auto_transition_job_to_executing: bool (default=True) - Automatically transition job from ASSESSING to EXECUTING on agent initialization\n  tracing: Optional[str] (default=None) - Type of tracing to use (optional)\n\nMethods:\n  async initialize_agent(auth_token: Optional[str] = None) -> None\n  async handle_mde_notification(request: Dict[str, Any]) -> Dict[str, Any]\n  start() -> None"
   },
   {
     "name": "StatelessAgentRuntimeServer.handle_mde_notification",
@@ -3713,6 +3955,31 @@
     "module": "agent_builder_sdk.server.stateless_agent_runtime_server",
     "docstring": "Start the Stateless Agent Runtime Server with FastAPI\n\nInitializes the message handler and starts the FastAPI server with uvicorn. Supports only sync\nrequest processing modes.",
     "signature": "start() -> None"
+  },
+  {
+    "name": "StreamingAgentPool",
+    "kind": "class",
+    "file": "agent_builder_sdk/server/streaming_agent_pool.py",
+    "module": "agent_builder_sdk.server.streaming_agent_pool",
+    "docstring": "Lazily builds and caches one streaming agent per source id.\n\nThe pool is scoped to a single AgentCore runtime session (one job, one process). It\ncaches one agent per distinct source id and evicts entries idle longer than\n``idle_ttl_seconds``, so memory stays bounded by the number of *recently active*\nsources rather than every source seen for the session's lifetime.\n\nArgs:\n    create_agent: Coroutine that builds an agent for a given per-source storage\n        directory. The pool supplies the directory; everything else (shared model,\n        shared MCP client, agent params) is closed over by the caller.\n    base_storage_dir: Base directory; each source gets ``<base>/sources/<source_id>``.\n        This per-source directory scopes only per-agent scratch. Conversation history\n        and memory are NOT per-file: shared, injected stores are used by every\n        per-source agent, keyed by ``source_id`` inside the one shared store, so an\n        evicted-then-rebuilt agent recalls everything.\n    idle_ttl_seconds: Evict an agent whose last use was more than this long ago\n        (lazily, on the next ``get_agent`` call). Defaults to 30 minutes.",
+    "signature": "StreamingAgentPool(create_agent: Callable[[str], Awaitable[AnyBaseAgent]], base_storage_dir: str, idle_ttl_seconds: float = _DEFAULT_IDLE_TTL_SECONDS) -> None",
+    "description": "Parameters:\n  create_agent: Callable[[str], Awaitable[AnyBaseAgent]] (required) - Coroutine that builds an agent for a given per-source storage directory. The pool supplies the directory; everything else (shared model, shared MCP client, agent params) is closed over by the caller.\n  base_storage_dir: str (required) - Base directory; each source gets ``<base>/sources/<source_id>``. This per-source directory scopes only per-agent scratch. Conversation history\n  idle_ttl_seconds: float (default=_DEFAULT_IDLE_TTL_SECONDS) - Evict an agent whose last use was more than this long ago (lazily, on the next ``get_agent`` call). Defaults to 30 minutes.\n\nMethods:\n  async get_agent(source_id: str, source_type: MessageSourceType) -> AnyBaseAgent\n  async lease(source_id: str) -> AsyncIterator[None]"
+  },
+  {
+    "name": "StreamingAgentPool.get_agent",
+    "kind": "method",
+    "file": "agent_builder_sdk/server/streaming_agent_pool.py",
+    "module": "agent_builder_sdk.server.streaming_agent_pool",
+    "docstring": "Return this source's agent, creating it on first use.",
+    "signature": "async get_agent(source_id: str, source_type: MessageSourceType) -> AnyBaseAgent"
+  },
+  {
+    "name": "StreamingAgentPool.lease",
+    "kind": "method",
+    "file": "agent_builder_sdk/server/streaming_agent_pool.py",
+    "module": "agent_builder_sdk.server.streaming_agent_pool",
+    "docstring": "Mark a source in-flight for the full duration of a streaming turn.\n\nWrap the ENTIRE turn (the stream loop) in this so ``_evict_idle`` can't evict the\nagent mid-stream, regardless of how the TTL compares to turn duration. Reference-counted\nso it is safe even if a source has overlapping leases. Releasing refreshes idle time so\nthe TTL is measured from the turn's END.",
+    "signature": "async lease(source_id: str) -> AsyncIterator[None]"
   },
   {
     "name": "RefreshableSession",
@@ -3757,6 +4024,265 @@
     "docstring": "Manage and use agent skills for specialized tasks.\n\nSkills are reusable instruction sets that provide specialized capabilities.\nEach skill contains detailed instructions that guide how to perform specific\ntasks or workflows.\n\nEXPERIMENTAL: This tool is vendored from strands-agents/tools PR #379.\nThe API may change when the upstream PR merges.\n\nActions:\n    - list: Show all available skills with their descriptions\n    - use: Load a skill's full instructions (returns them for you to follow)\n    - get_resource: Load a specific file from a skill\n    - list_resources: List all files available in a skill\n    - import: Dynamically import skills from an additional directory\n\nArgs:\n    action: The action to perform ('list', 'use', 'get_resource', 'list_resources', 'import')\n    skill_name: Name of the skill (required for 'use', 'get_resource', 'list_resources')\n    resource_path: Path to resource file within skill (required for 'get_resource')\n    directory: Path to skills directory (required for 'import')\n\nReturns:\n    Result of the action as a string\n\nEnvironment Variables:\n    STRANDS_SKILLS_DIR: Directory containing skills (default: ./skills)\n\nExample skill structure:\n    skills/\n    └── my-skill/\n        ├── SKILL.md      # Required: Contains skill instructions\n        ├── template.txt  # Optional: Resource files\n        └── config.json   # Optional: Additional resources",
     "signature": "skills(action: str, skill_name: Optional[str] = None, resource_path: Optional[str] = None, directory: Optional[str] = None) -> str",
     "description": "Parameters:\n  action: str (required) - The action to perform ('list', 'use', 'get_resource', 'list_resources', 'import')\n  skill_name: Optional[str] (default=None) - Name of the skill (required for 'use', 'get_resource', 'list_resources')\n  resource_path: Optional[str] (default=None) - Path to resource file within skill (required for 'get_resource')\n  directory: Optional[str] (default=None) - Path to skills directory (required for 'import')"
+  },
+  {
+    "name": "InteractionEvent",
+    "kind": "class",
+    "file": "agent_builder_sdk/streaming/a2a_agui_adapter.py",
+    "module": "agent_builder_sdk.streaming.a2a_agui_adapter",
+    "docstring": "Actionable UI interactions for a turn, emitted on the stream.\n\nCarries the turn's interactions (suggestion chips, a job-creation button) so they render live\nwith the response instead of only after a reload. ``interactions`` is the list the client renders\n(each with an ``actionType`` and its ``data``); ``message_id`` ties them to the assistant message\nthey belong to so the live and reloaded copies reconcile.",
+    "signature": "InteractionEvent()",
+    "description": "Extends: BaseModel"
+  },
+  {
+    "name": "StreamState",
+    "kind": "class",
+    "file": "agent_builder_sdk/streaming/a2a_agui_adapter.py",
+    "module": "agent_builder_sdk.streaming.a2a_agui_adapter",
+    "docstring": "Per-run mutable state. One instance per agent run (per turn).\n\nThree distinct ids ride each turn:\n- ``thread_id``  — the AG-UI threadId: a stable conversation id (rides in the AG-UI\n  DataPart on run-lifecycle events).\n- ``context_id`` — the A2A contextId: the routing id the caller minted and\n  stored for reply routing. The agent ECHOes it on the A2A frame envelope; it is NOT\n  the conversation id and NOT agent-minted.\n- ``run_id``     — the A2A taskId / AG-UI runId for this one turn. Minted here (the\n  agent is the A2A server and owns Task ids), never accepted from the caller, so a\n  request id can't be reused as the run id.",
+    "signature": "StreamState()",
+    "description": "Methods:\n  ensure_force_stop_message_id() -> str"
+  },
+  {
+    "name": "StreamState.ensure_force_stop_message_id",
+    "kind": "method",
+    "file": "agent_builder_sdk/streaming/a2a_agui_adapter.py",
+    "module": "agent_builder_sdk.streaming.a2a_agui_adapter",
+    "docstring": "Return the force_stop_response answer's message id, minting it once on first call.\n\nThe force_stop answer is a distinct assistant message from any pre-tool narration, so it\nalways gets its own id (never final_message_id, which the narration may own). BOTH the persist\nhook (on AfterInvocationEvent, fires first) and the adapter terminal branch must write under\nthis ONE id so the streamed answer and its persisted copy reconcile on reload; whichever runs\nfirst mints, the other reads. Idempotent and single-threaded per turn (each turn owns its\nStreamState), so no lock.",
+    "signature": "ensure_force_stop_message_id() -> str"
+  },
+  {
+    "name": "adapt",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_agui_adapter.py",
+    "module": "agent_builder_sdk.streaming.a2a_agui_adapter",
+    "docstring": "Translate one Strands stream event into zero or more AG-UI events.\n\nReturns a list because one Strands event can synthesize several AG-UI events\n(e.g. a first text token emits RunStarted + TextMessageStart + TextMessageContent).\nUnrecognized events return [] (dropped). ``cfg`` gates the reasoning and tool-call\ncategories at the branch head; run lifecycle and text are always emitted.",
+    "signature": "adapt(event: Dict[str, Any], state: StreamState, cfg: StreamingConfig = DEFAULT_STREAMING_CONFIG) -> List[BaseEvent]",
+    "description": "Parameters:\n  event: Dict[str, Any] (required)\n  state: StreamState (required)\n  cfg: StreamingConfig (default=DEFAULT_STREAMING_CONFIG)"
+  },
+  {
+    "name": "build_suggestion_interaction_events",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_agui_adapter.py",
+    "module": "agent_builder_sdk.streaming.a2a_agui_adapter",
+    "docstring": "Build the interaction event(s) for a turn's suggestions.\n\n- a create-job suggestion (``{jobName, jobType, objective}``) becomes an INVOKE interaction that\n  offers to create and start the job, and takes precedence over chat suggestions when both are\n  present;\n- otherwise chat suggestions (``list[str]``) become one SELECT interaction whose options are the\n  suggestion strings (label == value).\n\nReturns [] when neither is present.",
+    "signature": "build_suggestion_interaction_events(chat_suggestions: Optional[List[str]], create_job_suggestion: Optional[Dict[str, Any]], message_id: Optional[str] = None) -> List[InteractionEvent]",
+    "description": "Parameters:\n  chat_suggestions: Optional[List[str]] (required)\n  create_job_suggestion: Optional[Dict[str, Any]] (required)\n  message_id: Optional[str] (default=None)"
+  },
+  {
+    "name": "to_a2a_error_frames",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_agui_adapter.py",
+    "module": "agent_builder_sdk.streaming.a2a_agui_adapter",
+    "docstring": "Build the frames for a terminal streaming error, keeping the frame protocol valid.\n\nA raw ``RUN_ERROR`` alone emits only a terminal ``failed/final`` status-update. If the\nerror fires before the run opened (no content event yet), or with a content block still\nopen, that terminal frame would arrive with NO ``Task(submitted)`` opener and/or with an\nunclosed Text/Reasoning/ToolCall block — violating the same open-run / close-block\ninvariant the force_stop and terminal-result paths honor. This mirrors that invariant:\nopen the run if needed, close any open block, THEN emit RUN_ERROR.\n\nReturns fully-mapped A2A frames (dicts) ready to yield.",
+    "signature": "to_a2a_error_frames(message: str, state: StreamState) -> List[Dict[str, Any]]",
+    "description": "Parameters:\n  message: str (required)\n  state: StreamState (required)"
+  },
+  {
+    "name": "to_a2a_frames",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_agui_adapter.py",
+    "module": "agent_builder_sdk.streaming.a2a_agui_adapter",
+    "docstring": "Map one AG-UI (or our own InteractionEvent) event to one A2A result frame (plain dict).\n\nContent events (reasoning / text / tool) become a working TaskStatusUpdateEvent\nwhose status.message carries the AG-UI event in a DataPart. Lifecycle events use\nthe A2A envelope: RUN_STARTED -> Task(submitted); RUN_FINISHED -> terminal\nstatus-update(completed, final=true); RUN_ERROR -> terminal status-update(failed,\nfinal=true). Every lifecycle frame also carries its AG-UI event verbatim in a\nDataPart, so the fields that live only on the AG-UI event (RUN_STARTED's threadId +\nrunId, RUN_ERROR's reason) survive the A2A framing and the reader can lift them out\nof status.message the same way it does for content events, rather than reconstructing\nthem from the envelope.",
+    "signature": "to_a2a_frames(agui_event: BaseModel, state: StreamState) -> List[Dict[str, Any]]",
+    "description": "Parameters:\n  agui_event: BaseModel (required)\n  state: StreamState (required)"
+  },
+  {
+    "name": "to_wire",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_agui_adapter.py",
+    "module": "agent_builder_sdk.streaming.a2a_agui_adapter",
+    "docstring": "Serialize an AG-UI (or our own InteractionEvent) event to its JSON-ready camelCase wire dict.\n\n``by_alias`` gives the camelCase field names the wire contract expects\n(messageId, toolCallId, threadId); ``exclude_none`` drops unset optionals.\n\nOne rename: ag_ui's ToolCallStartEvent carries the tool-use message id under\n``parentMessageId`` (its field name), but on our wire every event names the\npersisted message id ``messageId``. So we surface it as ``messageId`` here,\nconsistent with the text/reasoning events.",
+    "signature": "to_wire(event: BaseModel) -> Dict[str, Any]",
+    "description": "Parameters:\n  event: BaseModel (required)"
+  },
+  {
+    "name": "data_message",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_frame_utils.py",
+    "module": "agent_builder_sdk.streaming.a2a_frame_utils",
+    "docstring": "Wrap ``payload`` as an A2A agent Message carrying it in a DataPart keyed by ``uri``.\n\n``uri`` is also listed in ``extensions`` so a reader discovers it the same way as the other A2A\nextensions (URI in ``extensions`` -> read ``data[URI]``). Shared by the raw emitter (RAW_EXT_URI\n+ a Strands event) and the AG-UI adapter (AG-UI URI + an AG-UI event).",
+    "signature": "data_message(uri: str, payload: Any, message_id: str, task_id: str, context_id: Optional[str]) -> Dict[str, Any]",
+    "description": "Parameters:\n  uri: str (required)\n  payload: Any (required)\n  message_id: str (required)\n  task_id: str (required)\n  context_id: Optional[str] (required)"
+  },
+  {
+    "name": "extract_raw_event",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_frame_utils.py",
+    "module": "agent_builder_sdk.streaming.a2a_frame_utils",
+    "docstring": "Lift the verbatim Strands event out of a raw frame's DataPart, or None.\n\nWalks ``status.message.parts`` for the ``kind == \"data\"`` part and returns\n``data[RAW_EXT_URI]``. Returns None when the frame carries no raw event (e.g. an envelope-only\nterminal), so callers can skip it.",
+    "signature": "extract_raw_event(frame: A2AFrame) -> Optional[Dict[str, Any]]",
+    "description": "Parameters:\n  frame: A2AFrame (required)"
+  },
+  {
+    "name": "frame_kind",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_frame_utils.py",
+    "module": "agent_builder_sdk.streaming.a2a_frame_utils",
+    "docstring": "The frame's top-level ``kind`` (``task`` | ``status-update``), or None.",
+    "signature": "frame_kind(frame: A2AFrame) -> Optional[str]",
+    "description": "Parameters:\n  frame: A2AFrame (required)"
+  },
+  {
+    "name": "frame_state",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_frame_utils.py",
+    "module": "agent_builder_sdk.streaming.a2a_frame_utils",
+    "docstring": "The A2A task state on this frame (``submitted``/``working``/``completed``/``failed``).",
+    "signature": "frame_state(frame: A2AFrame) -> Optional[str]",
+    "description": "Parameters:\n  frame: A2AFrame (required)"
+  },
+  {
+    "name": "is_end_of_turn",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_frame_utils.py",
+    "module": "agent_builder_sdk.streaming.a2a_frame_utils",
+    "docstring": "True if this frame ends the turn — ``final: true`` OR a terminal state.\n\nStream close (iterator exhaustion) is the third end condition and is handled by the reader\nloop terminating, not here. A2A v1.0 removed ``final``, so a robust consumer treats any of\nthe three as end-of-turn.",
+    "signature": "is_end_of_turn(frame: A2AFrame) -> bool",
+    "description": "Parameters:\n  frame: A2AFrame (required)"
+  },
+  {
+    "name": "is_final",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_frame_utils.py",
+    "module": "agent_builder_sdk.streaming.a2a_frame_utils",
+    "docstring": "True if the frame is flagged ``final`` (A2A pre-1.0 signal).",
+    "signature": "is_final(frame: A2AFrame) -> bool",
+    "description": "Parameters:\n  frame: A2AFrame (required)"
+  },
+  {
+    "name": "is_terminal_state",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_frame_utils.py",
+    "module": "agent_builder_sdk.streaming.a2a_frame_utils",
+    "docstring": "True if a state string is a turn-ending state (``completed`` / ``failed``).",
+    "signature": "is_terminal_state(state: Optional[str]) -> bool",
+    "description": "Parameters:\n  state: Optional[str] (required)"
+  },
+  {
+    "name": "status_update",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_frame_utils.py",
+    "module": "agent_builder_sdk.streaming.a2a_frame_utils",
+    "docstring": "Build an A2A TaskStatusUpdateEvent dict (camelCase wire shape).",
+    "signature": "status_update(task_id: str, context_id: Optional[str], state: str, *, final: bool, message: Optional[Dict[str, Any]] = None) -> A2AFrame",
+    "description": "Parameters:\n  task_id: str (required)\n  context_id: Optional[str] (required)\n  state: str (required)\n  final: bool (required)\n  message: Optional[Dict[str, Any]] (default=None)"
+  },
+  {
+    "name": "task_opener",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_frame_utils.py",
+    "module": "agent_builder_sdk.streaming.a2a_frame_utils",
+    "docstring": "Build the A2A ``task`` opener (state ``submitted``), emitted once per turn.\n\nOptionally carries an opening ``message`` in its status (the AG-UI path puts its RUN_STARTED\nevent there; the raw path emits none).",
+    "signature": "task_opener(task_id: str, context_id: Optional[str], *, message: Optional[Dict[str, Any]] = None) -> A2AFrame",
+    "description": "Parameters:\n  task_id: str (required)\n  context_id: Optional[str] (required)\n  message: Optional[Dict[str, Any]] (default=None)"
+  },
+  {
+    "name": "StreamingConfig",
+    "kind": "class",
+    "file": "agent_builder_sdk/streaming/config.py",
+    "module": "agent_builder_sdk.streaming.config",
+    "docstring": "Configures the agent's streaming (message/stream) path.\n\nPassing a ``StreamingConfig`` to the server IS the opt-in to streaming — there is no\nseparate enable flag. Absent (``None``) the server does not serve message/stream and\nbehaves exactly as before; present, the streaming path is stood up with these settings.\n\nFields:\n- ``agent_idle_ttl_seconds`` — evict a per-source streaming agent that hasn't streamed in\n  this long (default 30 min), lazily on the next streaming turn, so a long-lived session\n  serving many distinct sources stays memory-bounded. Nothing durable is lost: history and\n  memory live in the shared stores and the agent is rebuilt on the next turn.\n- ``emit_reasoning`` / ``emit_tool_calls`` — whether to emit that event category. Both\n  default on; turning one off applies to BOTH the live stream and persistence, so a\n  category turned off does not reappear on refresh. The run lifecycle (RUN_STARTED /\n  RUN_FINISHED / RUN_ERROR) and the assistant's text (narration + final answer) are always\n  emitted — there is no toggle to suppress the answer itself.\n- ``turn_timeout_seconds`` — server-side total budget for one streaming turn (wall-clock from\n  turn start). If the turn produces no terminal within this window (e.g. a hung MCP tool), the\n  stream is closed with a clean terminal RUN_ERROR instead of hanging. The same budget also\n  bounds a sub-agent's own streaming turn (see ``base_subagent``), which is the stream the\n  ``send_message_to_subagent_and_relay`` tool consumes — so a sub-agent's turn stays capped even\n  when relayed. This is one of only two true total-cap timeouts in the whole streaming path; the\n  other is the client's own stream cap. Every intermediate platform hop has only an *idle*\n  timeout (max gap between frames), not a total cap on the streaming connection, so none of\n  them severs a healthy long stream.",
+    "signature": "StreamingConfig()",
+    "description": ""
+  },
+  {
+    "name": "RawStreamState",
+    "kind": "class",
+    "file": "agent_builder_sdk/streaming/raw_a2a_emitter.py",
+    "module": "agent_builder_sdk.streaming.raw_a2a_emitter",
+    "docstring": "Per-turn mutable state for the raw emitter.\n\n- ``run_id`` is the A2A taskId for this turn, minted here — the agent is the A2A server and owns\nTask ids, never taking one from the request.\n- ``context_id`` is the A2A contextId, which groups related tasks/messages into one conversation (A2A spec 3.4.1);\nit is **optional** and only set when the caller supplies one.\n- ``run_started`` guards the single ``task`` opener;\n- ``ended`` guardsa double terminal.",
+    "signature": "RawStreamState()",
+    "description": ""
+  },
+  {
+    "name": "error_frames",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/raw_a2a_emitter.py",
+    "module": "agent_builder_sdk.streaming.raw_a2a_emitter",
+    "docstring": "Terminal ``failed`` frames for an error, keeping the protocol valid.\n\nEnsures a ``task`` opener precedes the terminal (a failed/final frame with no opener would\nviolate the open-run invariant), then emits a ``failed``/``final`` status-update whose message\ncarries the error text as a raw text event. Self-contained — no AG-UI dependency (unlike\n``to_a2a_error_frames``). Idempotent: returns empty if the turn already ended.",
+    "signature": "error_frames(state: RawStreamState, message: str) -> List[A2AFrame]",
+    "description": "Parameters:\n  state: RawStreamState (required)\n  message: str (required)"
+  },
+  {
+    "name": "event_frames",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/raw_a2a_emitter.py",
+    "module": "agent_builder_sdk.streaming.raw_a2a_emitter",
+    "docstring": "Map one Strands stream event to raw A2A frame(s).\n\nOpens the run on the first event, then emits one ``working`` status-update carrying the\nprojected event (only the fields ``adapt`` reads — see ``_project_event``).\n\nEmits no content frame when there's nothing to relay: non-dict events, or events that project to\nempty (Strands lifecycle markers and raw ``{\"event\": ...}`` Bedrock envelopes) — same events\n``adapt`` ignores. The ``result`` event is skipped here; ``finish_frames`` handles end-of-turn\n(including any ``force_stop_response``).",
+    "signature": "event_frames(event: Dict[str, Any], state: RawStreamState) -> List[A2AFrame]",
+    "description": "Parameters:\n  event: Dict[str, Any] (required)\n  state: RawStreamState (required)"
+  },
+  {
+    "name": "finish_frames",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/raw_a2a_emitter.py",
+    "module": "agent_builder_sdk.streaming.raw_a2a_emitter",
+    "docstring": "Close the turn with a terminal ``completed`` status-update.\n\nOpens the run first if no event was seen (an empty turn still gets an opener + terminal). If\nthe terminal AgentResult carries a ``force_stop_response`` (a terminating tool's real answer),\nsurface it as a final text event so the streamed answer matches the buffered path. Idempotent:\nreturns empty if the turn already ended.",
+    "signature": "finish_frames(state: RawStreamState, result: Any = None) -> List[A2AFrame]",
+    "description": "Parameters:\n  state: RawStreamState (required)\n  result: Any (default=None)"
+  },
+  {
+    "name": "start_frames",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/raw_a2a_emitter.py",
+    "module": "agent_builder_sdk.streaming.raw_a2a_emitter",
+    "docstring": "The ``task``(submitted) opener, emitted once. Empty if the run already started.",
+    "signature": "start_frames(state: RawStreamState) -> List[A2AFrame]",
+    "description": "Parameters:\n  state: RawStreamState (required)"
+  },
+  {
+    "name": "StreamingResponsePersistHook",
+    "kind": "class",
+    "file": "agent_builder_sdk/streaming/response_persist_hook.py",
+    "module": "agent_builder_sdk.streaming.response_persist_hook",
+    "docstring": "Persists a streaming turn's messages to ATX Chat.\n\nEverything it needs per turn (contextId, the stream-emitted messageIds) comes off the\nturn's ``invocation_state``, so one instance serves every turn of a reused per-user agent.\nThe ``StreamingConfig`` is turn-invariant (set once at construction); its emit toggles gate\npersistence so history matches what the live stream showed — reasoning is not persisted when\n``emit_reasoning`` is off, tool calls not persisted when ``emit_tool_calls`` is off.",
+    "signature": "StreamingResponsePersistHook(config: StreamingConfig) -> None",
+    "description": "Extends: HookProvider\n\nParameters:\n  config: StreamingConfig (required)\n\nMethods:\n  register_hooks(registry: HookRegistry, **kwargs: Any) -> None"
+  },
+  {
+    "name": "StreamingResponsePersistHook.register_hooks",
+    "kind": "method",
+    "file": "agent_builder_sdk/streaming/response_persist_hook.py",
+    "module": "agent_builder_sdk.streaming.response_persist_hook",
+    "docstring": "",
+    "signature": "register_hooks(registry: HookRegistry, **kwargs: Any) -> None"
+  },
+  {
+    "name": "persist_stream_error",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/response_persist_hook.py",
+    "module": "agent_builder_sdk.streaming.response_persist_hook",
+    "docstring": "Persist a terminal error message for a streaming turn, so a reload shows the same error the\nclient saw live (rather than a blank turn). The per-model-call persist hook does not fire on a\nturn that errored before/without a model message, so the streaming turn body calls this from its\nterminal-error paths (model/MCP error, timeout, concurrency reject). Best-effort: a persist\nfailure OR a slow send must never mask the original error or hold the already-open SSE stream, so\nit is bounded by a short timeout and any failure is logged and swallowed. ``message_id`` is the id\nthe terminal RUN_ERROR streamed under, so the live error and this persisted copy reconcile.",
+    "signature": "async persist_stream_error(context_id: str, text: str, message_id: str) -> None",
+    "description": "Parameters:\n  context_id: str (required)\n  text: str (required)\n  message_id: str (required)"
+  },
+  {
+    "name": "async_iter_from_sync",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/sse_reader.py",
+    "module": "agent_builder_sdk.streaming.sse_reader",
+    "docstring": "Adapt a blocking sync frame iterator to an async generator via a daemon thread + queue.\n\nA botocore ``StreamingBody`` read is blocking and cannot be awaited, so ``iter_frames`` must run\noff the event loop. A producer thread drains ``sync_iter`` into a bounded, thread-safe\n``queue.Queue`` (backpressure) and this async generator polls it. A sentinel marks normal end; an\nexception from the thread is captured and re-raised on the consumer side.\n\nThe producer is a **daemon** thread (not ``asyncio.to_thread``, whose non-daemon pool thread would\nblock the interpreter's atexit join if it got stuck on a read), and the hand-off is a plain\n``queue.Queue`` rather than an ``asyncio.Queue`` — so a stuck or abandoned producer can never keep\nthe process from exiting, and neither side ever blocks on the event loop.",
+    "signature": "async async_iter_from_sync(sync_iter: Iterator[A2AFrame], queue_maxsize: int = 32, poll_interval: float = 0.005) -> AsyncIterator[A2AFrame]",
+    "description": "Parameters:\n  sync_iter: Iterator[A2AFrame] (required)\n  queue_maxsize: int (default=32)\n  poll_interval: float (default=0.005)"
+  },
+  {
+    "name": "iter_frames",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/sse_reader.py",
+    "module": "agent_builder_sdk.streaming.sse_reader",
+    "docstring": "Decode a StreamingBody into A2A frames, stopping at end-of-turn.\n\nPumps the body's byte chunks through ``parse_sse_events`` and yields each frame. Ends when a\nframe is end-of-turn (``final: true`` or a terminal state) — that frame is yielded, then the\niterator returns. Natural stream close (chunks exhausted) also ends the iterator, covering the\nA2A-v1.0 case where neither ``final`` nor a terminal state is guaranteed.\n\nThe ``StreamingBody`` wraps a pooled HTTP socket, so it is closed on every exit path (early\nterminal, exhaustion, or the generator being closed early) via ``finally`` — otherwise the\nsocket leaks until GC and slowly drains botocore's connection pool / file descriptors under\nconcurrent long-lived streams. Closing is best-effort: a missing/failing ``close`` never masks\nthe frames already produced.",
+    "signature": "iter_frames(body: Any, chunk_size: int = _DEFAULT_CHUNK_SIZE) -> Iterator[A2AFrame]",
+    "description": "Parameters:\n  body: Any (required)\n  chunk_size: int (default=_DEFAULT_CHUNK_SIZE)"
+  },
+  {
+    "name": "parse_sse_events",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/sse_reader.py",
+    "module": "agent_builder_sdk.streaming.sse_reader",
+    "docstring": "Decode a stream of SSE byte chunks into A2A frame dicts (pure, no I/O).\n\nSSE framing: lines split on ``\\n``; each ``data:`` line contributes its payload (one leading\nspace after the colon stripped); consecutive ``data:`` lines within one event join with\n``\\n``; a blank line dispatches the accumulated event. ``event:`` / ``id:`` / comment (``:``)\nlines are ignored. Byte chunks are arbitrary-sized (not line- or character-aligned), so an\nincomplete trailing line is buffered across chunks, and a multibyte UTF-8 character split across\na chunk boundary is held by an incremental decoder until its bytes are complete (a per-chunk\n``bytes.decode`` would raise ``UnicodeDecodeError`` on the split). On exhaustion, any complete\nbuffered event is flushed. A data buffer that fails to parse as JSON is logged and skipped\nrather than raising.",
+    "signature": "parse_sse_events(chunks: Iterable[bytes]) -> Iterator[A2AFrame]",
+    "description": "Parameters:\n  chunks: Iterable[bytes] (required)"
   },
   {
     "name": "create_parser",
@@ -4267,9 +4793,9 @@
     "kind": "class",
     "file": "agent_builder_sdk/util/suggestions_manager.py",
     "module": "agent_builder_sdk.util.suggestions_manager",
-    "docstring": "Manages pending suggestions for the current workflow step.",
-    "signature": "SuggestionsManager()",
-    "description": "Methods:\n  add_suggestions(suggestions: list[str]) -> None\n  get_and_consume_suggestions() -> Optional[list[str]]\n  clear_suggestions() -> None"
+    "docstring": "Manages pending suggestions for the current message.\n\nStorage is a plain shared holder by default — the behavior used by the message/send path\n(served by the shared singleton agent), which the single worker queue serializes to one\nturn at a time. A plain object attribute (unlike a ContextVar) is visible both from the\nworker thread that runs the agent (via ``asyncio.to_thread``) and from the request task\nthat reads the result, so the suggestion set by a tool survives that boundary.\n\nFor concurrent streaming (N per-user agents' turns run inline on one event loop, with no\nqueue serialization) a turn may call ``begin_turn_scope()`` to bind a per-turn holder in a\nContextVar. When a scope is active, add/get/clear operate on that turn-local holder instead\nof the shared one, so concurrent turns can't clobber or double-consume each other's\nsuggestions (nor leak into a concurrent message/send turn). The message/send path never\nopens a scope, so it keeps using the shared holder — behavior unchanged.",
+    "signature": "SuggestionsManager() -> None",
+    "description": "Methods:\n  begin_turn_scope() -> None\n  add_suggestions(suggestions: list[str]) -> None\n  get_and_consume_suggestions() -> Optional[list[str]]\n  clear_suggestions() -> None"
   },
   {
     "name": "SuggestionsManager.add_suggestions",
@@ -4278,6 +4804,14 @@
     "module": "agent_builder_sdk.util.suggestions_manager",
     "docstring": "Add suggestions to be included in the next message.",
     "signature": "add_suggestions(suggestions: list[str]) -> None"
+  },
+  {
+    "name": "SuggestionsManager.begin_turn_scope",
+    "kind": "method",
+    "file": "agent_builder_sdk/util/suggestions_manager.py",
+    "module": "agent_builder_sdk.util.suggestions_manager",
+    "docstring": "Isolate suggestions to the current turn (concurrent streaming path).\n\nSets a fresh per-turn holder in a ContextVar. Because each streaming turn runs in\nits own asyncio task, this holder is visible only within that turn. The message/send\npath never calls this, so it continues to use the shared holder.",
+    "signature": "begin_turn_scope() -> None"
   },
   {
     "name": "SuggestionsManager.clear_suggestions",
@@ -4303,6 +4837,15 @@
     "docstring": "Add suggestions for the next message.",
     "signature": "add_suggestions(suggestions: list[str]) -> None",
     "description": "Parameters:\n  suggestions: list[str] (required)"
+  },
+  {
+    "name": "begin_turn_scope",
+    "kind": "function",
+    "file": "agent_builder_sdk/util/suggestions_manager.py",
+    "module": "agent_builder_sdk.util.suggestions_manager",
+    "docstring": "Open a per-turn suggestion scope (concurrent streaming). The message/send path never\ncalls it, so its shared-holder behavior is unchanged.",
+    "signature": "begin_turn_scope() -> None",
+    "description": ""
   },
   {
     "name": "clear_suggestions",
@@ -4338,7 +4881,7 @@
     "module": "agent_builder_sdk.utils",
     "docstring": "Configuration utility for AWS Transform endpoints and region mappings.",
     "signature": "TransformEndpointConfig()",
-    "description": "Methods:\n  get_airport_code_for_region(region: str) -> str\n  create_endpoint_url(stage: str, region: str, component_name: str) -> str\n  create_external_agenticapi_endpoint_url(stage: str, region: str)"
+    "description": "Methods:\n  get_airport_code_for_region(region: str) -> str\n  get_root_dns_domain(region: str) -> str\n  create_endpoint_url(stage: str, region: str, component_name: str) -> str\n  create_external_agenticapi_endpoint_url(stage: str, region: str)"
   },
   {
     "name": "TransformEndpointConfig.create_endpoint_url",
@@ -4363,6 +4906,14 @@
     "module": "agent_builder_sdk.utils",
     "docstring": "Maps AWS regions to their corresponding airport codes.\n\nArgs:\n    region: AWS region code (e.g., 'us-east-1')\n\nReturns:\n    The airport code corresponding to the region\n\nRaises:\n    ValueError: If the provided region is not supported",
     "signature": "get_airport_code_for_region(region: str) -> str"
+  },
+  {
+    "name": "TransformEndpointConfig.get_root_dns_domain",
+    "kind": "method",
+    "file": "agent_builder_sdk/utils.py",
+    "module": "agent_builder_sdk.utils",
+    "docstring": "Resolves the Elastic Gumby DNS apex for a region's partition.\n\nGovCloud endpoints live under a separate child zone\n(us-gov.elastic-gumby.ai.aws.dev), not the commercial apex. Building a gov\nendpoint on the commercial apex yields a hostname with no DNS record in the\ngov partition, causing SdkClientException \"Unable to execute HTTP request\".",
+    "signature": "get_root_dns_domain(region: str) -> str"
   },
   {
     "name": "build_agentic_api_endpoint_from_env",
@@ -4428,6 +4979,15 @@
     "description": "Parameters:\n  request: InvocationRequest (required) - The InvocationRequest containing the A2A message to process."
   },
   {
+    "name": "extract_source_information",
+    "kind": "function",
+    "file": "agent_builder_sdk/utils.py",
+    "module": "agent_builder_sdk.utils",
+    "docstring": "Extract ``(user_id, sender)`` from an A2A message's source-information extension.\n\nSingle source of truth for source extraction, used by both the buffered path\n(``extract_message_info``) and the streaming ingress, so the two classify a turn\nthe same way. Requires the extension to be declared in ``message.extensions`` and\npresent in ``message.metadata`` (an undeclared extension is ignored).\n\nReturns ``(None, None)`` when no valid source information is present.",
+    "signature": "extract_source_information(message: Any) -> tuple[Optional[str], Optional[str]]",
+    "description": "Parameters:\n  message: Any (required)"
+  },
+  {
     "name": "extract_text_from_strands_agent_response",
     "kind": "function",
     "file": "agent_builder_sdk/utils.py",
@@ -4473,6 +5033,15 @@
     "description": "Parameters:\n  file_name: str (required)"
   },
   {
+    "name": "mcp_session_active",
+    "kind": "function",
+    "file": "agent_builder_sdk/utils.py",
+    "module": "agent_builder_sdk.utils",
+    "docstring": "Return True if an MCP client's session is already open.\n\nWraps Strands' ``MCPClient._is_session_active()`` (a leading-underscore method) in\none place so callers don't couple to that private API directly. Used to decide\nwhether a client must be entered (opened) for a turn or is already open — e.g. a\nshared client the server keeps open for concurrent streaming. Fails safe to\n``False`` (treat as not-open → enter it) if the private method is ever removed.",
+    "signature": "mcp_session_active(mcp_client: Any) -> bool",
+    "description": "Parameters:\n  mcp_client: Any (required)"
+  },
+  {
     "name": "process_extension_handlers",
     "kind": "function",
     "file": "agent_builder_sdk/utils.py",
@@ -4480,6 +5049,15 @@
     "docstring": "Process extension handlers for A2A message extensions.\n\nArgs:\n    request: The invocation request\n    request_id: The request ID\n    context_id: The context ID\n    sender: The sender agent instance ID\n    user_id: The user ID\n    extension_handlers: List of extension handlers\n\nReturns:\n    Extension handler response if processed, None otherwise",
     "signature": "process_extension_handlers(request: InvocationRequest, request_id: str, context_id: str | None, sender: str | None, user_id: str | None, extension_handlers: Optional[Sequence[BaseExtensionHandler]]) -> Optional[ExtensionResponse]",
     "description": "Parameters:\n  request: InvocationRequest (required) - The invocation request\n  request_id: str (required) - The request ID\n  context_id: str | None (required) - The context ID\n  sender: str | None (required) - The sender agent instance ID\n  user_id: str | None (required) - The user ID\n  extension_handlers: Optional[Sequence[BaseExtensionHandler]] (required) - List of extension handlers"
+  },
+  {
+    "name": "reconcile_dangling_tool_uses",
+    "kind": "function",
+    "file": "agent_builder_sdk/utils.py",
+    "module": "agent_builder_sdk.utils",
+    "docstring": "Insert error tool results immediately after assistant tool uses left unresolved.\n\nBedrock requires a toolUse to be answered in the message that IMMEDIATELY follows it, so a\nresult appearing later in the list is as invalid as a missing one — hence only the next\nmessage is consulted. History is persisted per message, before a tool runs, so an interrupted\nturn leaves an unpaired toolUse on disk that fails every later Converse call until repaired.\n\nNever mutates a message: a turn whose results arrived only in part gets a copy of its result\nmessage with the missing ones appended. So the caller's stored objects — which the loaded\nmessages alias — are left untouched, and a well-formed history round-trips unchanged.",
+    "signature": "reconcile_dangling_tool_uses(messages: List[Any]) -> List[Any]",
+    "description": "Parameters:\n  messages: List[Any] (required)"
   },
   {
     "name": "write_content_to_file",

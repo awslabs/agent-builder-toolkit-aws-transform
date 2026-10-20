@@ -12,6 +12,7 @@ import os
 from agent_builder_sdk.agent_factory import create_default_subagent
 from agent_builder_sdk.logging_config import configure_logging
 from agent_builder_sdk.server.agent_runtime_server import AgentRuntimeServer
+from agent_builder_sdk.streaming.config import StreamingConfig
 from agent_builder_sdk.utils import get_prompt_with_name
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,26 @@ def create_parser() -> argparse.ArgumentParser:
         "--storage-dir", default="/tmp/sub_agent", help="Storage directory for agent data"
     )
 
+    parser.add_argument(
+        "--concurrent-streaming",
+        action="store_true",
+        help="Opt into streaming (per-user agents over a shared MCP client).",
+    )
+    parser.add_argument(
+        "--emit-reasoning",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Emit reasoning/thinking on the stream (default: on). Only used with "
+        "--concurrent-streaming.",
+    )
+    parser.add_argument(
+        "--emit-tool-calls",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Emit tool-call events on the stream (default: on). Only used with "
+        "--concurrent-streaming.",
+    )
+
     return parser
 
 
@@ -63,14 +84,27 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
 
-    # Create agent factory with default configuration
-    def agent_factory(mcp_client, storage_dir):
+    # Create agent factory with default configuration.
+    # **kwargs absorbs server-provided params (e.g. conversation_repository when
+    # concurrent streaming is enabled); a minimal subagent has no conversation history,
+    # so it simply ignores them.
+    def agent_factory(mcp_client, storage_dir, **kwargs):
         # If you're writing your own entry point based off this code,
         # use create_default_async_subagent instead.
         return create_default_subagent(
             mcp_client=mcp_client,
             system_prompt=get_prompt_with_name("test_subagent_prompt"),
         )
+
+    # Passing a StreamingConfig opts into streaming; None (no --concurrent-streaming) leaves it off.
+    streaming_config = (
+        StreamingConfig(
+            emit_reasoning=args.emit_reasoning,
+            emit_tool_calls=args.emit_tool_calls,
+        )
+        if args.concurrent_streaming
+        else None
+    )
 
     # Create and start server
     server = AgentRuntimeServer(
@@ -79,6 +113,7 @@ def main():
         port=args.port,
         binary_location=args.binary_location,
         storage_dir=args.storage_dir,
+        streaming_config=streaming_config,
     )
 
     # This will set up everything and run the server

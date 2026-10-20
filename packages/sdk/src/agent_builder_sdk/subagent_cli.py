@@ -8,6 +8,7 @@ Simple command-line interface for the Base Subagent.
     Please use simple_subagent_cli.py instead for new implementations.
     See: src/agent_builder_sdk/entrypoints/simple_subagent_cli.py
 """
+
 import argparse
 import asyncio
 import logging

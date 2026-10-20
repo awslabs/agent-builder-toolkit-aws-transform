@@ -80,6 +80,176 @@ class TestAgentFactory:
     @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
     @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
     @mock.patch("agent_builder_sdk.agent_factory.get_prompt_with_name")
+    def test_boto_client_config_forwarded_to_orchestrator(
+        self,
+        mock_get_prompt,
+        mock_memory_hook,
+        mock_conversation_hook,
+        mock_conversation_repo,
+        mock_memory_tool,
+        mock_memory_manager,
+        mock_episodic_memory,
+        mock_file_repo,
+        mock_orchestrator,
+    ):
+        """boto_client_config is forwarded to the orchestrator (default None, opt-in when set)."""
+        from botocore.config import Config as BotocoreConfig
+
+        mock_get_prompt.return_value = "p"
+        mock_orchestrator.return_value = mock.Mock()
+
+        create_default_orchestrator()
+        assert mock_orchestrator.call_args.kwargs["boto_client_config"] is None
+
+        mock_orchestrator.reset_mock()
+        cfg = BotocoreConfig(read_timeout=300)
+        create_default_orchestrator(boto_client_config=cfg)
+        assert mock_orchestrator.call_args.kwargs["boto_client_config"] is cfg
+
+    @mock.patch("agent_builder_sdk.agent_factory.BaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.get_prompt_with_name")
+    def test_injected_conversation_repository_is_used_not_rebuilt(
+        self,
+        mock_get_prompt,
+        mock_memory_hook,
+        mock_conversation_hook,
+        mock_conversation_repo,
+        mock_memory_tool,
+        mock_memory_manager,
+        mock_episodic_memory,
+        mock_file_repo,
+        mock_orchestrator,
+    ):
+        """When a shared conversation_repository is injected (concurrent streaming),
+        the factory uses it and does NOT build a new one."""
+        mock_get_prompt.return_value = "test prompt"
+        shared_repo = mock.Mock()
+
+        create_default_orchestrator(conversation_repository=shared_repo)
+
+        # factory did not build its own repo...
+        mock_conversation_repo.assert_not_called()
+        # ...and the hook got the injected instance
+        assert mock_conversation_hook.call_args.kwargs["repository"] is shared_repo
+
+    @mock.patch("agent_builder_sdk.agent_factory.BaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.get_prompt_with_name")
+    def test_no_injected_repository_builds_own(
+        self,
+        mock_get_prompt,
+        mock_memory_hook,
+        mock_conversation_hook,
+        mock_conversation_repo,
+        mock_memory_tool,
+        mock_memory_manager,
+        mock_episodic_memory,
+        mock_file_repo,
+        mock_orchestrator,
+    ):
+        """Backward-compatible default: no injected repo → factory builds its own."""
+        mock_get_prompt.return_value = "test prompt"
+
+        create_default_orchestrator(storage_dir="/tmp/x")
+
+        mock_conversation_repo.assert_called_once_with(storage_dir="/tmp/x")
+        assert (
+            mock_conversation_hook.call_args.kwargs["repository"]
+            is mock_conversation_repo.return_value
+        )
+
+    @mock.patch("agent_builder_sdk.agent_factory.BaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.get_prompt_with_name")
+    def test_injected_memory_manager_is_used_not_rebuilt(
+        self,
+        mock_get_prompt,
+        mock_memory_hook,
+        mock_conversation_hook,
+        mock_conversation_repo,
+        mock_memory_tool,
+        mock_memory_manager,
+        mock_episodic_memory,
+        mock_file_repo,
+        mock_orchestrator,
+    ):
+        """When a shared memory_manager is injected (concurrent streaming), the factory uses
+        it and does NOT build its own — so the shared singleton agent and per-user streaming
+        agents use the same (job-scoped) memory store instead of diverging per storage_dir."""
+        mock_get_prompt.return_value = "test prompt"
+        shared_mgr = mock.Mock()
+
+        create_default_orchestrator(memory_manager=shared_mgr)
+
+        # factory did NOT build its own memory chain...
+        mock_file_repo.assert_not_called()
+        mock_episodic_memory.assert_not_called()
+        mock_memory_manager.assert_not_called()
+        # ...and both memory surfaces got the injected instance
+        assert mock_memory_tool.call_args.args[0] is shared_mgr
+        assert mock_memory_hook.call_args.kwargs["memory_manager"] is shared_mgr
+
+    @mock.patch("agent_builder_sdk.agent_factory.BaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.get_prompt_with_name")
+    def test_no_injected_memory_manager_builds_own(
+        self,
+        mock_get_prompt,
+        mock_memory_hook,
+        mock_conversation_hook,
+        mock_conversation_repo,
+        mock_memory_tool,
+        mock_memory_manager,
+        mock_episodic_memory,
+        mock_file_repo,
+        mock_orchestrator,
+    ):
+        """Backward-compatible default: no injected manager → factory builds its own memory
+        chain under <storage_dir>/memories."""
+        mock_get_prompt.return_value = "test prompt"
+
+        create_default_orchestrator(storage_dir="/tmp/x")
+
+        mock_file_repo.assert_called_once_with(storage_path=os.path.join("/tmp/x", "memories"))
+        mock_memory_manager.assert_called_once()
+        assert (
+            mock_memory_hook.call_args.kwargs["memory_manager"] is mock_memory_manager.return_value
+        )
+
+    @mock.patch("agent_builder_sdk.agent_factory.BaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.get_prompt_with_name")
     @mock.patch("agent_builder_sdk.agent_factory.get_base_guardrail_prompt")
     def test_create_default_orchestrator_with_defaults_and_guardrails(
         self,

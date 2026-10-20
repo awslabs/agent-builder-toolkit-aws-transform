@@ -6,7 +6,9 @@ import pytest
 
 from agent_builder_sdk.agentic_framework.client_factory import (
     create_agentic_api_client,
+    create_streaming_agentic_api_client,
     get_agentic_api_client,
+    get_streaming_agentic_api_client,
 )
 
 
@@ -115,3 +117,67 @@ def test_create_agentic_api_client_external_api(mock_boto_client):
     call_args = mock_boto_client.call_args
     assert call_args[1]["service_name"] == "transformagenticservice"
     assert call_args[1]["endpoint_url"] == "https://transform-agents.us-east-1.api.aws"
+
+
+@mock.patch("agent_builder_sdk.agentic_framework.client_factory.boto3.client")
+def test_create_streaming_agentic_api_client_with_endpoint_url(mock_boto_client):
+    """Streaming client targets the streaming service with a large read timeout."""
+    mock_client = mock.Mock()
+    mock_boto_client.return_value = mock_client
+
+    result = create_streaming_agentic_api_client(
+        endpoint_url="https://test-endpoint.com", region="us-west-2"
+    )
+
+    assert result == mock_client
+    mock_boto_client.assert_called_once()
+    call_args = mock_boto_client.call_args
+    assert call_args[1]["service_name"] == "transformagentsstreamingservice"
+    assert call_args[1]["endpoint_url"] == "https://test-endpoint.com"
+    assert call_args[1]["region_name"] == "us-west-2"
+    # Idle read timeout must outlast the 9-min stream cap, not the sync client's 30s default.
+    assert call_args[1]["config"].read_timeout == 10 * 60
+    assert call_args[1]["config"].read_timeout > 9 * 60
+
+
+@mock.patch("agent_builder_sdk.agentic_framework.client_factory.boto3.client")
+def test_create_streaming_agentic_api_client_with_stage_region(mock_boto_client):
+    """Streaming client reuses the same host resolution as the sync client."""
+    mock_client = mock.Mock()
+    mock_boto_client.return_value = mock_client
+
+    result = create_streaming_agentic_api_client(stage="alpha-intg", region="us-west-2")
+
+    assert result == mock_client
+    call_args = mock_boto_client.call_args
+    assert call_args[1]["service_name"] == "transformagentsstreamingservice"
+    assert (
+        call_args[1]["endpoint_url"] == "https://pdx.alpha-intg.agenticapi.elastic-gumby.ai.aws.dev"
+    )
+
+
+@mock.patch.dict("os.environ", {}, clear=True)
+def test_create_streaming_agentic_api_client_missing_params():
+    """Streaming client requires endpoint_url or stage+region, like the sync client."""
+    with pytest.raises(
+        ValueError, match="Either endpoint_url or both stage and region must be provided"
+    ):
+        create_streaming_agentic_api_client()
+
+
+@mock.patch(
+    "agent_builder_sdk.agentic_framework.client_factory.create_streaming_agentic_api_client"
+)
+def test_get_streaming_agentic_api_client_cached(mock_create_client):
+    """Test that get_streaming_agentic_api_client uses caching."""
+    mock_client = mock.Mock()
+    mock_create_client.return_value = mock_client
+
+    get_streaming_agentic_api_client.cache_clear()
+
+    result1 = get_streaming_agentic_api_client()
+    result2 = get_streaming_agentic_api_client()
+
+    assert result1 == mock_client
+    assert result2 == mock_client
+    mock_create_client.assert_called_once()

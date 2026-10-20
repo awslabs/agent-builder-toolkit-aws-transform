@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """
 Main interface for AWS Transform Agentic service.
 
@@ -7,17 +9,17 @@ Usage::
     import boto3
     from agent_builder_types import (
         Client,
-        TransformAgenticServiceClient,
         ListAgentInstancesPaginator,
         ListArtifactsPaginator,
         ListHitlTasksPaginator,
         ListJobPlanStepsPaginator,
+        TransformAgenticServiceClient,
     )
 
     session = boto3.Session()
 
-    client: TransformAgenticServiceClient = boto3.client("elasticgumbyagenticservice")
-    session_client: TransformAgenticServiceClient = session.client("elasticgumbyagenticservice")
+    client: TransformAgenticServiceClient = boto3.client("transformagenticservice")
+    session_client: TransformAgenticServiceClient = session.client("transformagenticservice")
 
     list_agent_instances_paginator: ListAgentInstancesPaginator = client.get_paginator("list_agent_instances")
     list_artifacts_paginator: ListArtifactsPaginator = client.get_paginator("list_artifacts")
@@ -38,9 +40,9 @@ Client = TransformAgenticServiceClient
 
 __all__ = (
     "Client",
-    "TransformAgenticServiceClient",
     "ListAgentInstancesPaginator",
     "ListArtifactsPaginator",
     "ListHitlTasksPaginator",
     "ListJobPlanStepsPaginator",
+    "TransformAgenticServiceClient",
 )

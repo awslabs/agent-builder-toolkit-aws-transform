@@ -147,6 +147,38 @@ if __name__ == "__main__":
     main()
 ```
 
+## Streaming (opt-in)
+
+By default an orchestrator serves one turn at a time through a buffered queue, and `message/stream` is rejected. Pass a `StreamingConfig` to stream turns live over SSE (reasoning, tool calls and text) and to serve many users of the same job concurrently:
+
+```python
+from agent_builder_sdk.streaming.config import StreamingConfig
+
+server = AgentRuntimeServer(
+    agent_factory=agent_factory,
+    host="0.0.0.0",
+    port=8080,
+    binary_location="agent-builder-agentic-mcp",
+    storage_dir="/tmp/my_agent",
+    # Omit or pass None to keep streaming off (the default).
+    streaming_config=StreamingConfig(
+        agent_idle_ttl_seconds=30 * 60,  # optional; evict idle per-user agents
+        emit_reasoning=True,             # optional; stream and persist reasoning (default True)
+        emit_tool_calls=True,            # optional; stream and persist tool calls (default True)
+    ),
+)
+```
+
+The `simple_cli_agent_core.py` entry point exposes the same option as `--concurrent-streaming` (plus `--emit-reasoning/--no-emit-reasoning` and `--emit-tool-calls/--no-emit-tool-calls`). AWS Transform only streams to agents whose agent card declares `capabilities.streaming: true`.
+
+**How it works**: Strands runs one invocation at a time per `Agent`, so the server keeps a `StreamingAgentPool` with one agent per source (a user, or another agent that streams to yours). Agents are built on first use and evicted after `agent_idle_ttl_seconds`. The Bedrock model, the MCP client, the conversation repository and the `MemoryManager` stay shared, so a user's buffered and streamed turns see the same job history. Each streamed final response is persisted back to the chat.
+
+**Concurrency contract**: with streaming on, several users' turns run concurrently on one event loop. Tools and hooks must not keep per-request state in module-level or class-level mutable globals; use a `contextvars.ContextVar` or the per-request `ToolContext` / `invocation_state` instead.
+
+**Factory requirement**: your agent factory must accept and forward `conversation_repository` and `memory_manager` (for example `def agent_factory(mcp_client, storage_dir, **kwargs)` passing both to `create_default_orchestrator`). The server checks this at startup.
+
+**Subagents**: an agent that inherits `StreamingCapable` can stream too. An orchestrator can stream a subagent's answer back to the user with the `stream_message_to_subagent` tool; use `send_message_to_subagent` when the orchestrator keeps working on the result.
+
 ## Requirements
 
 - Python 3.11+

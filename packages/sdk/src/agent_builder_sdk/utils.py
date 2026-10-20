@@ -128,6 +128,43 @@ class MessageInfo(BaseModel):
     parts: list[dict[str, Any]]
 
 
+def mcp_session_active(mcp_client: Any) -> bool:
+    """Return True if an MCP client's session is already open.
+
+    Wraps Strands' ``MCPClient._is_session_active()`` (a leading-underscore method) in
+    one place so callers don't couple to that private API directly. Used to decide
+    whether a client must be entered (opened) for a turn or is already open — e.g. a
+    shared client the server keeps open for concurrent streaming. Fails safe to
+    ``False`` (treat as not-open → enter it) if the private method is ever removed.
+    """
+    checker = getattr(mcp_client, "_is_session_active", None)
+    if checker is None:
+        return False
+    try:
+        return bool(checker())
+    except Exception:
+        return False
+
+
+def extract_source_information(message: Any) -> tuple[Optional[str], Optional[str]]:
+    """Extract ``(user_id, sender)`` from an A2A message's source-information extension.
+
+    Single source of truth for source extraction, used by both the buffered path
+    (``extract_message_info``) and the streaming ingress, so the two classify a turn
+    the same way. Requires the extension to be declared in ``message.extensions`` and
+    present in ``message.metadata`` (an undeclared extension is ignored).
+
+    Returns ``(None, None)`` when no valid source information is present.
+    """
+    user_id = None
+    sender = None
+    if message.extensions and A2A_SOURCE_INFORMATION_EXT in message.extensions and message.metadata:
+        source_info = message.metadata[A2A_SOURCE_INFORMATION_EXT]
+        user_id = source_info.get("onBehalfOfUser")
+        sender = source_info.get("senderAgentInstanceId")
+    return user_id, sender
+
+
 def extract_message_info(request: InvocationRequest) -> MessageInfo:
     """
     Extract user information and process message parts from the request.
@@ -144,15 +181,8 @@ def extract_message_info(request: InvocationRequest) -> MessageInfo:
     message = request.message
     task_id = message.taskId
     parts = message.parts
-    user_id = None
-    sender = None
     context_id = request.message.contextId
-    if message.extensions and A2A_SOURCE_INFORMATION_EXT in message.extensions and message.metadata:
-        source_info = message.metadata[A2A_SOURCE_INFORMATION_EXT]
-        if "onBehalfOfUser" in source_info:
-            user_id = source_info["onBehalfOfUser"]
-        if "senderAgentInstanceId" in source_info:
-            sender = source_info["senderAgentInstanceId"]
+    user_id, sender = extract_source_information(message)
 
     parts[0]["type"] = parts[0]["kind"]
 
@@ -274,6 +304,8 @@ class TransformEndpointConfig:
             "eu-south-1": "MXP",  # Milan
             "me-south-1": "BAH",  # Bahrain
             "sa-east-1": "GRU",  # São Paulo
+            "us-gov-west-1": "PDT",  # GovCloud West
+            "us-gov-east-1": "OSU",  # GovCloud East
         }
 
         airport_code = region_mapping.get(region.lower())
@@ -281,6 +313,20 @@ class TransformEndpointConfig:
             raise ValueError(f"Unsupported AWS region: {region}")
 
         return airport_code
+
+    @staticmethod
+    def get_root_dns_domain(region: str) -> str:
+        """
+        Resolves the Elastic Gumby DNS apex for a region's partition.
+
+        GovCloud endpoints live under a separate child zone
+        (us-gov.elastic-gumby.ai.aws.dev), not the commercial apex. Building a gov
+        endpoint on the commercial apex yields a hostname with no DNS record in the
+        gov partition, causing SdkClientException "Unable to execute HTTP request".
+        """
+        if region.lower().startswith("us-gov-"):
+            return "us-gov.elastic-gumby.ai.aws.dev"
+        return "elastic-gumby.ai.aws.dev"
 
     @staticmethod
     def create_endpoint_url(stage: str, region: str, component_name: str) -> str:
@@ -299,7 +345,8 @@ class TransformEndpointConfig:
             ValueError: If the provided region is not supported
         """
         airport_code = TransformEndpointConfig.get_airport_code_for_region(region).lower()
-        return f"https://{airport_code}.{stage.lower()}.{component_name}.elastic-gumby.ai.aws.dev"
+        root_domain = TransformEndpointConfig.get_root_dns_domain(region)
+        return f"https://{airport_code}.{stage.lower()}.{component_name}.{root_domain}"
 
     @staticmethod
     def create_external_agenticapi_endpoint_url(stage: str, region: str):
@@ -430,12 +477,20 @@ def combine_tools(
     # Add MCP tools
     if mcp_clients:
         for mcp_client in mcp_clients:
-            with mcp_client:
-                for tool in mcp_client.list_tools_sync():
-                    if tool.tool_name in excluded_mcp_tool_names:
-                        logger.info(f"Excluding mcp tool: {tool.tool_name}")
-                        continue
-                    add_tool(tool)
+            # A client the caller keeps open (e.g. a shared client for concurrent
+            # streaming) is already active — list tools on it directly. Re-entering it
+            # would raise ("session currently running") and close it for others on exit.
+            # A standalone client is entered/exited here to list its tools, as before.
+            if mcp_session_active(mcp_client):
+                mcp_tools = mcp_client.list_tools_sync()
+            else:
+                with mcp_client:
+                    mcp_tools = mcp_client.list_tools_sync()
+            for tool in mcp_tools:
+                if tool.tool_name in excluded_mcp_tool_names:
+                    logger.info(f"Excluding mcp tool: {tool.tool_name}")
+                    continue
+                add_tool(tool)
 
     # Add custom tools
     if custom_tools:
@@ -507,3 +562,81 @@ def write_content_to_file(content: str, file_path: str) -> None:
             os.unlink(temp_path)
         logger.error(f"Failed to write to {file_path}: {e}")
         raise
+
+
+def reconcile_dangling_tool_uses(messages: List[Any]) -> List[Any]:
+    """Insert error tool results immediately after assistant tool uses left unresolved.
+
+    Bedrock requires a toolUse to be answered in the message that IMMEDIATELY follows it, so a
+    result appearing later in the list is as invalid as a missing one — hence only the next
+    message is consulted. History is persisted per message, before a tool runs, so an interrupted
+    turn leaves an unpaired toolUse on disk that fails every later Converse call until repaired.
+
+    Never mutates a message: a turn whose results arrived only in part gets a copy of its result
+    message with the missing ones appended. So the caller's stored objects — which the loaded
+    messages alias — are left untouched, and a well-formed history round-trips unchanged.
+    """
+    if not messages:
+        return messages
+    result = list(messages)
+    idx = 0
+    while idx < len(result):
+        message = result[idx]
+        if not isinstance(message, dict) or message.get("role") != "assistant":
+            idx += 1
+            continue
+
+        tool_use_ids: List[Any] = []
+        for block in message.get("content") or []:
+            if not isinstance(block, dict):
+                continue
+            tool_use = block.get("toolUse")
+            if isinstance(tool_use, dict) and "toolUseId" in tool_use:
+                tool_use_ids.append(tool_use["toolUseId"])
+
+        following_tool_result_ids: List[Any] = []
+        if idx + 1 < len(result):
+            following_message = result[idx + 1]
+            if isinstance(following_message, dict):
+                for block in following_message.get("content") or []:
+                    if not isinstance(block, dict):
+                        continue
+                    tool_result = block.get("toolResult")
+                    if isinstance(tool_result, dict) and "toolUseId" in tool_result:
+                        following_tool_result_ids.append(tool_result["toolUseId"])
+
+        unmatched_tool_use_ids = [
+            tool_use_id
+            for tool_use_id in tool_use_ids
+            if tool_use_id not in following_tool_result_ids
+        ]
+        if unmatched_tool_use_ids:
+            error_blocks: List[Any] = [
+                {
+                    "toolResult": {
+                        "toolUseId": tool_use_id,
+                        "content": [{"text": "Tool did not complete; the turn was interrupted."}],
+                        "status": "error",
+                    }
+                }
+                for tool_use_id in unmatched_tool_use_ids
+            ]
+            if following_tool_result_ids:
+                # The next message already carries this turn's results and resolved only some of
+                # the ids, so the missing ones have to join it. A separate message would displace
+                # the real results out of the only position Bedrock accepts them in.
+                partial_message = result[idx + 1]
+                result[idx + 1] = {
+                    **partial_message,
+                    "content": [*(partial_message.get("content") or []), *error_blocks],
+                }
+            else:
+                # Leaves two adjacent user turns when the next message is user text. That is the
+                # shape BedrockModel._separate_tool_result_turns normalises request-locally, so do
+                # NOT "fix" it by merging the results into that message — a turn carrying both
+                # conversation and toolResult blocks is rejected outright.
+                result.insert(idx + 1, {"role": "user", "content": error_blocks})
+            idx += 2
+        else:
+            idx += 1
+    return result

@@ -14,6 +14,11 @@ from strands.agent import AgentResult
 from structlog.contextvars import bound_contextvars
 
 from agent_builder_sdk.agentic_framework.client_factory import get_agentic_api_client
+from agent_builder_sdk.constants import (
+    DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS,
+    DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS,
+    validate_send_message_timeout,
+)
 from agent_builder_sdk.custom_types.common_types import (
     A2AError,
     A2AErrorCode,
@@ -58,8 +63,8 @@ class MessageHandler:
         self,
         queue: Optional[QueueService] = None,
         agent: Optional[AnyBaseAgent[str, AgentResult]] = None,
-        timeout: int = 28,
-        delayed_timeout: int = 300,
+        timeout: int = DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS,
+        delayed_timeout: int = DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS,
         extension_handlers: Optional[Sequence[BaseExtensionHandler]] = None,
         task_manager: Optional[TaskManager] = None,
     ):
@@ -69,7 +74,7 @@ class MessageHandler:
         Args:
             queue: QueueService for orchestrator agents (optional, mutually exclusive with agent)
             agent: BaseAgent for direct processing (optional, mutually exclusive with queue)
-            timeout: Request timeout in seconds
+            timeout: Request timeout in seconds. Above MAX_SEND_MESSAGE_TIMEOUT_SECONDS (28s) logs a warning
             delayed_timeout: Extended timeout for delayed responses
             extension_handlers: List of extension handlers for processing A2A extensions (e.g., acknowledgment)
             task_manager: TaskManager for task creation and management (optional, experimental)
@@ -89,7 +94,7 @@ class MessageHandler:
 
         self.queue = queue
         self.agent = agent
-        self._timeout = timeout
+        self._timeout = validate_send_message_timeout(timeout)
         self._delayed_timeout = delayed_timeout
         self.extension_handlers = extension_handlers
         self.task_manager = task_manager
@@ -259,9 +264,16 @@ class MessageHandler:
                 task_id=message_info.task_id,
             )
 
+            # Correlation ids for joining logs to the orchestrator's SendMessage record
+            msg_id = getattr(request.message, "messageId", None)
+            ctx_id = getattr(request.message, "contextId", None)
+
             log_context = {"queue.request.id": request_id}
             with bound_contextvars(**log_context):
-                logger.info(f"Submitted request {request_id} for message processing")
+                logger.info(
+                    f"Submitted request {request_id} for message processing "
+                    f"(messageId={msg_id}, contextId={ctx_id})"
+                )
 
                 # Process extension handlers
                 handler_response = process_extension_handlers(

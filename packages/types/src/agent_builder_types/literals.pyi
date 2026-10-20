@@ -1,3 +1,5 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 """
 Type annotations for AWS Transform Agentic service literal definitions.
 
@@ -45,6 +47,7 @@ __all__ = (
     "ListHitlTasksPaginatorName",
     "ListJobPlanStepsPaginatorName",
     "MeteredUnitType",
+    "MonitoringTypeType",
     "OwnerTypeType",
     "PlanStepStatusType",
     "PutJobPlanStatusType",
@@ -60,11 +63,17 @@ __all__ = (
 AccessControlType = Literal["DISABLED", "ENABLED"]
 AccountConnectionStatusType = Literal["ACTIVE", "PENDING", "REJECTED"]
 ActionType = Literal["APPROVE", "REJECT"]
-AgentConfigurationAvailabilityType = Literal[
-    "ANY", "NEEDS_RUNTIME_CONFIGURATION", "RUNTIME_CONFIGURATION_AVAILABLE"
-]
+AgentConfigurationAvailabilityType = Literal["ANY", "NEEDS_RUNTIME_CONFIGURATION", "RUNTIME_CONFIGURATION_AVAILABLE"]
 AgentInstanceStatusType = Literal[
-    "COMPLETED", "FAILED", "INVOKED", "INVOKING", "RUNNING", "STOPPED", "STOPPING", "UNRESPONSIVE"
+    "COMPLETED",
+    "FAILED",
+    "IDLE",
+    "INVOKED",
+    "INVOKING",
+    "RUNNING",
+    "STOPPED",
+    "STOPPING",
+    "UNRESPONSIVE",
 ]
 AgentTypeType = Literal["ORCHESTRATOR_AGENT", "SUB_AGENT"]
 AgentVisibilityType = Literal["PUBLIC", "RESTRICTED"]
@@ -86,9 +95,7 @@ ChunkingStrategyType = Literal["FIXED_SIZE", "HIERARCHICAL", "NONE", "SEMANTIC"]
 ClosureTypeType = Literal["CANCELLED", "CLOSED", "CLOSED_PENDING_NEXT_TASK"]
 CopyStatusType = Literal["COMPLETED", "IN_PROGRESS"]
 FailureCategoryType = Literal["CUSTOMER_ERROR", "EXPECTED_FAILURE", "SERVICE_ERROR"]
-FileTypeType = Literal[
-    "CSV", "HTML", "JSON", "MARKDOWN", "OTHER", "PDF", "PPTX", "TXT", "XLSX", "ZIP"
-]
+FileTypeType = Literal["CSV", "HTML", "JSON", "MARKDOWN", "OTHER", "PDF", "PPTX", "TXT", "XLSX", "ZIP"]
 HitlTaskStatusType = Literal[
     "AWAITING_APPROVAL",
     "AWAITING_HUMAN_INPUT",
@@ -102,9 +109,7 @@ HitlTaskStatusType = Literal[
     "WAITING_APPROVAL",
 ]
 HitlTaskTypeType = Literal["DASHBOARD", "NORMAL"]
-IngestionStatusType = Literal[
-    "COMPLETE", "FAILED", "IN_PROGRESS", "STARTING", "STOPPED", "STOPPING"
-]
+IngestionStatusType = Literal["COMPLETE", "FAILED", "IN_PROGRESS", "STARTING", "STOPPED", "STOPPING"]
 JobStatusType = Literal[
     "ASSESSING",
     "AWAITING_HUMAN_INPUT",
@@ -124,10 +129,9 @@ ListArtifactsPaginatorName = Literal["list_artifacts"]
 ListHitlTasksPaginatorName = Literal["list_hitl_tasks"]
 ListJobPlanStepsPaginatorName = Literal["list_job_plan_steps"]
 MeteredUnitType = Literal["COUNT"]
+MonitoringTypeType = Literal["HEALTHCHECK", "HEARTBEAT"]
 OwnerTypeType = Literal["DIRECT_AGENT", "INTERNAL_AGENT", "MARKETPLACE_AGENT"]
-PlanStepStatusType = Literal[
-    "FAILED", "IN_PROGRESS", "NOT_STARTED", "PENDING_HUMAN_INPUT", "STOPPED", "SUCCEEDED"
-]
+PlanStepStatusType = Literal["FAILED", "IN_PROGRESS", "NOT_STARTED", "PENDING_HUMAN_INPUT", "STOPPED", "SUCCEEDED"]
 PutJobPlanStatusType = Literal["COMPLETED", "IN_PROGRESS"]
 ResourceTypeType = Literal[
     "ASSESSMENTS_MONTHLY_COMPLETED_ASSESSMENTS",
@@ -136,6 +140,7 @@ ResourceTypeType = Literal[
     "DOT_NET_TRANSFORMATION_MONTHLY_REPOSITORIES",
     "DOT_NET_TRANSFORMATION_TOTAL_LOC",
     "MAINFRAME_ANALYSIS_LOC",
+    "MAINFRAME_ASSESSMENT_BUSINESS_PROCESS_LOC",
     "MAINFRAME_ASSESSMENT_LOC",
     "MAINFRAME_BUSINESS_RULE_DEPENDENCY_LOC",
     "MAINFRAME_BUSINESS_RULE_LOC",
@@ -154,6 +159,7 @@ ResourceTypeType = Literal[
     "MAINFRAME_TEST_DATA_COLLECTION_TC_SELECTED",
     "MAINFRAME_TEST_SCRIPT_GENERATION_TC_SELECTED",
     "MAINFRAME_TRANSFORM_LOC",
+    "MSSQL_TO_POSTGRES_DATABASES_MONTHLY",
     "QT_AGENTIC_PLATFORM_BILLING_TEST",
     "QT_AGENTIC_PLATFORM_TEST",
     "VMS_MIGRATED_SUCCESSFUL_COUNT",
@@ -163,6 +169,6 @@ ResourceTypeType = Literal[
 RetrievalResultLocationTypeType = Literal["S3", "WEB"]
 RetrievalScopeType = Literal["AGENT_INGESTED", "AWS", "PRODUCT"]
 SeverityType = Literal["CRITICAL", "STANDARD"]
-UpdateAgentInstanceStatusType = Literal["COMPLETED", "FAILED", "RUNNING", "STOPPED"]
+UpdateAgentInstanceStatusType = Literal["COMPLETED", "FAILED", "IDLE", "RUNNING", "STOPPED"]
 VersionStatusType = Literal["ACTIVE", "CREATED", "IN_VERIFICATION", "VERIFICATION_FAILED"]
 VisibilityType = Literal["EXTERNAL", "INTERNAL"]
