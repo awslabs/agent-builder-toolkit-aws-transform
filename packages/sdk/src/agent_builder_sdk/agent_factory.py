@@ -9,6 +9,7 @@ import os
 from typing import Any, Optional, Set, TypeVar, Union
 
 from botocore.config import Config as BotocoreConfig
+from strands.hooks import HookProvider
 from strands.models.model import Model
 from strands.tools.mcp.mcp_client import MCPClient
 
@@ -23,6 +24,9 @@ from agent_builder_sdk.orchestrator_strands.base_orchestrator import (
 )
 from agent_builder_sdk.orchestrator_strands.conversation.file_repository import (
     FileMultiSourceConversationRepository,
+)
+from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
+    BlankReplyHookProvider,
 )
 from agent_builder_sdk.orchestrator_strands.hooks.conversation_hook_provider import (
     ConversationHookProvider,
@@ -61,6 +65,8 @@ def _create_default_orchestrator(
     enable_skills: bool = False,
     skills_dir: Optional[str] = None,
     enable_code_execution: bool = False,
+    enable_blank_reply_continuation: bool = False,
+    enable_prompt_caching: bool = False,
     locale: Optional[str] = None,
     conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
     memory_manager: Optional[MemoryManager] = None,
@@ -122,10 +128,12 @@ def _create_default_orchestrator(
         conversation_repository = FileMultiSourceConversationRepository(storage_dir=storage_dir)
 
     # Create hooks
-    hooks = [
+    hooks: list[HookProvider] = [
         ConversationHookProvider(repository=conversation_repository),
         MemoryHookProvider(memory_manager=memory_manager),
     ]
+    if enable_blank_reply_continuation:
+        hooks.append(BlankReplyHookProvider())
 
     # Use provided system prompt or default
     if system_prompt is None:
@@ -151,6 +159,7 @@ def _create_default_orchestrator(
         metrics_config=metrics_config,
         plugins=[skills_plugin] if skills_plugin else None,
         locale=locale,
+        enable_prompt_caching=enable_prompt_caching,
     )
 
     logger.info("Default orchestrator created successfully with memory and conversation support")
@@ -351,6 +360,8 @@ def create_default_async_orchestrator_with_subagent(
     locale: Optional[str] = None,
     conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
     memory_manager: Optional[MemoryManager] = None,
+    enable_blank_reply_continuation: bool = False,
+    enable_prompt_caching: bool = False,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.
 
@@ -382,6 +393,10 @@ def create_default_async_orchestrator_with_subagent(
         enable_code_execution: Enable experimental local Python code execution tool.
             WARNING: Code executes locally without sandboxing. Use with caution.
             For sandboxed execution, AgentCore Code Interpreter integration is planned.
+        enable_blank_reply_continuation: Ask the model once more for its reply when a turn ends
+            empty right after tool results (see BlankReplyHookProvider).
+        enable_prompt_caching: Turn on Bedrock prompt caching for the orchestrator's model (see
+            AsyncBaseOrchestrator). Off by default.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
@@ -416,6 +431,8 @@ def create_default_async_orchestrator_with_subagent(
         enable_skills=enable_skills,
         skills_dir=skills_dir,
         enable_code_execution=enable_code_execution,
+        enable_blank_reply_continuation=enable_blank_reply_continuation,
+        enable_prompt_caching=enable_prompt_caching,
         locale=locale,
         conversation_repository=conversation_repository,
         memory_manager=memory_manager,

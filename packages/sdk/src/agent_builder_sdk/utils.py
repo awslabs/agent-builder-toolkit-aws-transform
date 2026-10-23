@@ -256,10 +256,31 @@ def extract_text_from_strands_agent_response(response: AgentResult) -> str:
     for block in response.message["content"]:
         if text := block.get("text", "").strip():
             text_blocks.append(text)
-        else:
-            logger.warning("Encountered non-text content block in agent result: %s", block)
 
     return "\n".join(text_blocks).strip()
+
+
+def describe_agent_result(result: Any) -> str:
+    """Summarize an agent result for logs without its content.
+
+    Agents may return their own result objects, so every field is optional and this never raises.
+    """
+    try:
+        message = getattr(result, "message", None) or {}
+        content = message.get("content") or []
+        state = getattr(result, "state", None)
+        return "stop_reason=%s, content_blocks=%s, state_keys=%s" % (
+            getattr(result, "stop_reason", None),
+            (
+                [sorted(b) if isinstance(b, dict) else type(b).__name__ for b in content]
+                if isinstance(content, list)
+                else type(content).__name__
+            ),
+            sorted(state) if isinstance(state, dict) else None,
+        )
+    except Exception as e:
+        # Not str(e): a broken __str__ would raise, and the message could carry content.
+        return f"undescribable {type(result).__name__}: {type(e).__name__}"
 
 
 class TransformEndpointConfig:

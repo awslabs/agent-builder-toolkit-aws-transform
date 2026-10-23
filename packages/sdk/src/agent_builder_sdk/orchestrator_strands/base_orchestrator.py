@@ -31,6 +31,7 @@ from botocore.config import Config as BotocoreConfig
 from strands import Agent as StrandsAgent
 from strands.agent import AgentResult
 from strands.hooks import HookCallback, HookProvider
+from strands.models import CacheConfig
 from strands.models.model import Model
 from strands.tools.mcp import MCPClient
 from strands.types.content import Messages
@@ -101,6 +102,7 @@ class _BaseOrchestrator(StrandsAgent):
         evaluation_card: Optional[EvaluationCard] = None,
         metrics_config: Optional[MetricsConfig] = None,
         locale: Optional[str] = None,
+        enable_prompt_caching: bool = False,
         **kwargs,
     ):
         """
@@ -140,6 +142,14 @@ class _BaseOrchestrator(StrandsAgent):
                 instruction is appended to the system prompt so the agent responds in the
                 user's language. Sourced from AgentRuntimeContext.locale, which is populated
                 identically for AgentCore (invoke/restore payload) and MDE (env var).
+            enable_prompt_caching: Turn on Bedrock prompt caching for the model built here
+                (ignored if model is provided). With ``CacheConfig(strategy="auto")`` Strands
+                places the cache points itself, for Claude model ids only, and Bedrock decides
+                which prompt tokens it reads from or writes to the cache
+                (https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html).
+                Cache reads cost a fraction of the uncached input price and cache writes cost a
+                premium over it, entries keep Bedrock's default lifetime, and Bedrock's
+                ``inputTokens`` counts only the uncached tokens.
         """
         # Append locale instruction to the system prompt when a locale is present.
         # get_locale_instruction returns "" for English/None/unknown, so non-localized
@@ -169,6 +179,10 @@ class _BaseOrchestrator(StrandsAgent):
             if guardrail_stream_processing_mode
             else {}
         )
+        # No tools_ttl: every cached prefix starts with the tools, so they are cached anyway.
+        cache_extra: Dict[str, Any] = (
+            {"cache_config": CacheConfig(strategy="auto")} if enable_prompt_caching else {}
+        )
         bedrock_model = (
             None
             if model is not None
@@ -179,6 +193,7 @@ class _BaseOrchestrator(StrandsAgent):
                 guardrail_version=guardrail_version,
                 boto_client_config=boto_client_config,
                 **guardrail_extra,
+                **cache_extra,
             )
         )
 

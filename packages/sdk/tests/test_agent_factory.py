@@ -8,10 +8,15 @@ import os
 from unittest import mock
 
 from agent_builder_sdk.agent_factory import (
+    create_default_async_orchestrator,
+    create_default_async_orchestrator_with_subagent,
     create_default_async_subagent,
     create_default_orchestrator,
     create_default_orchestrator_with_subagent,
     create_default_subagent,
+)
+from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
+    BlankReplyHookProvider,
 )
 
 
@@ -821,3 +826,72 @@ class TestAgentFactory:
         mock_async_subagent.assert_called_once()
         call_kwargs = mock_async_subagent.call_args.kwargs
         assert call_kwargs["region_name"] == "us-west-2"
+
+
+class TestOrchestratorOptions:
+    """Opt-in orchestrator options stay off by default."""
+
+    @mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
+    @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
+    def test_blank_reply_continuation_off_by_default(self, *mocks):
+        mock_orchestrator = mocks[-1]
+        mock_orchestrator.return_value = mock.Mock()
+
+        create_default_async_orchestrator_with_subagent(system_prompt="task prompt")
+        create_default_async_orchestrator(system_prompt="task prompt")
+
+        for call in mock_orchestrator.call_args_list:
+            hooks = call.kwargs["hooks"]
+            assert not any(isinstance(h, BlankReplyHookProvider) for h in hooks)
+
+    @mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
+    @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
+    def test_blank_reply_continuation_adds_its_hook_when_enabled(self, *mocks):
+        mock_orchestrator = mocks[-1]
+        mock_orchestrator.return_value = mock.Mock()
+
+        create_default_async_orchestrator_with_subagent(
+            system_prompt="task prompt", enable_blank_reply_continuation=True
+        )
+
+        hooks = mock_orchestrator.call_args.kwargs["hooks"]
+        assert hooks[0] is mocks[3].return_value
+        assert isinstance(hooks[-1], BlankReplyHookProvider)
+
+    @mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
+    @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
+    def test_prompt_caching_is_forwarded_and_off_by_default(self, *mocks):
+        mock_orchestrator = mocks[-1]
+        mock_orchestrator.return_value = mock.Mock()
+
+        create_default_async_orchestrator_with_subagent(system_prompt="p")
+        assert mock_orchestrator.call_args.kwargs["enable_prompt_caching"] is False
+
+        create_default_async_orchestrator_with_subagent(
+            system_prompt="p", enable_prompt_caching=True
+        )
+        assert mock_orchestrator.call_args.kwargs["enable_prompt_caching"] is True

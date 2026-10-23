@@ -226,16 +226,21 @@ def test_handler_validation_neither_provided():
         (AsyncBaseAgent, "process_message_async"),
     ],
 )
-async def test_send_message_with_agent(a2a_message, agent_result, agent_class, process_method):
+async def test_send_message_with_agent(
+    a2a_message, agent_result, agent_class, process_method, caplog
+):
     mock_agent = create_autospec(agent_class, spec_set=True, instance=True)
     getattr(mock_agent, process_method).return_value = agent_result
     handler = MessageHandler(agent=mock_agent)
 
-    response = await handler.send_message(InvocationRequest(a2a_message))
+    with caplog.at_level(logging.INFO, logger="agent_builder_sdk"):
+        response = await handler.send_message(InvocationRequest(a2a_message))
 
     assert response.error is None
     assert response.result is not None
     assert response.result.parts == [{"text": "test agent result", "kind": "text"}]
+    assert "Agent result: stop_reason=end_turn" in caplog.text
+    assert "test agent result" not in caplog.text
 
 
 async def test_send_message_with_acknowledgment_extension(mock_convert, handler, a2a_message):

@@ -37,6 +37,7 @@ from agent_builder_sdk.task.task_manager import TaskManager
 from agent_builder_sdk.utils import (
     convert_queue_response_to_send_message_output,
     convert_subagent_response_to_send_message_output,
+    describe_agent_result,
     extract_message_info,
     extract_text_from_strands_agent_response,
     process_extension_handlers,
@@ -201,7 +202,7 @@ class MessageHandler:
                 else:
                     agent_response = await asyncio.to_thread(agent.process_message, message)
 
-            logger.debug("Agent result: %r", agent_response)
+            logger.info("Agent result: %s", describe_agent_result(agent_response))
 
             extracted_agent_response = extract_text_from_strands_agent_response(agent_response)
             # If a tool set force_stop_response, use it directly as the response

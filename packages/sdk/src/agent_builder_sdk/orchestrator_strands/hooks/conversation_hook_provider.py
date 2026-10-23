@@ -14,6 +14,9 @@ from agent_builder_sdk.orchestrator_strands.conversation.file_repository import 
 from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     ConversationRepository,
 )
+from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
+    drop_unanswered_continuations,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +69,7 @@ class ConversationHookProvider(HookProvider):
         history = self.repository.get_conversation_history_for_agent(event.agent)
 
         # Update the agent's conversation with the relevant history
-        event.agent.messages = history
+        event.agent.messages = drop_unanswered_continuations(history)
 
         logger.info(
             f"Set conversation history for agent {event.agent.agent_id} with history length: {len(history)}"

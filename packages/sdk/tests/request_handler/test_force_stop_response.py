@@ -3,6 +3,7 @@
 """Tests for force_stop_response handling in QueueRequestHandler and MessageHandler."""
 
 import asyncio
+import logging
 from unittest.mock import AsyncMock, create_autospec
 
 import pytest
@@ -162,7 +163,7 @@ class TestQueueHandlerForceStopResponse:
         ],
     )
     async def test_normal_response_when_no_force_stop(
-        self, queue_handler, agent_class, process_method
+        self, queue_handler, agent_class, process_method, caplog
     ):
         """Without force_stop_response, normal text extraction should work as before."""
         # Normal flow: LLM produced text, no force_stop in state
@@ -175,12 +176,15 @@ class TestQueueHandlerForceStopResponse:
         getattr(mock_agent, process_method).side_effect = [result, asyncio.CancelledError()]
         mock_get_agent = AsyncMock(return_value=mock_agent)
 
-        await queue_handler.start_processing(mock_get_agent)
+        with caplog.at_level(logging.INFO, logger="agent_builder_sdk"):
+            await queue_handler.start_processing(mock_get_agent)
         response = await queue_handler.response_store.get_response(request.request_id)
 
         # Regression check: normal text extraction still works
         assert response is not None
         assert response.message == "Normal LLM response"
+        assert "Agent result: stop_reason=end_turn" in caplog.text
+        assert "Normal LLM response" not in caplog.text
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(

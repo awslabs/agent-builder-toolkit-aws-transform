@@ -6,6 +6,7 @@ from unittest import mock
 from unittest.mock import AsyncMock, Mock, create_autospec, patch
 
 import pytest
+from strands.models import CacheConfig
 from strands.tools.mcp import MCPAgentTool, MCPClient
 from strands.types import PaginatedList
 
@@ -675,6 +676,18 @@ def test_orchestrator_omits_guardrail_mode_when_unset(mock_model):
 
         _, kwargs = mock_factory.call_args
         assert "guardrail_stream_processing_mode" not in kwargs
+
+
+def test_orchestrator_passes_cache_config_when_prompt_caching_is_on(
+    patch_create_with_shared_capacity_role,
+):
+    """The flag hands Strands' automatic cache placement to the model it builds. The default
+    call, with no cache_config at all, is pinned by
+    test_initialize_bedrock_model_default_credentials."""
+    BaseOrchestrator(system_prompt="Test prompt", enable_prompt_caching=True)
+
+    _, kwargs = patch_create_with_shared_capacity_role.call_args
+    assert kwargs["cache_config"] == CacheConfig(strategy="auto")
 
 
 @patch(

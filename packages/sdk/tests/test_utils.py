@@ -23,6 +23,7 @@ from agent_builder_sdk.utils import (
     combine_tools,
     convert_queue_response_to_send_message_output,
     convert_subagent_response_to_send_message_output,
+    describe_agent_result,
     extract_source_information,
     extract_text_from_strands_agent_response,
     get_prompt,
@@ -42,6 +43,74 @@ def test_get_prompt():
 
         mock_read_text.assert_called_once_with("agent_builder_sdk.prompts", "system_prompt.md")
         assert result == "Test system prompt"
+
+
+@pytest.mark.parametrize(
+    ("result", "expected"),
+    (
+        (
+            AgentResult(
+                "end_turn",
+                Message(role="assistant", content=[{"text": "secret"}, {"toolUse": {}}]),
+                EventLoopMetrics(),
+                state={"force_stop_response": "secret"},
+            ),
+            "stop_reason=end_turn, content_blocks=[['text'], ['toolUse']], "
+            "state_keys=['force_stop_response']",
+        ),
+        (
+            AgentResult("end_turn", Message(role="assistant", content=[]), EventLoopMetrics(), {}),
+            "stop_reason=end_turn, content_blocks=[], state_keys=[]",
+        ),
+        (
+            type("Result", (), {"message": {"content": [{"text": "hi"}]}, "state": {}})(),
+            "stop_reason=None, content_blocks=[['text']], state_keys=[]",
+        ),
+        (
+            type("Result", (), {"message": {"content": "secret"}, "state": {}})(),
+            "stop_reason=None, content_blocks=str, state_keys=[]",
+        ),
+        (
+            type("Result", (), {"message": {"content": ["secret"]}, "state": {}})(),
+            "stop_reason=None, content_blocks=['str'], state_keys=[]",
+        ),
+        (None, "stop_reason=None, content_blocks=[], state_keys=None"),
+    ),
+    ids=["agent-result", "empty", "hand-built", "string-content", "string-blocks", "none"],
+)
+def test_describe_agent_result_never_includes_content(result, expected):
+    assert describe_agent_result(result) == expected
+
+
+def test_extract_text_does_not_log_non_text_blocks(caplog):
+    result = AgentResult(
+        "tool_use",
+        Message(role="assistant", content=[{"toolUse": {"input": {"q": "secret"}}}]),
+        EventLoopMetrics(),
+        state=None,
+    )
+
+    assert extract_text_from_strands_agent_response(result) == ""
+    assert "secret" not in caplog.text
+
+
+def test_describe_agent_result_never_raises():
+    class Broken:
+        @property
+        def message(self):
+            raise RuntimeError("boom")
+
+    class BrokenStr(Exception):
+        def __str__(self):
+            raise ValueError("inner")
+
+    class BrokenTwice:
+        @property
+        def message(self):
+            raise BrokenStr()
+
+    assert describe_agent_result(Broken()) == "undescribable Broken: RuntimeError"
+    assert describe_agent_result(BrokenTwice()) == "undescribable BrokenTwice: BrokenStr"
 
 
 @pytest.mark.parametrize(
