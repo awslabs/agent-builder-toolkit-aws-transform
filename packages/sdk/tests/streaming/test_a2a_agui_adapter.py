@@ -30,6 +30,7 @@ from agent_builder_sdk.streaming import (
     to_wire,
 )
 from agent_builder_sdk.streaming.a2a_agui_adapter import build_suggestion_interaction_events
+from agent_builder_sdk.streaming.a2a_frame_utils import RELAY_CYCLE_SEPARATOR
 
 
 def types(events):
@@ -527,6 +528,52 @@ class TestRelayedSubagentStream:
         assert state.force_stop_streamed is True
         assert out[1].message_id == state.force_stop_message_id
         assert out[2].delta == "Hi"
+
+    def test_relayed_model_cycles_are_separated_live(self):
+        state = fresh_state()
+        adapt(tool_stream_event({"data": "Let me check."}), state)
+        model_call_end = tool_stream_event({"message": {"role": "assistant", "content": []}})
+        assert adapt(model_call_end, state) == []
+
+        out = adapt(tool_stream_event({"data": "Final answer"}), state)
+
+        assert [e.delta for e in out if isinstance(e, TextMessageContentEvent)] == [
+            RELAY_CYCLE_SEPARATOR,
+            "Final answer",
+        ]
+        assert all(e.message_id == state.force_stop_message_id for e in out)
+
+    def test_relayed_cycle_end_before_any_text_adds_no_separator(self):
+        state = fresh_state()
+        adapt(tool_stream_event({"message": {"role": "assistant", "content": []}}), state)
+
+        out = adapt(tool_stream_event({"data": "Answer"}), state)
+
+        assert [e.delta for e in out if isinstance(e, TextMessageContentEvent)] == ["Answer"]
+
+    def test_relayed_deltas_in_one_cycle_get_one_separator(self):
+        state = fresh_state()
+        adapt(tool_stream_event({"data": "Let me check."}), state)
+        adapt(tool_stream_event({"message": {"role": "assistant", "content": []}}), state)
+        first = adapt(tool_stream_event({"data": "Final"}), state)
+        second = adapt(tool_stream_event({"data": " answer"}), state)
+
+        deltas = [e.delta for e in [*first, *second] if isinstance(e, TextMessageContentEvent)]
+        assert deltas == [RELAY_CYCLE_SEPARATOR, "Final", " answer"]
+
+    def test_empty_relayed_delta_adds_no_separator(self):
+        """An empty delta opens no cycle, so live text matches the persisted answer, which joins
+        only cycles with text."""
+        state = fresh_state()
+        adapt(tool_stream_event({"data": "A."}), state)
+        adapt(tool_stream_event({"message": {"role": "assistant", "content": []}}), state)
+        assert adapt(tool_stream_event({"data": ""}), state) == []
+        adapt(tool_stream_event({"message": {"role": "assistant", "content": []}}), state)
+
+        out = adapt(tool_stream_event({"data": "B."}), state)
+
+        deltas = [e.delta for e in out if isinstance(e, TextMessageContentEvent)]
+        assert deltas == [RELAY_CYCLE_SEPARATOR, "B."]
 
     def test_other_streaming_tool_yield_is_not_treated_as_relay(self):
         # A DIFFERENT async-generator tool also emits tool_stream events. Its yields must NOT be

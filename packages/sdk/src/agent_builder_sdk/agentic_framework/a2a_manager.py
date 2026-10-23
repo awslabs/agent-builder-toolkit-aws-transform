@@ -5,6 +5,7 @@ A2A Manager for SendMessage and GetTask operations.
 """
 
 import logging
+import threading
 from functools import lru_cache
 from typing import Any, Dict, Iterator
 
@@ -22,13 +23,18 @@ from agent_builder_sdk.env_var import get_agent_context_from_env
 logger = logging.getLogger(__name__)
 
 
+# stream_send_message runs in worker threads; this keeps concurrent first calls from each building
+# the streaming client (lru_cache does not lock).
+_streaming_client_lock = threading.Lock()
+
+
 class A2AManager(AgenticApiHelper):
     """Manager for A2A protocol operations (SendMessage, GetTask)."""
 
     def __init__(self, streaming_client: Any = None, **kwargs: Any) -> None:
         """``streaming_client`` is the separate ConverseStream (``transformagentsstreamingservice``)
         client used only by ``stream_send_message``; the sync ``client`` (base class) serves every
-        other op. Kept optional so buffered-only callers/tests need not provide it."""
+        other op. Built on first use when not provided."""
         super().__init__(**kwargs)
         self.streaming_client = streaming_client
 
@@ -92,14 +98,16 @@ class A2AManager(AgenticApiHelper):
 
         Raises:
             ClientError: If the initial ConverseStream call fails.
-            ValueError: If this manager was built without a streaming client.
         """
         from agent_builder_sdk.streaming import sse_reader
 
         # ConverseStream lives in the separate `transformagentsstreamingservice`, not the sync
         # client (`self.client`), which has no such operation.
+        # Built on first use so buffered-only callers never need the streaming service model.
         if self.streaming_client is None:
-            raise ValueError("A2AManager was constructed without a streaming_client")
+            with _streaming_client_lock:
+                if self.streaming_client is None:
+                    self.streaming_client = get_streaming_agentic_api_client()
 
         request_data = {
             "agentInstanceId": agent_instance_id,
@@ -194,12 +202,10 @@ def get_a2a_manager() -> A2AManager:
     """Get cached A2AManager singleton from environment variables."""
     context = get_agent_context_from_env()
     client = get_agentic_api_client()
-    streaming_client = get_streaming_agentic_api_client()
 
     return A2AManager(
         workspace_id=context.workspace_id,
         job_id=context.job_id,
         agent_instance_id=context.agent_instance_id,
         client=client,
-        streaming_client=streaming_client,
     )

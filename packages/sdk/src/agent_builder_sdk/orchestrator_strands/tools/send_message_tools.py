@@ -30,13 +30,22 @@ class _SubagentStreamOutcome:
     both streaming tools so the terminal/failure decision and its messages stay in one place.
     """
 
+    # Text deltas of the current model cycle, and the text of each finished cycle (empty ones too).
     text_parts: List[str] = field(default_factory=list)
+    cycles: List[str] = field(default_factory=list)
     failed: bool = False
     saw_terminal: bool = False
     # Error text off a `failed` terminal frame (raw_a2a_emitter.error_frames), if any.
     error_text: Optional[str] = None
 
-    def resolve(self, subagent_instance_id: str) -> Tuple[bool, str]:
+    def end_cycle(self) -> None:
+        """A model call finished: its text, possibly none, is one cycle."""
+        self.cycles.append("".join(self.text_parts))
+        self.text_parts = []
+
+    def resolve(
+        self, subagent_instance_id: str, *, last_cycle_only: bool = False
+    ) -> Tuple[bool, str]:
         """Reduce the stream outcome to ``(is_success, message)``.
 
         ``message`` is always the string to surface as the tool result. When ``is_success`` is True
@@ -64,7 +73,16 @@ class _SubagentStreamOutcome:
             return False, (
                 f"Subagent {subagent_instance_id} stream ended without a terminal frame (truncated)."
             )
-        text = "".join(self.text_parts).strip()
+        cycles = [*self.cycles, "".join(self.text_parts)] if self.text_parts else self.cycles
+        if last_cycle_only:
+            # The answer is the last model call, even when it had no text (same as the buffered
+            # send_message_to_subagent), so an empty last cycle never falls back to earlier narration.
+            text = cycles[-1].strip() if cycles else ""
+        else:
+            from agent_builder_sdk.streaming.a2a_frame_utils import RELAY_CYCLE_SEPARATOR
+
+            # Only cycles with text, matching the live stream, which separates only those.
+            text = RELAY_CYCLE_SEPARATOR.join(c for c in cycles if c).strip()
         if not text:
             # NON-TERMINATING: completed but empty. force_stop_response="" would stop the loop and
             # persist nothing (every consumer treats "" as falsy) — a completed-but-silent turn — so
@@ -220,7 +238,8 @@ class SendMessageTools:
             logger.exception(f"Stream error for subagent {subagent_instance_id}: {e}")
             return f"Error streaming from subagent {subagent_instance_id}: {e}"
 
-        _is_success, message_out = outcome.resolve(subagent_instance_id)
+        # Return only the last model cycle (the answer), like the buffered send_message_to_subagent.
+        _is_success, message_out = outcome.resolve(subagent_instance_id, last_cycle_only=True)
         return message_out
 
     async def _consume_subagent_stream(
@@ -245,6 +264,7 @@ class SendMessageTools:
             STATE_FAILED,
             extract_raw_event,
             frame_state,
+            is_assistant_message,
             is_end_of_turn,
         )
         from agent_builder_sdk.streaming.sse_reader import async_iter_from_sync
@@ -275,6 +295,9 @@ class SendMessageTools:
                 # aggregate-only caller discards it.
                 if isinstance(event.get("data"), str):
                     outcome.text_parts.append(event["data"])
+                elif is_assistant_message(event):
+                    # A finished model call (same test as the live adapter) closes its cycle.
+                    outcome.end_cycle()
                 yield event
             elif event and end and isinstance(event.get("data"), str):
                 # TERMINAL error frame (raw_a2a_emitter.error_frames): capture the sanitized error

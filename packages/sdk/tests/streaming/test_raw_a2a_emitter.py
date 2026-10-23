@@ -5,7 +5,7 @@
 import json
 import uuid
 
-from agent_builder_sdk.streaming.a2a_frame_utils import extract_raw_event
+from agent_builder_sdk.streaming.a2a_frame_utils import extract_raw_event, is_assistant_message
 from agent_builder_sdk.streaming.raw_a2a_emitter import (
     RawStreamState,
     _project_event,
@@ -154,7 +154,7 @@ def test_projection_keeps_every_field_the_adapter_reads():
         assert ag._is_text_delta(p) == ag._is_text_delta(ev)
         assert ag._is_reasoning_text_delta(p) == ag._is_reasoning_text_delta(ev)
         assert ag._is_tool_use_delta(p) == ag._is_tool_use_delta(ev)
-        assert ag._is_assistant_message(p) == ag._is_assistant_message(ev)
+        assert is_assistant_message(p) == is_assistant_message(ev)
 
 
 def test_result_event_not_emitted_as_content():

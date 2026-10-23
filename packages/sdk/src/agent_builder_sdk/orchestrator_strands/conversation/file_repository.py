@@ -25,7 +25,10 @@ from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     conversation_source_id,
     conversation_source_type,
 )
-from agent_builder_sdk.utils import reconcile_dangling_tool_uses
+from agent_builder_sdk.utils import (
+    reconcile_dangling_tool_uses,
+    reconcile_unanswered_user_turns,
+)
 
 
 # Type definitions for serialization
@@ -176,16 +179,22 @@ class FileMultiSourceConversationRepository(ConversationRepository):
 
             # Repair before the notification merge: a toolResult must sit in the message
             # immediately after its toolUse, and notifications append past that point.
-            if not _interrupt_pending(agent):
-                history = reconcile_dangling_tool_uses(history)
+            repair = not _interrupt_pending(agent)
+            if repair:
+                history = reconcile_unanswered_user_turns(reconcile_dangling_tool_uses(history))
 
             # For users, also include notifications
             if source_type == MessageSourceType.USER:
-                history.extend(
+                notifications = [
                     msg.to_message()
                     for msg in self.conversations[MessageSourceType.NOTIFICATION.value][
                         DEFAULT_SOURCE_ID
                     ]
+                ]
+                # Closed on their own, so an aborted notification turn does not end the history
+                # unanswered and a notification reply never counts as the user's missing reply.
+                history.extend(
+                    reconcile_unanswered_user_turns(notifications) if repair else notifications
                 )
 
             return history

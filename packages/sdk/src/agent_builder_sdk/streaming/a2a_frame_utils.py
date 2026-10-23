@@ -26,6 +26,10 @@ RAW_EXT_URI = "https://aws.com/transform/ext/strands-raw/v1"
 # Strands derives the tool name from the method name).
 RELAY_TOOL_NAME = "send_message_to_subagent_and_relay"
 
+# Joins a relayed sub-agent's model cycles (e.g. pre-tool narration, then the answer), both in the
+# live stream and in the persisted answer, so the two stay identical.
+RELAY_CYCLE_SEPARATOR = "\n\n"
+
 # A2A task-state wire values, sourced from the a2a-sdk TaskState enum so they track the spec.
 STATE_SUBMITTED = TaskState.submitted.value
 STATE_WORKING = TaskState.working.value
@@ -140,6 +144,13 @@ def is_end_of_turn(frame: A2AFrame) -> bool:
     the three as end-of-turn.
     """
     return is_final(frame) or is_terminal_state(frame_state(frame))
+
+
+def is_assistant_message(event: Dict[str, Any]) -> bool:
+    """True for a Strands ModelMessageEvent (``{"message": {"role": "assistant", ...}}``): one
+    finished model call."""
+    msg = event.get("message")
+    return isinstance(msg, dict) and msg.get("role") == "assistant"
 
 
 def extract_raw_event(frame: A2AFrame) -> Optional[Dict[str, Any]]:

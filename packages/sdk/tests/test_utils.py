@@ -17,6 +17,7 @@ from agent_builder_sdk.utils import (
     A2A_CHAT_SUGGESTIONS_EXT,
     A2A_MESSAGE_TYPE_EXT,
     A2A_SOURCE_INFORMATION_EXT,
+    INTERRUPTED_TURN_TEXT,
     TransformEndpointConfig,
     build_agentic_api_endpoint_from_env,
     build_mcp_args_from_parsed_args,
@@ -30,6 +31,7 @@ from agent_builder_sdk.utils import (
     mcp_session_active,
     process_extension_handlers,
     reconcile_dangling_tool_uses,
+    reconcile_unanswered_user_turns,
     write_content_to_file,
 )
 
@@ -1339,3 +1341,113 @@ def test_reconcile_merges_missing_results_into_a_partially_resolved_turn():
     assert result[2] is not partial_result_message
     assert len(partial_result_message["content"]) == 1
     _assert_tool_uses_immediately_resolved(result)
+
+
+def _placeholder():
+    return {"role": "assistant", "content": [{"text": INTERRUPTED_TURN_TEXT}]}
+
+
+def test_reconcile_unanswered_closes_a_trailing_user_message():
+    messages = [
+        {"role": "user", "content": [{"text": "first"}]},
+        {"role": "assistant", "content": [{"text": "reply"}]},
+        {"role": "user", "content": [{"text": "aborted"}]},
+    ]
+
+    assert reconcile_unanswered_user_turns(messages) == messages + [_placeholder()]
+
+
+def test_reconcile_unanswered_separates_back_to_back_user_messages():
+    first = {"role": "user", "content": [{"text": "aborted"}]}
+    second = {"role": "user", "content": [{"text": "next"}]}
+    reply = {"role": "assistant", "content": [{"text": "reply"}]}
+
+    assert reconcile_unanswered_user_turns([first, second, reply]) == [
+        first,
+        _placeholder(),
+        second,
+        reply,
+    ]
+
+
+def test_reconcile_unanswered_leaves_a_well_formed_history_unchanged():
+    messages = [
+        {"role": "user", "content": [{"text": "q"}]},
+        {"role": "assistant", "content": [{"text": "a"}]},
+    ]
+
+    result = reconcile_unanswered_user_turns(messages)
+
+    assert result == messages
+    assert result is not messages
+
+
+def _continuation():
+    return {
+        "role": "user",
+        "content": [{"text": "Please reply."}],
+        "metadata": {"custom": {"blank_reply_continuation": True}},
+    }
+
+
+def test_reconcile_unanswered_drops_an_unanswered_blank_reply_continuation():
+    messages = [{"role": "assistant", "content": []}, _continuation()]
+
+    assert reconcile_unanswered_user_turns(messages) == [{"role": "assistant", "content": []}]
+
+
+def test_reconcile_unanswered_closes_the_turn_an_unanswered_continuation_re_asked():
+    """The continuation is dropped first, so the turn it re-asked gets the placeholder."""
+    user = {"role": "user", "content": [{"text": "q"}]}
+    tool_use = {"role": "assistant", "content": [{"toolUse": {"toolUseId": "t1", "input": {}}}]}
+    tool_result = {"role": "user", "content": [{"toolResult": {"toolUseId": "t1", "content": []}}]}
+
+    assert reconcile_unanswered_user_turns([user, tool_use, tool_result, _continuation()]) == [
+        user,
+        tool_use,
+        tool_result,
+        _placeholder(),
+    ]
+
+
+def test_reconcile_unanswered_closes_a_re_asked_turn_followed_by_a_later_turn():
+    user = {"role": "user", "content": [{"text": "q"}]}
+    tool_use = {"role": "assistant", "content": [{"toolUse": {"toolUseId": "t1", "input": {}}}]}
+    tool_result = {"role": "user", "content": [{"toolResult": {"toolUseId": "t1", "content": []}}]}
+    user2 = {"role": "user", "content": [{"text": "q2"}]}
+    reply2 = {"role": "assistant", "content": [{"text": "a2"}]}
+
+    result = reconcile_unanswered_user_turns(
+        [user, tool_use, tool_result, _continuation(), user2, reply2]
+    )
+
+    assert result == [user, tool_use, tool_result, _placeholder(), user2, reply2]
+
+
+def test_history_load_passes_in_order_leave_alternating_turns():
+    """The repository's repair, then the hook's drop_unanswered_continuations, as on every load."""
+    from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
+        drop_unanswered_continuations,
+    )
+
+    user = {"role": "user", "content": [{"text": "q"}]}
+    tool_use = {"role": "assistant", "content": [{"toolUse": {"toolUseId": "t1", "input": {}}}]}
+    tool_result = {"role": "user", "content": [{"toolResult": {"toolUseId": "t1", "content": []}}]}
+
+    loaded = drop_unanswered_continuations(
+        reconcile_unanswered_user_turns([user, tool_use, tool_result, _continuation()])
+    )
+
+    assert [m["role"] for m in loaded] == ["user", "assistant", "user", "assistant"]
+
+
+def test_reconcile_unanswered_allows_a_continuation_right_after_a_user_message():
+    tool_result = {"role": "user", "content": [{"toolResult": {"toolUseId": "t1", "content": []}}]}
+    answer = {
+        "role": "assistant",
+        "content": [{"text": "Done."}],
+        "metadata": {"custom": {"blank_reply_continuation_answer": True}},
+    }
+    messages = [tool_result, _continuation(), answer]
+
+    assert reconcile_unanswered_user_turns(messages) == messages

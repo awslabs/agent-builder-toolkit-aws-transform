@@ -18,6 +18,8 @@ from typing import (
     TYPE_CHECKING,
     Any,
     AsyncIterator,
+    Awaitable,
+    Callable,
     Dict,
     List,
     Optional,
@@ -72,6 +74,27 @@ from agent_builder_sdk.util.suggestions_manager import (
 from agent_builder_sdk.utils import combine_tools, mcp_session_active
 
 logger = logging.getLogger(__name__)
+
+# Strong references keep fire-and-forget tasks alive until they finish.
+_background_tasks: set[asyncio.Task] = set()
+
+_TIMEOUT_MSG = "The request took too long to process and was stopped."
+_INTERRUPTED_MSG = "The response was interrupted before it finished."
+
+
+async def _persist_end_unless_answered(
+    final_persist: "Optional[asyncio.Future[bool]]",
+    persist: Callable[[str, str, str], Awaitable[None]],
+    context_id: str,
+    text: str,
+    run_id: str,
+) -> None:
+    """Persist how an aborted turn ended, unless its final answer was stored. A final save already
+    in flight runs to completion (its send is in a thread), so wait for it rather than guess."""
+    if final_persist is not None and await asyncio.shield(final_persist):
+        return
+    await persist(context_id, text, run_id)
+
 
 messages_var: ContextVar[Messages] = ContextVar("orchestator_messages")
 
@@ -605,6 +628,7 @@ class AsyncBaseOrchestrator(
         # Lazy import: keeps ag_ui.core + a2a.types off the module-load path for partners who
         # never stream (this method only runs on the opt-in streaming path).
         from agent_builder_sdk.streaming import StreamState, to_a2a_error_frames
+        from agent_builder_sdk.streaming.a2a_frame_utils import is_final
         from agent_builder_sdk.streaming.response_persist_hook import (
             persist_stream_error as _persist_stream_error,
         )
@@ -621,6 +645,8 @@ class AsyncBaseOrchestrator(
         # caller-minted A2A contextId echoed on the frame envelope. run_id (the A2A taskId)
         # is minted by StreamState — the agent owns Task ids.
         state = StreamState(thread_id=conversation_id, context_id=context_id)
+        turn_finished = False
+        turn_cm: Optional[asyncio.Timeout] = None
 
         try:
             # Only enter MCP clients that aren't already active. When the server keeps
@@ -644,9 +670,10 @@ class AsyncBaseOrchestrator(
                 try:
                     async with asyncio.timeout(cfg.turn_timeout_seconds) as turn_cm:
                         async for frame in self._stream_frames(message, state, cfg, **kwargs):
+                            turn_finished = turn_finished or is_final(frame)
                             yield frame
                 except TimeoutError:
-                    if not turn_cm.expired():
+                    if turn_cm is None or not turn_cm.expired():
                         raise
                     logger.warning(
                         "Streaming turn exceeded %.0fs budget for conversation %s; ending "
@@ -654,9 +681,11 @@ class AsyncBaseOrchestrator(
                         cfg.turn_timeout_seconds,
                         conversation_id,
                     )
-                    timeout_msg = "The request took too long to process and was stopped."
-                    await _persist_stream_error(context_id, timeout_msg, state.run_id)
-                    for frame in to_a2a_error_frames(timeout_msg, state):
+                    # The timeout error is this turn's end; a disconnect while it is sent must
+                    # not persist a second error.
+                    turn_finished = True
+                    await _persist_stream_error(context_id, _TIMEOUT_MSG, state.run_id)
+                    for frame in to_a2a_error_frames(_TIMEOUT_MSG, state):
                         yield frame
         except ConcurrencyException:
             logger.warning(
@@ -671,6 +700,43 @@ class AsyncBaseOrchestrator(
             await _persist_stream_error(context_id, busy_msg, state.run_id)
             for frame in to_a2a_error_frames(busy_msg, state):
                 yield frame
+        except (asyncio.CancelledError, GeneratorExit):
+            # The client went away: the server cancels the turn (CancelledError) or closes this
+            # generator (GeneratorExit). Neither lets this frame await, so persist how the turn
+            # ended from its own task so a reload shows it. A disconnect after the terminal frame
+            # was sent is not an interruption, nor is one after the final answer was stored. A
+            # turn timeout that fired while the client was between frames lands here too (the
+            # cancel reaches the consumer), so it is persisted as the timeout.
+            if not turn_finished:
+                timed_out = turn_cm is not None and turn_cm.expired()
+                end_msg = _TIMEOUT_MSG if timed_out else _INTERRUPTED_MSG
+                logger.info(
+                    "Streaming turn %s for conversation %s",
+                    "timed out" if timed_out else "interrupted",
+                    conversation_id,
+                )
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    # Closed outside the loop (e.g. finalized after it stopped): nothing can run
+                    # the persist, and raising here would replace the original exception.
+                    logger.warning(
+                        "Interruption not persisted for conversation %s: no running event loop",
+                        conversation_id,
+                    )
+                else:
+                    task = loop.create_task(
+                        _persist_end_unless_answered(
+                            state.final_persist,
+                            _persist_stream_error,
+                            context_id,
+                            end_msg,
+                            state.run_id,
+                        )
+                    )
+                    _background_tasks.add(task)
+                    task.add_done_callback(_background_tasks.discard)
+            raise
         except Exception:
             # Any other failure (model/MCP/adapter error) surfaces as a terminal error
             # frame so the client sees a clean end instead of a truncated SSE stream.

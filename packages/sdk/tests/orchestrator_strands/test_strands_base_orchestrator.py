@@ -464,6 +464,263 @@ async def test_stream_message_async_turn_timeout_emits_clean_terminal(mock_model
     mock_persist.assert_awaited_once()
 
 
+async def test_stream_message_async_persists_interruption_when_client_disconnects(mock_model):
+    """A disconnect cancels the turn mid-stream; the interruption is persisted for reload."""
+    import asyncio as _asyncio
+
+    orchestrator = AsyncBaseOrchestrator(system_prompt="Test prompt")
+
+    async def stream(*args, **kwargs):
+        yield {"data": "partial", "delta": {"text": "partial"}}
+        await _asyncio.sleep(60)
+        yield {"result": object()}  # pragma: no cover
+
+    async def consume():
+        async for _ in orchestrator._stream_message_async(
+            "hello",
+            "user-1",
+            MessageSourceType.USER,
+            conversation_id="conv-1",
+            a2a_context=A2AContext(context_id="ctx-d", task_id=None),
+        ):
+            pass
+
+    with patch.object(orchestrator, "stream_async", side_effect=stream), patch(
+        "agent_builder_sdk.streaming.response_persist_hook.persist_stream_error"
+    ) as mock_persist:
+        task = _asyncio.create_task(consume())
+        await _asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(_asyncio.CancelledError):
+            await task
+        await _asyncio.sleep(0.01)
+
+    mock_persist.assert_awaited_once()
+    assert mock_persist.call_args[0][1] == "The response was interrupted before it finished."
+
+
+async def test_stream_message_async_persists_interruption_when_stream_is_closed(mock_model):
+    """A server that closes the generator mid-turn (GeneratorExit, not a cancel) also persists the
+    interruption."""
+    import asyncio as _asyncio
+
+    orchestrator = AsyncBaseOrchestrator(system_prompt="Test prompt")
+
+    async def stream(*args, **kwargs):
+        yield {"data": "partial", "delta": {"text": "partial"}}
+        await _asyncio.sleep(60)
+        yield {"result": object()}  # pragma: no cover
+
+    with patch.object(orchestrator, "stream_async", side_effect=stream), patch(
+        "agent_builder_sdk.streaming.response_persist_hook.persist_stream_error"
+    ) as mock_persist:
+        gen = orchestrator._stream_message_async(
+            "hello",
+            "user-1",
+            MessageSourceType.USER,
+            conversation_id="conv-1",
+            a2a_context=A2AContext(context_id="ctx-g", task_id=None),
+        )
+        await gen.__anext__()
+        await gen.aclose()
+        await _asyncio.sleep(0.01)
+
+    mock_persist.assert_awaited_once()
+    assert mock_persist.call_args[0][1] == "The response was interrupted before it finished."
+
+
+async def test_stream_message_async_disconnect_after_terminal_is_not_an_interruption(mock_model):
+    """Closing the stream after the terminal frame arrived must not persist an interruption."""
+    import asyncio as _asyncio
+
+    orchestrator = AsyncBaseOrchestrator(system_prompt="Test prompt")
+
+    async def stream(*args, **kwargs):
+        yield {"data": "hello", "delta": {"text": "hello"}}
+        yield {"result": object()}
+
+    with patch.object(orchestrator, "stream_async", side_effect=stream), patch(
+        "agent_builder_sdk.streaming.response_persist_hook.persist_stream_error"
+    ) as mock_persist:
+        gen = orchestrator._stream_message_async(
+            "hello",
+            "user-1",
+            MessageSourceType.USER,
+            conversation_id="conv-1",
+            a2a_context=A2AContext(context_id="ctx-f", task_id=None),
+        )
+        async for frame in gen:
+            if frame.get("final"):
+                break
+        await gen.aclose()
+        await _asyncio.sleep(0.01)
+
+    mock_persist.assert_not_called()
+
+
+async def test_stream_message_async_disconnect_during_timeout_error_persists_once(mock_model):
+    """A disconnect while the turn-timeout error is being sent must not persist a second error."""
+    import asyncio as _asyncio
+
+    from agent_builder_sdk.streaming.config import StreamingConfig
+
+    orchestrator = AsyncBaseOrchestrator(system_prompt="Test prompt")
+
+    async def stream(*args, **kwargs):
+        yield {"data": "partial", "delta": {"text": "partial"}}
+        await _asyncio.sleep(60)
+        yield {"result": object()}  # pragma: no cover
+
+    with patch.object(orchestrator, "stream_async", side_effect=stream), patch(
+        "agent_builder_sdk.streaming.response_persist_hook.persist_stream_error"
+    ) as mock_persist:
+        gen = orchestrator._stream_message_async(
+            "hello",
+            "user-1",
+            MessageSourceType.USER,
+            conversation_id="conv-1",
+            cfg=StreamingConfig(turn_timeout_seconds=0.05),
+            a2a_context=A2AContext(context_id="ctx-td", task_id=None),
+        )
+        async for _ in gen:
+            if mock_persist.await_count:
+                break
+        await gen.aclose()
+        await _asyncio.sleep(0.01)
+
+    mock_persist.assert_awaited_once()
+    assert mock_persist.call_args[0][1] == "The request took too long to process and was stopped."
+
+
+@pytest.mark.parametrize(
+    "stored, settle_after_disconnect, expect_interruption",
+    [
+        (True, False, False),
+        (False, False, True),
+        (True, True, False),
+        (False, True, True),
+    ],
+)
+async def test_stream_message_async_disconnect_during_final_save(
+    mock_model, stored, settle_after_disconnect, expect_interruption
+):
+    """A disconnect once the final answer's save started records an interruption only if that save
+    failed, whether it settles before or after the disconnect."""
+    import asyncio as _asyncio
+
+    orchestrator = AsyncBaseOrchestrator(system_prompt="Test prompt")
+    final_persist = _asyncio.get_running_loop().create_future()
+
+    async def stream(*args, invocation_state, **kwargs):
+        yield {"data": "hello", "delta": {"text": "hello"}}
+        invocation_state["stream_state"].final_persist = final_persist
+        if not settle_after_disconnect:
+            final_persist.set_result(stored)
+        await _asyncio.sleep(60)
+        yield {"result": object()}  # pragma: no cover
+
+    async def consume():
+        async for _ in orchestrator._stream_message_async(
+            "hello",
+            "user-1",
+            MessageSourceType.USER,
+            conversation_id="conv-1",
+            a2a_context=A2AContext(context_id="ctx-fp", task_id=None),
+        ):
+            pass
+
+    with patch.object(orchestrator, "stream_async", side_effect=stream), patch(
+        "agent_builder_sdk.streaming.response_persist_hook.persist_stream_error"
+    ) as mock_persist:
+        task = _asyncio.create_task(consume())
+        await _asyncio.sleep(0.05)
+        task.cancel()
+        with pytest.raises(_asyncio.CancelledError):
+            await task
+        if settle_after_disconnect:
+            await _asyncio.sleep(0.01)
+            mock_persist.assert_not_called()
+            final_persist.set_result(stored)
+        await _asyncio.sleep(0.01)
+
+    if expect_interruption:
+        mock_persist.assert_awaited_once()
+        assert mock_persist.call_args[0][1] == "The response was interrupted before it finished."
+    else:
+        mock_persist.assert_not_called()
+
+
+async def test_stream_message_async_timeout_between_frames_is_persisted_as_timeout(mock_model):
+    """A turn timeout that fires while the consumer is outside the generator reaches it as a
+    cancel; it is still persisted as the timeout, not as an interruption."""
+    import asyncio as _asyncio
+
+    from agent_builder_sdk.streaming.config import StreamingConfig
+
+    orchestrator = AsyncBaseOrchestrator(system_prompt="Test prompt")
+
+    async def stream(*args, **kwargs):
+        for _ in range(100):
+            yield {"data": "x", "delta": {"text": "x"}}
+            await _asyncio.sleep(0)
+
+    async def slow_consume():
+        async for _ in orchestrator._stream_message_async(
+            "hello",
+            "user-1",
+            MessageSourceType.USER,
+            conversation_id="conv-1",
+            cfg=StreamingConfig(turn_timeout_seconds=0.05),
+            a2a_context=A2AContext(context_id="ctx-tc", task_id=None),
+        ):
+            await _asyncio.sleep(0.04)
+
+    with patch.object(orchestrator, "stream_async", side_effect=stream), patch(
+        "agent_builder_sdk.streaming.response_persist_hook.persist_stream_error"
+    ) as mock_persist:
+        with pytest.raises(_asyncio.CancelledError):
+            await _asyncio.create_task(slow_consume())
+        await _asyncio.sleep(0.01)
+
+    mock_persist.assert_awaited_once()
+    assert mock_persist.call_args[0][1] == "The request took too long to process and was stopped."
+
+
+def test_stream_message_async_closed_outside_the_loop_keeps_generator_exit(mock_model):
+    """Closing the stream with no running loop cannot persist the interruption; it must not
+    replace the GeneratorExit with a RuntimeError."""
+    import asyncio as _asyncio
+
+    orchestrator = AsyncBaseOrchestrator(system_prompt="Test prompt")
+
+    async def stream(*args, **kwargs):
+        yield {"data": "partial", "delta": {"text": "partial"}}
+        await _asyncio.sleep(60)
+        yield {"result": object()}  # pragma: no cover
+
+    with patch.object(orchestrator, "stream_async", side_effect=stream), patch(
+        "agent_builder_sdk.streaming.response_persist_hook.persist_stream_error"
+    ) as mock_persist:
+        gen = orchestrator._stream_message_async(
+            "hello",
+            "user-1",
+            MessageSourceType.USER,
+            conversation_id="conv-1",
+            a2a_context=A2AContext(context_id="ctx-nl", task_id=None),
+        )
+        loop = _asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(gen.__anext__())
+            loop.run_until_complete(gen.__anext__())
+        finally:
+            loop.close()
+        closer = gen.aclose()
+        with pytest.raises(StopIteration):
+            closer.send(None)
+
+    mock_persist.assert_not_called()
+
+
 async def test_stream_message_async_drains_side_events_before_terminal(mock_model):
     """Suggestion interactions the persist hook queues on state.side_events must ride the live stream
     BEFORE the terminal RUN_FINISHED frame (so chips arrive with the response, not after the run

@@ -210,11 +210,11 @@ class StreamingResponsePersistHook(HookProvider):
             # path, which attaches suggestions on every final response).
             force_stop_message_id = stream_state.ensure_force_stop_message_id()
             suggestions = get_and_consume_suggestions()
-            persisted = await self._safe_persist(
+            persisted = await self._persist_final(
+                stream_state,
                 force_stop_text,
                 context_id,
                 force_stop_message_id,
-                is_partial=False,
                 suggestions=suggestions,
             )
             # Gate the live chips on the persist succeeding — same reason as the end_turn final in
@@ -303,9 +303,14 @@ class StreamingResponsePersistHook(HookProvider):
             text = _extract_assistant_text(message)
             if text:
                 text_id = getattr(stream_state, "final_message_id", None) or str(uuid.uuid4())
-                persisted = await self._safe_persist(
-                    text, context_id, text_id, is_partial=is_partial, suggestions=suggestions
-                )
+                if is_partial or stream_state is None:
+                    persisted = await self._safe_persist(
+                        text, context_id, text_id, is_partial=is_partial, suggestions=suggestions
+                    )
+                else:
+                    persisted = await self._persist_final(
+                        stream_state, text, context_id, text_id, suggestions=suggestions
+                    )
                 # On a final message that carried suggestions, ALSO emit them live: build the
                 # interaction event under the SAME id (final_message_id) and hand it to the stream
                 # loop via side_events, so chips render with the response instead of only on reload.
@@ -363,6 +368,26 @@ class StreamingResponsePersistHook(HookProvider):
                 message_id=message_id,
             )
         )
+
+    async def _persist_final(
+        self,
+        stream_state: Any,
+        text: str,
+        context_id: str,
+        message_id: str,
+        suggestions: Optional[List[str]] = None,
+    ) -> bool:
+        """Persist the turn's final answer as a task on ``stream_state``. A client disconnect cancels
+        this await but not the send already running in its thread, so the stream's disconnect
+        handler waits on the same task and records an interruption only if the answer was not
+        stored."""
+        final_persist = asyncio.ensure_future(
+            self._safe_persist(
+                text, context_id, message_id, is_partial=False, suggestions=suggestions
+            )
+        )
+        stream_state.final_persist = final_persist
+        return await asyncio.shield(final_persist)
 
     async def _safe_persist(
         self,

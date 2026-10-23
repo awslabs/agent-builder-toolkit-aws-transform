@@ -2364,6 +2364,175 @@ class TestConcurrentStreaming:
         assert got is sentinel
         assert server._streaming_agent_pool.calls == [("user-1", MessageSourceType.USER)]
 
+    async def test_streaming_errors_when_agent_never_becomes_ready(self, mock_agent_factory):
+        """A failed init never sets agent_ready_event; the stream must error instead of hanging."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        with pytest.raises(RuntimeError, match="not ready to stream"):
+            await server._get_agent_for_streaming("user-1", MessageSourceType.USER)
+
+    async def test_streaming_waits_for_slow_background_init(self, mock_agent_factory):
+        """A background init that is still running is waited for, however long it takes."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        sentinel = object()
+
+        class _Pool:
+            async def get_agent(self, source_id, source_type):
+                return sentinel
+
+        async def init():
+            await asyncio.sleep(0.05)
+            server._streaming_agent_pool = _Pool()
+            server.agent_ready_event.set()
+
+        server._initialization_task = asyncio.create_task(init())
+        got = await server._get_agent_for_streaming("user-1", MessageSourceType.USER)
+        assert got is sentinel
+
+    async def test_streaming_errors_when_background_init_fails(self, mock_agent_factory):
+        """A background init that ends without the agent ready errors the stream."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+
+        async def failed_init():
+            await asyncio.sleep(0.01)
+
+        server._initialization_task = asyncio.create_task(failed_init())
+        with pytest.raises(RuntimeError, match="not ready to stream"):
+            await server._get_agent_for_streaming("user-1", MessageSourceType.USER)
+
+    async def test_sync_factory_runs_off_the_event_loop_only_when_asked(self, mock_agent):
+        """Per-user streaming agents are built in a worker thread so a new user's agent does not
+        block the event loop; other agents keep building on the loop as before."""
+        import threading
+
+        built_on = []
+
+        def factory(mcp_client, storage_dir, **kwargs):
+            built_on.append(threading.get_ident())
+            return mock_agent
+
+        server = self._make_server(factory, streaming_config=StreamingConfig())
+        assert await server._create_agent(mock.Mock()) is mock_agent
+        agent = await server._create_agent_with_storage(
+            mock.Mock(), "/tmp/test_storage/u1", off_loop=True
+        )
+
+        assert agent is mock_agent
+        assert built_on[0] == threading.get_ident()
+        assert built_on[1] != threading.get_ident()
+
+    async def test_off_loop_builds_run_one_at_a_time(self, mock_agent):
+        """Off-loop builds stay serialized, as on the event loop, so a factory need not be
+        thread-safe."""
+        import threading
+        import time
+
+        lock = threading.Lock()
+        running = {"now": 0, "max": 0}
+
+        def factory(mcp_client, storage_dir, **kwargs):
+            with lock:
+                running["now"] += 1
+                running["max"] = max(running["max"], running["now"])
+            time.sleep(0.02)
+            with lock:
+                running["now"] -= 1
+            return mock_agent
+
+        server = self._make_server(factory, streaming_config=StreamingConfig())
+        await asyncio.gather(
+            *(
+                server._create_agent_with_storage(
+                    mock.Mock(), f"/tmp/test_storage/u{i}", off_loop=True
+                )
+                for i in range(3)
+            )
+        )
+        assert running["max"] == 1
+
+    async def test_cancelled_off_loop_build_keeps_the_next_one_waiting(self, mock_agent):
+        """Cancelling a task awaiting an off-loop build does not stop its thread, so the next
+        build must still wait for that factory call to finish."""
+        import threading
+        import time
+
+        lock = threading.Lock()
+        running = {"now": 0, "max": 0}
+
+        def factory(mcp_client, storage_dir, **kwargs):
+            with lock:
+                running["now"] += 1
+                running["max"] = max(running["max"], running["now"])
+            time.sleep(0.1)
+            with lock:
+                running["now"] -= 1
+            return mock_agent
+
+        server = self._make_server(factory, streaming_config=StreamingConfig())
+        first = asyncio.create_task(
+            server._create_agent_with_storage(mock.Mock(), "/tmp/test_storage/a", off_loop=True)
+        )
+        await asyncio.sleep(0.02)
+        first.cancel()
+        await server._create_agent_with_storage(mock.Mock(), "/tmp/test_storage/b", off_loop=True)
+
+        assert running["max"] == 1
+
+    async def test_pool_builds_streaming_agents_off_the_loop(self, mock_agent_factory, mock_agent):
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        server.context = mock.Mock(workspace_id="ws", job_id="job", agent_instance_id="ai")
+        server.mcp_client = mock.Mock()
+        build = mock.AsyncMock(return_value=mock_agent)
+        with mock.patch.object(server, "_create_agent_with_storage", build), mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.mcp_session_active",
+            return_value=True,
+        ):
+            server._setup_concurrent_streaming()
+            await server._streaming_agent_pool._create_agent("/tmp/test_storage/u1")
+
+        assert build.await_args.kwargs["off_loop"] is True
+
+    async def test_off_loop_build_sees_the_callers_context(self, mock_agent):
+        import contextvars
+
+        var: contextvars.ContextVar[str] = contextvars.ContextVar("caller", default="unset")
+        seen = []
+
+        def factory(mcp_client, storage_dir, **kwargs):
+            seen.append(var.get())
+            return mock_agent
+
+        server = self._make_server(factory, streaming_config=StreamingConfig())
+        var.set("request-1")
+        await server._create_agent_with_storage(mock.Mock(), "/tmp/test_storage/u1", off_loop=True)
+
+        assert seen == ["request-1"]
+
+    async def test_cancelled_stream_request_does_not_cancel_init(self, mock_agent_factory):
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        release = asyncio.Event()
+
+        async def init():
+            await release.wait()
+
+        server._initialization_task = asyncio.create_task(init())
+        request = asyncio.create_task(
+            server._get_agent_for_streaming("user-1", MessageSourceType.USER)
+        )
+        await asyncio.sleep(0.01)
+        request.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await request
+
+        assert not server._initialization_task.cancelled()
+        release.set()
+        await server._initialization_task
+
+    async def test_cleanup_shuts_down_the_agent_build_executor(self, mock_agent_factory):
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        await server._cleanup()
+        with pytest.raises(RuntimeError):
+            server._agent_build_executor.submit(lambda: None)
+
     def test_shared_repo_passed_in_agent_params_only_when_on(self, mock_agent_factory):
         """conversation_repository is injected into agent params only when a shared repo
         exists (concurrent streaming); otherwise the params are unchanged."""

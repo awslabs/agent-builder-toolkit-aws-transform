@@ -362,13 +362,46 @@ class TestHandleStreamingIds:
             msg["contextId"] = context_id
         return {"message": msg}
 
-    async def test_streaming_rejected_when_not_configured(self):
-        """A server without a StreamingConfig rejects message/stream up front (before parsing),
-        so it surfaces as a JSON-RPC error rather than a broken/empty stream."""
+    def test_streaming_off_jsonrpc_is_method_not_found(self):
+        """Without a StreamingConfig, message/stream answers -32601 Method not found, as before
+        streaming existed."""
+        from fastapi.testclient import TestClient
+
         server = self._server_with_capture({})
         server.streaming_config = None
-        with pytest.raises(ValueError, match="does not support streaming"):
-            await server._handle_streaming(self._params())
+        server.initialized = True
+        response = TestClient(server.app).post(
+            "/invocations",
+            json={"jsonrpc": "2.0", "id": 7, "method": "message/stream", "params": self._params()},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["error"]["code"] == -32601
+        assert response.json()["id"] == 7
+
+    def test_streaming_rest_route_returns_an_error_body_when_the_agent_is_not_ready(self):
+        from fastapi.testclient import TestClient
+
+        server = self._server_with_capture({})
+
+        async def not_ready(source_id, source_type):
+            raise RuntimeError("Agent is not ready to stream")
+
+        server._get_agent_for_streaming = not_ready  # type: ignore[assignment]
+        response = TestClient(server.app).post("/message/stream", json=self._params())
+
+        assert response.status_code == 200
+        assert response.json() == {"error": "Agent is not ready to stream"}
+
+    def test_streaming_off_rest_route_is_404(self):
+        """Without a StreamingConfig, REST /message/stream is a 404, as before the route existed."""
+        from fastapi.testclient import TestClient
+
+        server = self._server_with_capture({})
+        server.streaming_config = None
+        response = TestClient(server.app).post("/message/stream", json=self._params())
+
+        assert response.status_code == 404
 
     async def test_missing_context_id_raises_when_agent_requires_it(self):
         """When the resolved agent requires a contextId (orchestrator policy), a turn without one

@@ -171,13 +171,18 @@ server = AgentRuntimeServer(
 
 The `simple_cli_agent_core.py` entry point exposes the same option as `--concurrent-streaming` (plus `--emit-reasoning/--no-emit-reasoning` and `--emit-tool-calls/--no-emit-tool-calls`). AWS Transform only streams to agents whose agent card declares `capabilities.streaming: true`.
 
-**How it works**: Strands runs one invocation at a time per `Agent`, so the server keeps a `StreamingAgentPool` with one agent per source (a user, or another agent that streams to yours). Agents are built on first use and evicted after `agent_idle_ttl_seconds`. The Bedrock model, the MCP client, the conversation repository and the `MemoryManager` stay shared, so a user's buffered and streamed turns see the same job history. Each streamed final response is persisted back to the chat.
+**How it works**: Strands runs one invocation at a time per `Agent`, so the server keeps a `StreamingAgentPool` with one agent per source (a user, or another agent that streams to yours). Agents are built on first use and evicted after `agent_idle_ttl_seconds`. Your factory runs once per source, so each pooled agent builds its own model client. The MCP client, the conversation repository and the `MemoryManager` stay shared, so a user's buffered and streamed turns see the same job history. A synchronous factory runs on a dedicated worker thread, one build at a time, so building a new user's agent does not stall live streams; it has no running event loop there. Each streamed final response is persisted back to the chat.
 
 **Concurrency contract**: with streaming on, several users' turns run concurrently on one event loop. Tools and hooks must not keep per-request state in module-level or class-level mutable globals; use a `contextvars.ContextVar` or the per-request `ToolContext` / `invocation_state` instead.
 
 **Factory requirement**: your agent factory must accept and forward `conversation_repository` and `memory_manager` (for example `def agent_factory(mcp_client, storage_dir, **kwargs)` passing both to `create_default_orchestrator`). The server checks this at startup.
 
-**Subagents**: an agent that inherits `StreamingCapable` can stream too. An orchestrator can stream a subagent's answer back to the user with the `stream_message_to_subagent` tool; use `send_message_to_subagent` when the orchestrator keeps working on the result.
+**Subagents**: an agent that inherits `StreamingCapable` can stream too (`simple_subagent_cli.py --concurrent-streaming` builds one). Two opt-in tools, added through `custom_tools`, use a subagent's stream:
+
+- `send_message_to_subagent_and_relay` streams the subagent's answer live to the user as the orchestrator's final answer, and ends the turn.
+- `stream_message_to_subagent` returns the subagent's answer (its last model cycle) to the orchestrator without streaming it to the user, like `send_message_to_subagent`.
+
+**History repair**: when a turn is interrupted (timeout, client disconnect, crash), the next history load gives the unanswered message a placeholder reply, so the next turn answers its own prompt. A turn ended by a terminating tool (`stop_event_loop`) stores its `force_stop_response` as the reply.
 
 ## Requirements
 

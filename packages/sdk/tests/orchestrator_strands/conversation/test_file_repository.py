@@ -25,6 +25,7 @@ from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     conversation_source_id,
     conversation_source_type,
 )
+from agent_builder_sdk.utils import INTERRUPTED_TURN_TEXT
 
 
 @pytest.fixture
@@ -114,10 +115,56 @@ def test_get_conversation_history_for_agent_user(repository, mock_agent):
     conversation_source_id.set("test-user")
     history = repository.get_conversation_history_for_agent(mock_agent)
 
-    # Should include both user message and notification
-    assert len(history) == 2
-    assert any(msg["content"][0]["text"] == "User message" for msg in history)
-    assert any(msg["content"][0]["text"] == "Notification" for msg in history)
+    # Should include the user message (closed by the unanswered-turn placeholder) and notification
+    assert len(history) == 3
+    assert history[0]["content"][0]["text"] == "User message"
+    assert history[1]["content"][0]["text"] == INTERRUPTED_TURN_TEXT
+    assert history[2]["content"][0]["text"] == "Notification"
+
+
+def test_aborted_notification_turn_is_closed_on_its_own(repository, mock_agent):
+    """An aborted notification turn gets its own placeholder, so the user's history does not end
+    with an unanswered notification."""
+    conversation_source_type.set(MessageSourceType.USER)
+    conversation_source_id.set("test-user")
+    repository.add_message_for_agent(
+        Message(role="user", content=[ContentBlock(text="q")]), mock_agent
+    )
+    repository.add_message_for_agent(
+        Message(role="assistant", content=[ContentBlock(text="a")]), mock_agent
+    )
+    conversation_source_type.set(MessageSourceType.NOTIFICATION)
+    conversation_source_id.set(DEFAULT_SOURCE_ID)
+    repository.add_message_for_agent(
+        Message(role="user", content=[ContentBlock(text="job finished")]), mock_agent
+    )
+
+    conversation_source_type.set(MessageSourceType.USER)
+    conversation_source_id.set("test-user")
+    history = repository.get_conversation_history_for_agent(mock_agent)
+
+    assert [m["content"][0]["text"] for m in history] == [
+        "q",
+        "a",
+        "job finished",
+        INTERRUPTED_TURN_TEXT,
+    ]
+
+
+def test_pending_interrupt_leaves_notifications_unrepaired(repository, mock_agent):
+    """With a Strands interrupt pending, history is returned as stored, notifications included."""
+    mock_agent._interrupt_state = Mock(activated=True)
+    conversation_source_type.set(MessageSourceType.NOTIFICATION)
+    conversation_source_id.set(DEFAULT_SOURCE_ID)
+    repository.add_message_for_agent(
+        Message(role="user", content=[ContentBlock(text="job finished")]), mock_agent
+    )
+
+    conversation_source_type.set(MessageSourceType.USER)
+    conversation_source_id.set("test-user")
+    history = repository.get_conversation_history_for_agent(mock_agent)
+
+    assert [m["content"][0]["text"] for m in history] == ["job finished"]
 
 
 def test_get_conversation_history_returns_fresh_list_each_call(repository, mock_agent):
@@ -134,6 +181,9 @@ def test_get_conversation_history_returns_fresh_list_each_call(repository, mock_
     repository.add_message_for_agent(
         Message(role="user", content=[ContentBlock(text="hi")]), mock_agent
     )
+    repository.add_message_for_agent(
+        Message(role="assistant", content=[ContentBlock(text="hello")]), mock_agent
+    )
 
     h1 = repository.get_conversation_history_for_agent(mock_agent)
     h2 = repository.get_conversation_history_for_agent(mock_agent)
@@ -144,7 +194,7 @@ def test_get_conversation_history_returns_fresh_list_each_call(repository, mock_
     # mutating one working copy (as Strands would) does not affect the next call
     h1.append(Message(role="user", content=[ContentBlock(text="scratch")]))
     h3 = repository.get_conversation_history_for_agent(mock_agent)
-    assert len(h3) == 1  # durable store unchanged by the in-place mutation
+    assert len(h3) == 2  # durable store unchanged by the in-place mutation
 
 
 def test_save_and_load(repository, temp_dir, mock_agent):
@@ -264,7 +314,8 @@ def test_get_conversation_history_repairs_dangling_tool_use(repository, mock_age
 
     assert history[2]["content"][0]["toolResult"]["toolUseId"] == "tool-1"
     assert history[2]["content"][0]["toolResult"]["status"] == "error"
-    assert history[3]["content"][0]["text"] == "Notification"
+    assert history[3]["content"][0]["text"] == INTERRUPTED_TURN_TEXT
+    assert history[4]["content"][0]["text"] == "Notification"
 
 
 def test_get_conversation_history_leaves_well_formed_messages_identical(repository, mock_agent):
@@ -294,13 +345,14 @@ def test_get_conversation_history_leaves_well_formed_messages_identical(reposito
                 )
             ],
         ),
+        Message(role="assistant", content=[ContentBlock(text="done")]),
     ):
         repository.add_message_for_agent(message, mock_agent)
 
     stored = repository.conversations[MessageSourceType.USER.value]["test-user"]
     history = repository.get_conversation_history_for_agent(mock_agent)
 
-    assert len(history) == 3
+    assert len(history) == 4
     assert all(actual is original.to_message() for actual, original in zip(history, stored))
 
 

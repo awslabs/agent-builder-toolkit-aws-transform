@@ -585,6 +585,48 @@ def write_content_to_file(content: str, file_path: str) -> None:
         raise
 
 
+INTERRUPTED_TURN_TEXT = "[No response: this request was interrupted before it completed.]"
+
+
+def reconcile_unanswered_user_turns(messages: List[Any]) -> List[Any]:
+    """Insert a placeholder assistant reply after each user message that never got one.
+
+    A turn that is aborted (timeout, client disconnect, crash) has already persisted its user
+    message but no reply. Left as is, the next turn sends two user messages in a row and the model
+    answers the earlier one. History is loaded before the new prompt is appended, so a trailing
+    user message is unanswered, unless another invocation for the same source is still answering
+    it (a concurrent turn on a shared repository); that reader then sees the placeholder, which is
+    no worse than two user messages in a row. Like reconcile_dangling_tool_uses, this never
+    mutates the caller's messages and leaves a well-formed history unchanged. Unanswered
+    blank-reply continuations are dropped first; an answered one directly follows the turn it
+    re-asks, so it is left alone and does not count as that turn's missing reply.
+    """
+    from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
+        BLANK_REPLY_CONTINUATION_MARKER,
+        drop_unanswered_continuations,
+    )
+
+    messages = drop_unanswered_continuations(messages)
+
+    def is_continuation(message: Any) -> bool:
+        custom = (message.get("metadata") or {}).get("custom") or {}
+        return bool(custom.get(BLANK_REPLY_CONTINUATION_MARKER))
+
+    result: List[Any] = []
+    for idx, message in enumerate(messages):
+        result.append(message)
+        if not isinstance(message, dict) or message.get("role") != "user":
+            continue
+        following = messages[idx + 1] if idx + 1 < len(messages) else None
+        if following is None or (
+            isinstance(following, dict)
+            and following.get("role") == "user"
+            and not is_continuation(following)
+        ):
+            result.append({"role": "assistant", "content": [{"text": INTERRUPTED_TURN_TEXT}]})
+    return result
+
+
 def reconcile_dangling_tool_uses(messages: List[Any]) -> List[Any]:
     """Insert error tool results immediately after assistant tool uses left unresolved.
 

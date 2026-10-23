@@ -25,6 +25,7 @@ if a category is off we return before opening its block, so no start/content/end
 emitted and nothing is left dangling. Text (narration + final answer) is always emitted.
 """
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -47,11 +48,13 @@ from ag_ui.core import (
 from pydantic import BaseModel, Field
 
 from agent_builder_sdk.streaming.a2a_frame_utils import (
+    RELAY_CYCLE_SEPARATOR,
     RELAY_TOOL_NAME,
     STATE_COMPLETED,
     STATE_FAILED,
     STATE_WORKING,
     data_message,
+    is_assistant_message,
     status_update,
     task_opener,
 )
@@ -103,6 +106,11 @@ class StreamState:
     # force_stop_message_id). The terminal branch then just closes that block instead of re-emitting
     # the whole answer, so a relayed answer isn't rendered twice (live deltas + terminal one-shot).
     force_stop_streamed: bool = False
+    # True after a relayed sub-agent model call ended; the next relayed text starts a new cycle.
+    relay_cycle_ended: bool = False
+    # The persist hook's save of this turn's final answer, once started; resolves to whether it was
+    # stored. A disconnect after it started records an interruption only if that save fails.
+    final_persist: Optional["asyncio.Future[bool]"] = None
     # Events produced OUTSIDE the model token stream (e.g. suggestion interactions the response
     # hook builds at end-of-turn) that must still ride the live stream. The hook appends wire-ready
     # events here; the stream loop drains them and yields their frames before the terminal. Kept off
@@ -129,12 +137,6 @@ class StreamState:
 def _is_text_delta(event: Dict[str, Any]) -> bool:
     # TextStreamEvent -> {"data": <str>, "delta": {...}}
     return isinstance(event.get("data"), str)
-
-
-def _is_assistant_message(event: Dict[str, Any]) -> bool:
-    # ModelMessageEvent -> {"message": {"role": "assistant", "content": [...]}}
-    msg = event.get("message")
-    return isinstance(msg, dict) and msg.get("role") == "assistant"
 
 
 def _is_terminal_result(event: Dict[str, Any]) -> bool:
@@ -325,7 +327,7 @@ def adapt(
             out.append(ToolCallArgsEvent(tool_call_id=tool_id, delta=delta))
         return out
 
-    if _is_assistant_message(event):
+    if is_assistant_message(event):
         # End of the model's assistant turn: close whatever block is open.
         _end_model_call(state, out)
         return out
@@ -403,7 +405,14 @@ def _adapt_relayed_event(
          we already streamed it live here, so we set ``force_stop_streamed`` to tell that branch to
          SKIP the re-emit; otherwise the answer would render twice (our live deltas + its one-shot).
     """
+    if is_assistant_message(inner):
+        state.relay_cycle_ended = True
+        return []
     if _is_text_delta(inner):
+        # An empty delta carries no text; it must not open a cycle (or emit a separator) that the
+        # persisted answer, which joins only cycles with text, would not have.
+        if not inner["data"]:
+            return []
         out: List[BaseEvent] = []
         _start_run_if_needed(state, out)
         # Only one content block may be open at a time, so answer text closes any open reasoning/tool.
@@ -415,6 +424,9 @@ def _adapt_relayed_event(
             _close_message_if_open(state, out)
             state.open_message_id = msg_id
             out.append(TextMessageStartEvent(message_id=msg_id, role="assistant"))
+        if state.relay_cycle_ended and state.force_stop_streamed:
+            out.append(TextMessageContentEvent(message_id=msg_id, delta=RELAY_CYCLE_SEPARATOR))
+        state.relay_cycle_ended = False
         out.append(TextMessageContentEvent(message_id=msg_id, delta=inner["data"]))
         state.force_stop_streamed = True  # terminal branch: don't re-emit this answer
         return out

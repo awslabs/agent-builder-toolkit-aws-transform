@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from starlette_context import context as request_context
 from strands.telemetry import StrandsTelemetry
@@ -336,12 +336,6 @@ class BaseServer(ABC):
         ``data: {json}\\n\\n`` SSE event. Runs inline (no request queue): the connection
         is held for the whole turn.
         """
-        # message/stream is only valid when this server opted into streaming. Reject before any
-        # parsing/logging (and before the SSE response is returned) so it surfaces as a JSON-RPC
-        # error to the caller rather than wasted work or a broken/empty stream.
-        if self.streaming_config is None:
-            raise ValueError("This server does not support streaming (no StreamingConfig set)")
-
         message = A2AMessage(**params.get("message", {}))
 
         # Build the agent input identically to the message/send path: reuse
@@ -519,8 +513,13 @@ class BaseServer(ABC):
 
                 # message/stream is a streaming turn: it needs an SSE StreamingResponse,
                 # not a JSON-RPC dict, so it is peeled off before handle_jsonrpc. Every
-                # other method (message/send, tasks/get, notify, ...) is unchanged.
-                if request.get("method") == JsonRpcMethods.MESSAGE_STREAM:
+                # other method (message/send, tasks/get, notify, ...) is unchanged. Without a
+                # StreamingConfig it falls through to handle_jsonrpc's -32601 Method not found,
+                # the answer before streaming existed.
+                if (
+                    request.get("method") == JsonRpcMethods.MESSAGE_STREAM
+                    and self.streaming_config is not None
+                ):
                     return await self._handle_streaming(request.get("params") or {})
 
                 if self.is_jsonrpc_request(request):
@@ -563,13 +562,24 @@ class BaseServer(ABC):
             return await self.get_task(request)
 
         @self.app.post("/message/stream", response_model=None)
-        async def message_stream_rest(request: Dict[str, Any]) -> StreamingResponse:
+        async def message_stream_rest(
+            request: Dict[str, Any],
+        ) -> StreamingResponse | Dict[str, Any]:
             """REST endpoint for streaming (MDE mode). Same params shape as the AgentCore
             message/stream method; delegates to the shared _handle_streaming helper.
 
             ``response_model=None``: returns a StreamingResponse (SSE), not a model.
             """
-            return await self._handle_streaming(request.get("params") or request)
+            # Without a StreamingConfig, 404 as before this route existed.
+            if self.streaming_config is None:
+                raise HTTPException(status_code=404)
+            # A failure before the stream starts (e.g. the agent never became ready) is an error
+            # body, as on /invocations, not an uncaught 500.
+            try:
+                return await self._handle_streaming(request.get("params") or request)
+            except Exception as e:
+                logger.error(f"Error handling message/stream: {e}")
+                return self.format_error_response(request, e)
 
     async def handle_mde_notification(self, request: Dict[str, Any]) -> Dict[str, Any]:
         """Handle MDE notification - implementation varies by server type."""

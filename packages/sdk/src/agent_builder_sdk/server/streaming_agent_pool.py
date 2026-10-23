@@ -8,11 +8,10 @@ shares the same process. Strands allows only one invocation at a time per Agent 
 concurrent streams at once.
 
 When streaming is enabled (a ``StreamingConfig`` is passed), this pool hands each source its
-own lazily-created Agent object (built by the partner's own factory). The expensive,
-concurrency-safe pieces stay shared: the Bedrock model and the MCP client (the MCP
-protocol multiplexes concurrent tool calls over one connection by request id). Only
-the per-Agent state that would otherwise collide — the invocation lock, agent state,
-and the per-source conversation file — is separated.
+own lazily-created Agent object (built by the partner's own factory, once per source, so
+whatever the factory builds, such as the Bedrock model client, is per source). The MCP client
+stays shared (the MCP protocol multiplexes concurrent tool calls over one connection by request
+id), along with the conversation repository and memory manager the server injects.
 
 The pool key, ``source_id``, is just a string — the pool never interprets it. Where it comes
 from is decided upstream by ``classify_source`` (in

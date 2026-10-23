@@ -8,6 +8,7 @@ AgenticApi call), the env-derived sender, and the suggestions store. The asserti
 inspect the actual A2AMessage the hook would send, so a wrong field/branch fails here.
 """
 
+import asyncio
 import uuid
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -203,6 +204,62 @@ async def test_persists_under_stream_emitted_message_id(manager):
 
     _, message = manager.calls[0]
     assert message.messageId == "msg-stream-42"
+
+
+async def test_final_persist_is_recorded_on_stream_state(manager):
+    """Only the final answer's save is recorded on the stream state; a narration's is not."""
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    narration = make_event(stop_reason="tool_use", final_message_id="msg-1")
+    await hook._on_after_model_call(narration)
+    assert narration.invocation_state["stream_state"].final_persist is None
+
+    final = make_event(final_message_id="msg-2")
+    await hook._on_after_model_call(final)
+    assert final.invocation_state["stream_state"].final_persist.result() is True
+
+
+async def test_final_persist_is_recorded_before_the_send_completes(manager):
+    """A disconnect during the final save cancels the hook's await, so the save must already be on
+    the stream state for the disconnect handler to wait on."""
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    event = make_event(final_message_id="msg-1")
+    seen = []
+
+    async def persist(*args, **kwargs):
+        seen.append(event.invocation_state["stream_state"].final_persist is not None)
+
+    with patch.object(hook, "_persist", side_effect=persist):
+        await hook._on_after_model_call(event)
+
+    assert seen == [True]
+
+
+async def test_final_save_survives_a_cancelled_hook(manager):
+    """Cancelling the hook (a client disconnect) does not cancel the save it started."""
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    event = make_event(final_message_id="msg-1")
+    release = asyncio.Event()
+
+    async def persist(*args, **kwargs):
+        await release.wait()
+
+    with patch.object(hook, "_persist", side_effect=persist):
+        task = asyncio.create_task(hook._on_after_model_call(event))
+        await asyncio.sleep(0.01)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        release.set()
+        final_persist = event.invocation_state["stream_state"].final_persist
+        assert await final_persist is True
+
+
+async def test_failed_final_persist_resolves_false(manager):
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    event = make_event(final_message_id="msg-1")
+    with patch.object(hook, "_persist", side_effect=RuntimeError("chat down")):
+        await hook._on_after_model_call(event)
+    assert event.invocation_state["stream_state"].final_persist.result() is False
 
 
 async def test_stop_sequence_also_persists(manager):
@@ -489,6 +546,29 @@ async def test_force_stop_response_persists_as_final_under_dedicated_id(manager)
     # ensure_force_stop_message_id)
     assert message.messageId == event.invocation_state["stream_state"].force_stop_message_id
     assert A2A_MESSAGE_TYPE_EXT not in (message.metadata or {})
+
+
+async def test_force_stop_persist_is_recorded_before_the_send_completes(manager):
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    event = make_after_invocation_event(force_stop_response="Your job has been started.")
+    seen = []
+
+    async def persist(*args, **kwargs):
+        seen.append(event.invocation_state["stream_state"].final_persist is not None)
+
+    with patch.object(hook, "_persist", side_effect=persist):
+        await hook._on_after_invocation(event)
+
+    assert seen == [True]
+    assert event.invocation_state["stream_state"].final_persist.result() is True
+
+
+async def test_failed_force_stop_persist_resolves_false(manager):
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    event = make_after_invocation_event(force_stop_response="Your job has been started.")
+    with patch.object(hook, "_persist", side_effect=RuntimeError("chat down")):
+        await hook._on_after_invocation(event)
+    assert event.invocation_state["stream_state"].final_persist.result() is False
 
 
 async def test_force_stop_id_distinct_from_narration_final_id(manager):

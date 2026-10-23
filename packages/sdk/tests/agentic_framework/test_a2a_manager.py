@@ -276,7 +276,52 @@ class TestA2AManagerFactory:
             assert manager.job_id == "test-job"
             assert manager.agent_instance_id == "test-agent"
             assert manager.client is mock_client
+            # Built lazily, so buffered-only callers never need the streaming service model.
+            assert manager.streaming_client is None
+
+            mock_streaming_client.converse_stream.return_value = {"stream": _FakeBody(b"")}
+            with mock.patch(
+                "agent_builder_sdk.agentic_framework.a2a_manager.get_streaming_agentic_api_client",
+                return_value=mock_streaming_client,
+            ):
+                list(manager.stream_send_message(agent_instance_id="sub-1", message=mock.Mock()))
             assert manager.streaming_client is mock_streaming_client
+
+
+def test_streaming_client_built_once_under_concurrent_first_calls(a2a_manager):
+    """stream_send_message runs in worker threads; concurrent first calls build one client."""
+    import threading
+    import time
+
+    a2a_manager.streaming_client = None
+    client = mock.Mock()
+    client.converse_stream.return_value = {"stream": _FakeBody(b"")}
+    builds = []
+
+    def build():
+        builds.append(1)
+        time.sleep(0.05)
+        return client
+
+    with mock.patch(
+        "agent_builder_sdk.agentic_framework.a2a_manager.get_streaming_agentic_api_client",
+        side_effect=build,
+    ):
+        threads = [
+            threading.Thread(
+                target=lambda: list(
+                    a2a_manager.stream_send_message(agent_instance_id="sub-1", message=mock.Mock())
+                )
+            )
+            for _ in range(3)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+    assert len(builds) == 1
+    assert a2a_manager.streaming_client is client
 
 
 class _FakeBody:

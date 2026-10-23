@@ -5,9 +5,12 @@ Agent Runtime Server implementation compatible with multiple agent execution env
 """
 
 import asyncio
+import contextvars
+import functools
 import inspect
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import (
     TYPE_CHECKING,
@@ -244,6 +247,12 @@ class AgentRuntimeServer(BaseServer):
         self.initialized = False
         self._initialization_lock = asyncio.Lock()
         self._initialization_task: Optional[asyncio.Task] = None
+        # Off-loop sync factory builds run on one dedicated thread: one at a time, as they did on
+        # the event loop, so a factory need not be thread-safe (a cancelled caller cannot let the
+        # next build overlap one still running), and queued builds hold no shared-pool threads.
+        self._agent_build_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="agent-build"
+        )
         self.agent_ready_event = asyncio.Event()
         self.context: Optional[AgentRuntimeContext] = None
         self.message_processor_task: Optional[asyncio.Task] = None
@@ -726,8 +735,10 @@ class AgentRuntimeServer(BaseServer):
         streaming_config = self.streaming_config
 
         async def create_streaming_agent(user_storage_dir: str) -> AnyBaseAgent:
+            # Off the event loop: a sync factory lists MCP tools and creates model clients,
+            # which would otherwise stall every live stream while a new user's agent is built.
             agent = await self._create_agent_with_storage(
-                shared_mcp_client, user_storage_dir, **agent_params
+                shared_mcp_client, user_storage_dir, off_loop=True, **agent_params
             )
             # Attach the streaming hooks the agent declares (e.g. an orchestrator persists each
             # turn back to Chat, since a stream has no return value to persist; a sub-agent
@@ -748,19 +759,30 @@ class AgentRuntimeServer(BaseServer):
         logger.info("Concurrent streaming enabled: streaming agent pool ready")
 
     async def _create_agent_with_storage(
-        self, mcp_client: MCPClient, storage_dir: str, **agent_params
+        self, mcp_client: MCPClient, storage_dir: str, *, off_loop: bool = False, **agent_params
     ) -> AnyBaseAgent:
-        """Like _create_agent but with an explicit per-user storage_dir."""
+        """Like _create_agent but with an explicit per-user storage_dir. off_loop runs a sync
+        factory in a worker thread."""
         if self._is_async_factory(self.agent_factory):
             async_factory = cast(AsyncAgentFactory, self.agent_factory)
             return await async_factory(mcp_client, storage_dir, **agent_params)
         else:
             if self._factory_accepts_kwargs(self.agent_factory):
                 sync_factory = cast(SyncAgentFactory, self.agent_factory)
-                return sync_factory(mcp_client, storage_dir, **agent_params)
+                build: Callable[[], AnyBaseAgent] = functools.partial(
+                    sync_factory, mcp_client, storage_dir, **agent_params
+                )
             else:
                 sync_factory_no_kwargs = cast(SyncAgentFactoryNoKwargs, self.agent_factory)
-                return sync_factory_no_kwargs(mcp_client, storage_dir)
+                build = functools.partial(sync_factory_no_kwargs, mcp_client, storage_dir)
+            if not off_loop:
+                return build()
+            # Run in a copy of the caller's context, as asyncio.to_thread does, so ContextVars the
+            # factory reads (e.g. the request context) are still set.
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(
+                self._agent_build_executor, contextvars.copy_context().run, build
+            )
 
     def _get_agent_params(self) -> dict[str, Any]:
         """Return parameters to be used for agent initialization"""
@@ -809,9 +831,15 @@ class AgentRuntimeServer(BaseServer):
                 "This agent does not support streaming. "
                 "Enable it by passing a StreamingConfig to AgentRuntimeServer."
             )
-        # Wait for initialization to finish (it runs as a background task, so the
-        # pool and shared MCP client are built only once the agent is ready).
-        await self.agent_ready_event.wait()
+        # Wait for initialization to finish (it may run as a background task, so the
+        # pool and shared MCP client are built only once the agent is ready). asyncio.wait
+        # does not cancel the task if this request is cancelled. A failed init never sets
+        # agent_ready_event, so error instead of hanging the stream.
+        init_task = self._initialization_task
+        if init_task is not None:
+            await asyncio.wait({init_task})
+        if not self.agent_ready_event.is_set():
+            raise RuntimeError("Agent is not ready to stream")
         if self._streaming_agent_pool is None:
             raise RuntimeError("Streaming agent pool unavailable after initialization")
         return await self._streaming_agent_pool.get_agent(source_id, source_type)
@@ -925,6 +953,9 @@ class AgentRuntimeServer(BaseServer):
                     # Null it so a later pass (or the idempotency guard above being bypassed)
                     # never re-stops an already-closed client.
                     self._shared_mcp_client = None
+
+            # 8. Release the agent-build thread (idempotent).
+            self._agent_build_executor.shutdown(wait=False)
 
             logger.info("Graceful shutdown completed")
 

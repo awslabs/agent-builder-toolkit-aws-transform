@@ -294,6 +294,68 @@ class TestRelayMessageFromSubagent:
     @patch(
         "agent_builder_sdk.orchestrator_strands.tools.send_message_tools.get_agent_context_from_env"
     )
+    async def test_relay_separates_model_cycles(
+        self, mock_get_context, mock_get_manager, send_message_tools
+    ):
+        """Pre-tool narration and the answer come from different model cycles; the persisted
+        answer separates them the same way the live stream does."""
+        mock_get_context.return_value = AgenticApiRequestContext(
+            "job-123", "workspace-123", "sender", "token"
+        )
+        manager = Mock()
+        manager.stream_send_message.return_value = self._sse_iter(
+            {"kind": "task", "status": {"state": "submitted"}},
+            self._working({"data": "Let me check."}),
+            self._working({"message": {"role": "assistant", "content": []}}),
+            self._working({"data": "Final answer"}),
+            {"kind": "status-update", "final": True, "status": {"state": "completed"}},
+        )
+        mock_get_manager.return_value = manager
+
+        request_state: dict = {}
+        gen = send_message_tools.send_message_to_subagent_and_relay(
+            "subagent-456", "Q", tool_context=self._tool_context(request_state)
+        )
+        outputs = [chunk async for chunk in gen]
+
+        assert outputs[-1] == "Let me check.\n\nFinal answer"
+        assert request_state["force_stop_response"] == "Let me check.\n\nFinal answer"
+
+    @patch("agent_builder_sdk.agentic_framework.a2a_manager.get_a2a_manager")
+    @patch(
+        "agent_builder_sdk.orchestrator_strands.tools.send_message_tools.get_agent_context_from_env"
+    )
+    async def test_relay_skips_model_cycles_without_text(
+        self, mock_get_context, mock_get_manager, send_message_tools
+    ):
+        """A tool-only model cycle adds no separator, matching the live stream."""
+        mock_get_context.return_value = AgenticApiRequestContext(
+            "job-123", "workspace-123", "sender", "token"
+        )
+        manager = Mock()
+        manager.stream_send_message.return_value = self._sse_iter(
+            {"kind": "task", "status": {"state": "submitted"}},
+            self._working({"data": "Let me check."}),
+            self._working({"message": {"role": "assistant", "content": []}}),
+            self._working({"message": {"role": "assistant", "content": []}}),
+            self._working({"data": "Final answer"}),
+            self._working({"message": {"role": "assistant", "content": []}}),
+            {"kind": "status-update", "final": True, "status": {"state": "completed"}},
+        )
+        mock_get_manager.return_value = manager
+
+        request_state: dict = {}
+        gen = send_message_tools.send_message_to_subagent_and_relay(
+            "subagent-456", "Q", tool_context=self._tool_context(request_state)
+        )
+        outputs = [chunk async for chunk in gen]
+
+        assert outputs[-1] == "Let me check.\n\nFinal answer"
+
+    @patch("agent_builder_sdk.agentic_framework.a2a_manager.get_a2a_manager")
+    @patch(
+        "agent_builder_sdk.orchestrator_strands.tools.send_message_tools.get_agent_context_from_env"
+    )
     async def test_completed_with_no_content_is_non_terminating(
         self, mock_get_context, mock_get_manager, send_message_tools
     ):
@@ -608,6 +670,58 @@ class TestStreamMessageToSubagent:
         manager.stream_send_message.assert_called_once()
         call_kwargs = manager.stream_send_message.call_args[1]
         assert call_kwargs["agent_instance_id"] == "subagent-456"
+
+    @patch("agent_builder_sdk.agentic_framework.a2a_manager.get_a2a_manager")
+    @patch(
+        "agent_builder_sdk.orchestrator_strands.tools.send_message_tools.get_agent_context_from_env"
+    )
+    async def test_returns_only_the_last_model_cycle(
+        self, mock_get_context, mock_get_manager, send_message_tools
+    ):
+        """Pre-tool narration is not part of the answer, matching send_message_to_subagent."""
+        mock_get_context.return_value = AgenticApiRequestContext(
+            "job-123", "workspace-123", "sender", "token"
+        )
+        manager = Mock()
+        manager.stream_send_message.return_value = self._sse_iter(
+            {"kind": "task", "status": {"state": "submitted"}},
+            self._working({"data": "Let me check."}),
+            self._working({"message": {"role": "assistant", "content": []}}),
+            self._working({"data": "Final answer"}),
+            self._working({"message": {"role": "assistant", "content": []}}),
+            {"kind": "status-update", "final": True, "status": {"state": "completed"}},
+        )
+        mock_get_manager.return_value = manager
+
+        result = await send_message_tools.stream_message_to_subagent("subagent-456", "Q")
+
+        assert result == "Final answer"
+
+    @patch("agent_builder_sdk.agentic_framework.a2a_manager.get_a2a_manager")
+    @patch(
+        "agent_builder_sdk.orchestrator_strands.tools.send_message_tools.get_agent_context_from_env"
+    )
+    async def test_empty_last_model_cycle_is_not_replaced_by_narration(
+        self, mock_get_context, mock_get_manager, send_message_tools
+    ):
+        """A last model cycle with no text is an empty answer, as in send_message_to_subagent; the
+        earlier narration must not stand in for it."""
+        mock_get_context.return_value = AgenticApiRequestContext(
+            "job-123", "workspace-123", "sender", "token"
+        )
+        manager = Mock()
+        manager.stream_send_message.return_value = self._sse_iter(
+            {"kind": "task", "status": {"state": "submitted"}},
+            self._working({"data": "Let me check."}),
+            self._working({"message": {"role": "assistant", "content": []}}),
+            self._working({"message": {"role": "assistant", "content": []}}),
+            {"kind": "status-update", "final": True, "status": {"state": "completed"}},
+        )
+        mock_get_manager.return_value = manager
+
+        result = await send_message_tools.stream_message_to_subagent("subagent-456", "Q")
+
+        assert result == "Subagent subagent-456 completed but returned no content."
 
     @patch("agent_builder_sdk.agentic_framework.a2a_manager.get_a2a_manager")
     @patch(

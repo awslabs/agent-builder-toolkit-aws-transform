@@ -9,7 +9,10 @@ import argparse
 import logging
 import os
 
-from agent_builder_sdk.agent_factory import create_default_subagent
+from agent_builder_sdk.agent_factory import (
+    create_default_async_subagent,
+    create_default_subagent,
+)
 from agent_builder_sdk.logging_config import configure_logging
 from agent_builder_sdk.server.agent_runtime_server import AgentRuntimeServer
 from agent_builder_sdk.streaming.config import StreamingConfig
@@ -90,8 +93,12 @@ def main():
     # so it simply ignores them.
     def agent_factory(mcp_client, storage_dir, **kwargs):
         # If you're writing your own entry point based off this code,
-        # use create_default_async_subagent instead.
-        return create_default_subagent(
+        # use create_default_async_subagent instead. Streaming requires it: only the async
+        # subagent is StreamingCapable.
+        factory = (
+            create_default_async_subagent if args.concurrent_streaming else create_default_subagent
+        )
+        return factory(
             mcp_client=mcp_client,
             system_prompt=get_prompt_with_name("test_subagent_prompt"),
         )
