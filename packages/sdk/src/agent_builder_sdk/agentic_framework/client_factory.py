@@ -26,6 +26,17 @@ ATX_AGENTIC_API_COMPONENT_NAME = "agenticapi"
 ATX_EXTERNAL_AGENTIC_API_SERVICE_NAME = "transformagenticservice"
 ATX_STREAMING_AGENTIC_API_SERVICE_NAME = "transformagentsstreamingservice"
 
+# Service models shipped with the SDK (package data), so clients work without `aws configure add-model`.
+PACKAGED_MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "botocore_models")
+
+
+def _register_packaged_models() -> None:
+    """Add the packaged service models to the default botocore session's search path. They are
+    searched last, so a model the user registered (AWS_DATA_PATH or ~/.aws/models) still wins."""
+    loader = boto3._get_default_session()._session.get_component("data_loader")
+    if PACKAGED_MODELS_DIR not in loader.search_paths:
+        loader.search_paths.append(PACKAGED_MODELS_DIR)
+
 
 @functools.lru_cache(maxsize=1)
 def get_agentic_api_client() -> TransformAgenticServiceClient:
@@ -85,6 +96,7 @@ def create_streaming_agentic_api_client(
     logger.debug(
         f"Creating streaming agentic API client for region={region} at {resolved_endpoint_url}"
     )
+    _register_packaged_models()
     return boto3.client(
         service_name=ATX_STREAMING_AGENTIC_API_SERVICE_NAME,
         endpoint_url=resolved_endpoint_url,
@@ -154,6 +166,7 @@ def create_agentic_api_client(
     )
 
     resolved_endpoint_url = endpoint_url or _resolve_agentic_api_endpoint_url(stage, region)
+    _register_packaged_models()
     return boto3.client(
         service_name=_sync_service_name(),
         endpoint_url=resolved_endpoint_url,

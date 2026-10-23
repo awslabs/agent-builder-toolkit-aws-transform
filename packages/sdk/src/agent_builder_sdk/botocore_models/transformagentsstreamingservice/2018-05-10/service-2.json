@@ -39,7 +39,7 @@
   "shapes":{
     "A2ASseStream":{
       "type":"blob",
-      "documentation":"<p>Unbounded stream of raw SSE bytes (text/event-stream). On the Java side this surfaces as an AsyncStreamContext the activity feeds a Flowable<ByteBuffer> of <code>data: {A2A frame}\\n\\n</code> frames into.</p>",
+      "documentation":"<p>Unbounded stream of raw SSE bytes (text/event-stream) carrying <code>data: {A2A frame}\\n\\n</code> frames.</p>",
       "streaming":true
     },
     "AccessDeniedException":{

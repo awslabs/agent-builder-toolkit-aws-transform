@@ -2501,7 +2501,7 @@
         },
         "tags":{
           "shape":"EngagementTagList",
-          "documentation":"<p>Tags associated with the workspace, fetched from ATXEngagementService. Only populated by GetJob. This structure is shared with ListJobs, but ListJobs does NOT return tags \u2014 use GetJob to retrieve a job's tags.</p>"
+          "documentation":"<p>Tags associated with the workspace. Only populated by GetJob. This structure is shared with ListJobs, but ListJobs does NOT return tags \u2014 use GetJob to retrieve a job's tags.</p>"
         }
       },
       "documentation":"<p>Consists of details about a job such as the time the job was started</p>"

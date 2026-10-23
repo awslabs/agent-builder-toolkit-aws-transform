@@ -122,9 +122,9 @@
     "kind": "function",
     "file": "agent_builder_sdk/agent_factory.py",
     "module": "agent_builder_sdk.agent_factory",
-    "docstring": "Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.\n\nThis function creates a fully-featured orchestrator with:\n- Episodic memory for storing agent experiences\n- Conversation tracking across multiple sources\n- Memory tools for agent self-reflection\n- Lifecycle hooks for conversation and memory events\n- Subagent tools for communication and discovery (mocked)\n- Agent skills support via Strands AgentSkills plugin (when enable_skills=True)\n- Experimental code execution support (when enable_code_execution=True)\n\nArgs:\n    system_prompt: Custom system prompt for the orchestrator\n    mcp_client: Optional MCP client for tool integration\n    storage_dir: Directory for agent data storage\n    custom_tools: Optional list of additional custom tools to add to the orchestrator\n    model_id: Optional model ID for Bedrock inference\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)\n    with_base_guardrails: Whether to add base guardrail prompts\n    trace_attributes: Optional trace attributes for observability\n    excluded_mcp_tool_names: Set of MCP tool names to exclude\n    metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)\n    enable_skills: Enable agent skills via the Strands AgentSkills plugin.\n        When True, creates an AgentSkills plugin that registers a skills tool\n        and auto-injects skill metadata into the system prompt.\n    skills_dir: Directory containing skills. If None, uses STRANDS_SKILLS_DIR env var\n        or defaults to ./skills\n    enable_code_execution: Enable experimental local Python code execution tool.\n        WARNING: Code executes locally without sandboxing. Use with caution.\n        For sandboxed execution, AgentCore Code Interpreter integration is planned.\n\nReturns:\n    Configured AsyncBaseOrchestrator instance with memory, hooks, and tools\n\nExample:\n    # Enable skills and code execution\n    agent = create_default_async_orchestrator_with_subagent(\n        system_prompt=\"You are a helpful assistant.\",\n        enable_skills=True,\n        skills_dir=\"./my_skills\",\n        enable_code_execution=True,\n    )",
-    "signature": "create_default_async_orchestrator_with_subagent(system_prompt: str, mcp_client: Optional[MCPClient] = None, storage_dir: str = '/tmp/orchestrator_agent', custom_tools: Optional[list[Any]] = None, model_id: str = 'anthropic.claude-sonnet-4-5-20250929-v1:0', model: Union[Model, str, None] = None, boto_client_config: Optional[BotocoreConfig] = None, with_base_guardrails: bool = False, trace_attributes: Optional[dict[str, Any]] = None, excluded_mcp_tool_names: Optional[Set[str]] = None, metrics_config: Optional[MetricsConfig] = None, enable_skills: bool = False, skills_dir: Optional[str] = None, enable_code_execution: bool = False, locale: Optional[str] = None, conversation_repository: Optional[FileMultiSourceConversationRepository] = None, memory_manager: Optional[MemoryManager] = None) -> AsyncBaseOrchestrator",
-    "description": "Parameters:\n  system_prompt: str (required) - Custom system prompt for the orchestrator\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the orchestrator\n  model_id: str (default='anthropic.claude-sonnet-4-5-20250929-v1:0') - Optional model ID for Bedrock inference\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string (takes precedence over model_id)\n  boto_client_config: Optional[BotocoreConfig] (default=None)\n  with_base_guardrails: bool (default=False) - Whether to add base guardrail prompts\n  trace_attributes: Optional[dict[str, Any]] (default=None) - Optional trace attributes for observability\n  excluded_mcp_tool_names: Optional[Set[str]] (default=None) - Set of MCP tool names to exclude\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)\n  enable_skills: bool (default=False) - Enable agent skills via the Strands AgentSkills plugin. When True, creates an AgentSkills plugin that registers a skills tool and auto-injects skill metadata into the system prompt.\n  skills_dir: Optional[str] (default=None) - Directory containing skills. If None, uses STRANDS_SKILLS_DIR env var or defaults to ./skills\n  enable_code_execution: bool (default=False) - Enable experimental local Python code execution tool.\n  locale: Optional[str] (default=None)\n  conversation_repository: Optional[FileMultiSourceConversationRepository] (default=None)\n  memory_manager: Optional[MemoryManager] (default=None)"
+    "docstring": "Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.\n\nThis function creates a fully-featured orchestrator with:\n- Episodic memory for storing agent experiences\n- Conversation tracking across multiple sources\n- Memory tools for agent self-reflection\n- Lifecycle hooks for conversation and memory events\n- Subagent tools for communication and discovery (mocked)\n- Agent skills support via Strands AgentSkills plugin (when enable_skills=True)\n- Experimental code execution support (when enable_code_execution=True)\n\nArgs:\n    system_prompt: Custom system prompt for the orchestrator\n    mcp_client: Optional MCP client for tool integration\n    storage_dir: Directory for agent data storage\n    custom_tools: Optional list of additional custom tools to add to the orchestrator\n    model_id: Optional model ID for Bedrock inference\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)\n    with_base_guardrails: Whether to add base guardrail prompts\n    trace_attributes: Optional trace attributes for observability\n    excluded_mcp_tool_names: Set of MCP tool names to exclude\n    metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)\n    enable_skills: Enable agent skills via the Strands AgentSkills plugin.\n        When True, creates an AgentSkills plugin that registers a skills tool\n        and auto-injects skill metadata into the system prompt.\n    skills_dir: Directory containing skills. If None, uses STRANDS_SKILLS_DIR env var\n        or defaults to ./skills\n    enable_code_execution: Enable experimental local Python code execution tool.\n        WARNING: Code executes locally without sandboxing. Use with caution.\n        For sandboxed execution, AgentCore Code Interpreter integration is planned.\n    enable_blank_reply_continuation: Ask the model once more for its reply when a turn ends\n        empty right after tool results (see BlankReplyHookProvider).\n    enable_prompt_caching: Turn on Bedrock prompt caching for the orchestrator's model (see\n        AsyncBaseOrchestrator). Off by default.\n\nReturns:\n    Configured AsyncBaseOrchestrator instance with memory, hooks, and tools\n\nExample:\n    # Enable skills and code execution\n    agent = create_default_async_orchestrator_with_subagent(\n        system_prompt=\"You are a helpful assistant.\",\n        enable_skills=True,\n        skills_dir=\"./my_skills\",\n        enable_code_execution=True,\n    )",
+    "signature": "create_default_async_orchestrator_with_subagent(system_prompt: str, mcp_client: Optional[MCPClient] = None, storage_dir: str = '/tmp/orchestrator_agent', custom_tools: Optional[list[Any]] = None, model_id: str = 'anthropic.claude-sonnet-4-5-20250929-v1:0', model: Union[Model, str, None] = None, boto_client_config: Optional[BotocoreConfig] = None, with_base_guardrails: bool = False, trace_attributes: Optional[dict[str, Any]] = None, excluded_mcp_tool_names: Optional[Set[str]] = None, metrics_config: Optional[MetricsConfig] = None, enable_skills: bool = False, skills_dir: Optional[str] = None, enable_code_execution: bool = False, locale: Optional[str] = None, conversation_repository: Optional[FileMultiSourceConversationRepository] = None, memory_manager: Optional[MemoryManager] = None, enable_blank_reply_continuation: bool = False, enable_prompt_caching: bool = False) -> AsyncBaseOrchestrator",
+    "description": "Parameters:\n  system_prompt: str (required) - Custom system prompt for the orchestrator\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the orchestrator\n  model_id: str (default='anthropic.claude-sonnet-4-5-20250929-v1:0') - Optional model ID for Bedrock inference\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string (takes precedence over model_id)\n  boto_client_config: Optional[BotocoreConfig] (default=None)\n  with_base_guardrails: bool (default=False) - Whether to add base guardrail prompts\n  trace_attributes: Optional[dict[str, Any]] (default=None) - Optional trace attributes for observability\n  excluded_mcp_tool_names: Optional[Set[str]] (default=None) - Set of MCP tool names to exclude\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)\n  enable_skills: bool (default=False) - Enable agent skills via the Strands AgentSkills plugin. When True, creates an AgentSkills plugin that registers a skills tool and auto-injects skill metadata into the system prompt.\n  skills_dir: Optional[str] (default=None) - Directory containing skills. If None, uses STRANDS_SKILLS_DIR env var or defaults to ./skills\n  enable_code_execution: bool (default=False) - Enable experimental local Python code execution tool.\n  locale: Optional[str] (default=None)\n  conversation_repository: Optional[FileMultiSourceConversationRepository] (default=None)\n  memory_manager: Optional[MemoryManager] (default=None)\n  enable_blank_reply_continuation: bool (default=False) - Ask the model once more for its reply when a turn ends empty right after tool results (see BlankReplyHookProvider).\n  enable_prompt_caching: bool (default=False) - Turn on Bedrock prompt caching for the orchestrator's model (see AsyncBaseOrchestrator). Off by default."
   },
   {
     "name": "create_default_async_subagent",
@@ -225,7 +225,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/agentic_framework/a2a_manager.py",
     "module": "agent_builder_sdk.agentic_framework.a2a_manager",
-    "docstring": "Send a message via the A2A ConverseStream API and stream the reply as A2A frames.\n\nThe streaming counterpart of ``send_message``: instead of one buffered reply, the callee's\nresponse comes back as a live SSE stream of A2A frames, which this returns as an iterator of\nframe dicts (parsed by ``sse_reader``).\n\nArgs:\n    agent_instance_id: The agent instance ID to send the message to\n    message: The A2AMessage object to send\n\nReturns:\n    An iterator of A2A frame dicts. NOTE: the ``converse_stream`` call is issued eagerly, but\n    frames (and any mid-stream transport error, e.g. a dropped connection) surface while\n    iterating, not at call time.\n\nRaises:\n    ClientError: If the initial ConverseStream call fails.\n    ValueError: If this manager was built without a streaming client.",
+    "docstring": "Send a message via the A2A ConverseStream API and stream the reply as A2A frames.\n\nThe streaming counterpart of ``send_message``: instead of one buffered reply, the callee's\nresponse comes back as a live SSE stream of A2A frames, which this returns as an iterator of\nframe dicts (parsed by ``sse_reader``).\n\nArgs:\n    agent_instance_id: The agent instance ID to send the message to\n    message: The A2AMessage object to send\n\nReturns:\n    An iterator of A2A frame dicts. NOTE: the ``converse_stream`` call is issued eagerly, but\n    frames (and any mid-stream transport error, e.g. a dropped connection) surface while\n    iterating, not at call time.\n\nRaises:\n    ClientError: If the initial ConverseStream call fails.",
     "signature": "stream_send_message(agent_instance_id: str, message: A2AMessage) -> Iterator[Dict[str, Any]]"
   },
   {
@@ -2869,15 +2869,15 @@
     "module": "agent_builder_sdk.metrics.metrics_helper",
     "docstring": "Metrics helper with automatic trace correlation using aws-embedded-metrics.",
     "signature": "MetricsHelper(custom_dimensions: Optional[Dict[str, str]] = None, namespace: str = 'StrandsAgentMetrics')",
-    "description": "Parameters:\n  custom_dimensions: Optional[Dict[str, str]] (default=None)\n  namespace: str (default='StrandsAgentMetrics')\n\nMethods:\n  emit_metrics(strands_metrics_summary: Dict[str, Any])"
+    "description": "Parameters:\n  custom_dimensions: Optional[Dict[str, str]] (default=None)\n  namespace: str (default='StrandsAgentMetrics')\n\nMethods:\n  emit_metrics(strands_metrics_summary: Dict[str, Any], baseline: Optional[Dict[str, float]] = None) -> Dict[str, float]"
   },
   {
     "name": "MetricsHelper.emit_metrics",
     "kind": "method",
     "file": "agent_builder_sdk/metrics/metrics_helper.py",
     "module": "agent_builder_sdk.metrics.metrics_helper",
-    "docstring": "Emit metrics - automatically handles both sync and async contexts.",
-    "signature": "emit_metrics(strands_metrics_summary: Dict[str, Any])"
+    "docstring": "Emit the change in the summary's counters since ``baseline``; return the new totals.\n\nA Strands summary counts from the agent's creation, not per invocation, so an agent that\nserves many turns passes the totals this returned last time to emit one turn per record.\nWithout a baseline the whole summary is emitted. Inside a running loop the record goes out\nfrom a background task after this returns, so a record lost there takes its turn with it.",
+    "signature": "emit_metrics(strands_metrics_summary: Dict[str, Any], baseline: Optional[Dict[str, float]] = None) -> Dict[str, float]"
   },
   {
     "name": "BaseJobDeletionProcessor",
@@ -3464,6 +3464,32 @@
     "module": "agent_builder_sdk.orchestrator_strands.evaluation.metrics_helper",
     "docstring": "Save the extracted metrics to a file in EMF format.\n\nArgs:\n    strands_metrics_summary (dict): The metrics summary from agent.metrics.get_summary()\n    eval_output (EvaluationOutput): Output of agent evaluation after execution",
     "signature": "emit_metrics(strands_metrics_summary, eval_output: EvaluationOutput)"
+  },
+  {
+    "name": "BlankReplyHookProvider",
+    "kind": "class",
+    "file": "agent_builder_sdk/orchestrator_strands/hooks/blank_reply_hook_provider.py",
+    "module": "agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider",
+    "docstring": "Ask the model once more for its reply when it ends a turn empty right after tool results.\n\nA model that writes its reply in the same message as a trailing tool call can have nothing left\nto say when Strands calls it again with the tool result, so the turn delivers nothing.\nRe-sending the same request gets the same empty answer; the documented remedy is a\ncontinuation prompt in a new user message\n(https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons).\n\nThe continuation reaches the conversation store only once the model answers it, and that answer\nis marked as its answer: the answer's signed thinking was produced with the ask in context, so\nreplayed history must keep the ask, and it is never removed. An ask whose call raises (a\nterminal model error, or the turn timing out) is never stored. One stored without its marked\nanswer right after it, because something failed between storing the two or the process died\nthere, stays in the store; ``drop_unanswered_continuations`` removes it from every history\n``ConversationHookProvider`` loads, with or without this hook, so it never reaches the model\nagain.\n\nRuns late among ``AfterModelCallEvent`` hooks (a high ``HookOrder``). After Strands'\n``ModelRetryStrategy``, because a retry requested before the strategy runs makes it skip\nresetting its attempt count, so the continuation would inherit the empty call's throttling\nbudget; and after lower-ordered hooks, so one that raises on the answer, or discards it, does\nso before the ask is stored. A message that such a hook stores on that answer lands ahead of\nthe ask. Any message stored between the ask and its answer instead makes the ask look\nunanswered, and replay drops it: one that a hook ordered after this one stores on the answer,\nor any message stored before the replacement once such a hook discards the answer. Without\n``HookOrder`` it registers unordered and accepts all of this.\n\nLeft alone:\n- turns served over message/stream (``stream_state`` in ``invocation_state``): the streaming\n  persist hook handles ``AfterModelCallEvent`` first and would consume the turn's suggestion\n  chips on the discarded response, so the reply would reach chat without them;\n- turns started by a platform notification, whose replies are never delivered.",
+    "signature": "BlankReplyHookProvider()",
+    "description": "Extends: HookProvider\n\nMethods:\n  register_hooks(registry: HookRegistry, **kwargs: Any) -> None"
+  },
+  {
+    "name": "BlankReplyHookProvider.register_hooks",
+    "kind": "method",
+    "file": "agent_builder_sdk/orchestrator_strands/hooks/blank_reply_hook_provider.py",
+    "module": "agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider",
+    "docstring": "",
+    "signature": "register_hooks(registry: HookRegistry, **kwargs: Any) -> None"
+  },
+  {
+    "name": "drop_unanswered_continuations",
+    "kind": "function",
+    "file": "agent_builder_sdk/orchestrator_strands/hooks/blank_reply_hook_provider.py",
+    "module": "agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider",
+    "docstring": "Applied on every history load, so it must not depend on this hook being registered.",
+    "signature": "drop_unanswered_continuations(messages: Messages) -> Messages",
+    "description": "Parameters:\n  messages: Messages (required)"
   },
   {
     "name": "ConversationHookProvider",
@@ -4131,6 +4157,15 @@
     "docstring": "The A2A task state on this frame (``submitted``/``working``/``completed``/``failed``).",
     "signature": "frame_state(frame: A2AFrame) -> Optional[str]",
     "description": "Parameters:\n  frame: A2AFrame (required)"
+  },
+  {
+    "name": "is_assistant_message",
+    "kind": "function",
+    "file": "agent_builder_sdk/streaming/a2a_frame_utils.py",
+    "module": "agent_builder_sdk.streaming.a2a_frame_utils",
+    "docstring": "True for a Strands ModelMessageEvent (``{\"message\": {\"role\": \"assistant\", ...}}``): one\nfinished model call.",
+    "signature": "is_assistant_message(event: Dict[str, Any]) -> bool",
+    "description": "Parameters:\n  event: Dict[str, Any] (required)"
   },
   {
     "name": "is_end_of_turn",
@@ -4970,6 +5005,15 @@
     "description": "Parameters:\n  context_id: str | None (required)\n  request_message: A2AMessage (required)\n  response: Optional[str] (default=None)\n  error_message: Optional[str] (default=None)\n  sender: str | None (default=None)"
   },
   {
+    "name": "describe_agent_result",
+    "kind": "function",
+    "file": "agent_builder_sdk/utils.py",
+    "module": "agent_builder_sdk.utils",
+    "docstring": "Summarize an agent result for logs without its content.\n\nAgents may return their own result objects, so every field is optional and this never raises.",
+    "signature": "describe_agent_result(result: Any) -> str",
+    "description": "Parameters:\n  result: Any (required)"
+  },
+  {
     "name": "extract_message_info",
     "kind": "function",
     "file": "agent_builder_sdk/utils.py",
@@ -5057,6 +5101,15 @@
     "module": "agent_builder_sdk.utils",
     "docstring": "Insert error tool results immediately after assistant tool uses left unresolved.\n\nBedrock requires a toolUse to be answered in the message that IMMEDIATELY follows it, so a\nresult appearing later in the list is as invalid as a missing one — hence only the next\nmessage is consulted. History is persisted per message, before a tool runs, so an interrupted\nturn leaves an unpaired toolUse on disk that fails every later Converse call until repaired.\n\nNever mutates a message: a turn whose results arrived only in part gets a copy of its result\nmessage with the missing ones appended. So the caller's stored objects — which the loaded\nmessages alias — are left untouched, and a well-formed history round-trips unchanged.",
     "signature": "reconcile_dangling_tool_uses(messages: List[Any]) -> List[Any]",
+    "description": "Parameters:\n  messages: List[Any] (required)"
+  },
+  {
+    "name": "reconcile_unanswered_user_turns",
+    "kind": "function",
+    "file": "agent_builder_sdk/utils.py",
+    "module": "agent_builder_sdk.utils",
+    "docstring": "Insert a placeholder assistant reply after each user message that never got one.\n\nA turn that is aborted (timeout, client disconnect, crash) has already persisted its user\nmessage but no reply. Left as is, the next turn sends two user messages in a row and the model\nanswers the earlier one. History is loaded before the new prompt is appended, so a trailing\nuser message is unanswered, unless another invocation for the same source is still answering\nit (a concurrent turn on a shared repository); that reader then sees the placeholder, which is\nno worse than two user messages in a row. Like reconcile_dangling_tool_uses, this never\nmutates the caller's messages and leaves a well-formed history unchanged. Unanswered\nblank-reply continuations are dropped first; an answered one directly follows the turn it\nre-asks, so it is left alone and does not count as that turn's missing reply.",
+    "signature": "reconcile_unanswered_user_turns(messages: List[Any]) -> List[Any]",
     "description": "Parameters:\n  messages: List[Any] (required)"
   },
   {

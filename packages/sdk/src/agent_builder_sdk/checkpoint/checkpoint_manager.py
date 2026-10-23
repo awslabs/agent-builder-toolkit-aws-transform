@@ -175,7 +175,8 @@ class BackgroundCheckpointer:
         """Background checkpoint loop."""
         while self.enabled:
             try:
-                self.manager.attempt_checkpoint()
+                # Run off the event loop: the ZIP and upload are blocking (#74).
+                await asyncio.to_thread(self.manager.attempt_checkpoint)
                 # sleep 30s
                 await asyncio.sleep(30)
             except asyncio.CancelledError:

@@ -181,3 +181,24 @@ def test_get_streaming_agentic_api_client_cached(mock_create_client):
     assert result1 == mock_client
     assert result2 == mock_client
     mock_create_client.assert_called_once()
+
+
+def test_packaged_models_let_clients_build_without_registered_models(monkeypatch, tmp_path):
+    """With no models registered by the user, both services still resolve from package data."""
+    import boto3
+
+    from agent_builder_sdk.agentic_framework import client_factory
+
+    monkeypatch.setenv("AWS_DATA_PATH", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(boto3, "DEFAULT_SESSION", None)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "x")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "x")
+
+    client_factory._register_packaged_models()
+    for service in (
+        client_factory.ATX_AGENTIC_API_SERVICE_NAME,
+        client_factory.ATX_STREAMING_AGENTIC_API_SERVICE_NAME,
+    ):
+        client = boto3.client(service, region_name="us-west-2", endpoint_url="https://example.invalid")
+        assert client.meta.service_model.service_name == service
