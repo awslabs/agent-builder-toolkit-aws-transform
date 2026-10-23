@@ -90,6 +90,7 @@ class _BaseSubagent(StrandsAgent):
         self.mcp_clients = mcp_clients
         self.custom_tools = custom_tools or []
         self.metrics_config = metrics_config or MetricsConfig(enabled=False)
+        self._metrics_baseline: Optional[Dict[str, float]] = None
 
         # Create Bedrock model only if no model provided
         bedrock_model = (
@@ -159,7 +160,9 @@ class _BaseSubagent(StrandsAgent):
                 custom_dimensions=self.metrics_config.custom_dimensions,
                 namespace=self.metrics_config.namespace,
             )
-            metrics_helper.emit_metrics(metrics_summary)
+            self._metrics_baseline = metrics_helper.emit_metrics(
+                metrics_summary, self._metrics_baseline
+            )
 
             logger.info("Agent metrics emitted successfully")
 
@@ -370,10 +373,11 @@ class AsyncBaseSubagent(
             try:
                 async with asyncio.timeout(cfg.turn_timeout_seconds) as turn_cm:
                     async for event in self.stream_async(request.message):
-                        for frame in event_frames(event, state):
-                            yield frame
                         if isinstance(event, dict) and "result" in event:
                             result = event["result"]
+                            self._emit_agent_metrics(result)
+                        for frame in event_frames(event, state):
+                            yield frame
                     for frame in finish_frames(state, result):
                         yield frame
             except TimeoutError:

@@ -526,6 +526,35 @@ async def test_stream_message_async_drains_side_events_before_terminal(mock_mode
     assert captured["state"].side_events == []
 
 
+async def test_stream_message_async_emits_each_turn_against_the_last_baseline(mock_model):
+    from agent_builder_sdk.metrics.metrics_config import MetricsConfig
+
+    orchestrator = AsyncBaseOrchestrator(
+        system_prompt="Test prompt", metrics_config=MetricsConfig(enabled=True)
+    )
+
+    async def stream(*args, **kwargs):
+        yield "result"  # a non-dict event: must not be taken for the terminal
+        yield {"result": Mock(state={})}
+
+    with patch.object(orchestrator, "stream_async", side_effect=stream), patch(
+        "agent_builder_sdk.metrics.metrics_helper.MetricsHelper.emit_metrics",
+        side_effect=[{"turn": 1}, {"turn": 2}],
+    ) as emit_metrics:
+        for context_id in ("ctx-m1", "ctx-m2"):
+            async for frame in orchestrator._stream_message_async(
+                "hello",
+                "user-1",
+                MessageSourceType.USER,
+                conversation_id="conv-1",
+                a2a_context=A2AContext(context_id=context_id, task_id=None),
+            ):
+                if frame.get("final"):
+                    break
+
+    assert [c.args[1] for c in emit_metrics.call_args_list] == [None, {"turn": 1}]
+
+
 async def test_stream_message_async_inner_timeout_is_generic_not_turn_timeout(mock_model):
     """An inner TimeoutError (e.g. an MCP tool / boto3 read timeout) that fires BEFORE the turn
     budget expires must be surfaced as the generic internal error, not mislabeled as a turn timeout.

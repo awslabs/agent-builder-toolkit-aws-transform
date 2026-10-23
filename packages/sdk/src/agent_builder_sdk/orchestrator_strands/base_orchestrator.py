@@ -170,6 +170,7 @@ class _BaseOrchestrator(StrandsAgent):
         self.evaluation_card = evaluation_card
         self.evaluator = EvaluateAgent(self, self.evaluation_card) if self.evaluation_card else None
         self.metrics_config = metrics_config or MetricsConfig(enabled=False)
+        self._metrics_baseline: Optional[Dict[str, float]] = None
 
         # Create Bedrock model only if no model provided. The stream-processing mode is passed only
         # when set, so an unset value leaves BedrockModel on its own default (Bedrock treats an
@@ -327,7 +328,9 @@ class _BaseOrchestrator(StrandsAgent):
                 custom_dimensions=self.metrics_config.custom_dimensions,
                 namespace=self.metrics_config.namespace,
             )
-            metrics_helper.emit_metrics(metrics_summary)
+            self._metrics_baseline = metrics_helper.emit_metrics(
+                metrics_summary, self._metrics_baseline
+            )
 
             logger.info("Agent metrics emitted successfully")
 
@@ -701,6 +704,9 @@ class AsyncBaseOrchestrator(
         # message/send path never sets it, so its hooks are unaffected.
         kwargs["stream_state"] = state
         async for event in self.stream_async(message, invocation_state=kwargs):
+            # Ahead of adapt(): a client may stop reading at the terminal frame it yields.
+            if isinstance(event, dict) and "result" in event:
+                self._emit_agent_metrics(event["result"])
             for agui_event in adapt(event, state, cfg):
                 # Events produced off the model stream (suggestion interactions the response hook
                 # built as the final message was assembled) must ride BEFORE the terminal — drain

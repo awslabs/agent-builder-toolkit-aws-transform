@@ -12,6 +12,7 @@ from agent_builder_sdk.custom_types.orchestrator_agent_types import (
     ConversationContext,
     ProcessMessageRequest,
 )
+from agent_builder_sdk.metrics.metrics_config import MetricsConfig
 from agent_builder_sdk.streaming.a2a_frame_utils import extract_raw_event, frame_state
 from agent_builder_sdk.streaming.config import StreamingConfig
 
@@ -144,6 +145,21 @@ async def test_force_stop_response_surfaced_as_final_text():
         if frame_state(f) == "working" and extract_raw_event(f)
     ]
     assert "terminating answer" in working_texts
+
+
+async def test_streamed_turns_emit_against_the_last_baseline():
+    agent = _subagent()
+    agent.metrics_config = MetricsConfig(enabled=True)
+    agent.stream_async = _make_stream([{"data": "x"}, {"result": mock.Mock(state={})}])
+    with mock.patch(
+        "agent_builder_sdk.metrics.metrics_helper.MetricsHelper.emit_metrics",
+        side_effect=[{"turn": 1}, {"turn": 2}],
+    ) as emit_metrics:
+        for _ in range(2):
+            async for frame in agent.process_message_stream(_request(), conversation_id="conv"):
+                if frame.get("final"):
+                    break
+    assert [c.args[1] for c in emit_metrics.call_args_list] == [None, {"turn": 1}]
 
 
 def test_streaming_policy_is_neutral():
