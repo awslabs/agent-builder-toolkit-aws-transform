@@ -2,11 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for MetricsHelper."""
 
+import asyncio
+import importlib
 import os
 from unittest import mock
 
 import pytest
+from aws_embedded_metrics.config import get_config
 
+from agent_builder_sdk.metrics import metrics_helper
 from agent_builder_sdk.metrics.metrics_helper import MetricsHelper, _get_current_trace_id
 
 
@@ -64,7 +68,11 @@ class TestMetricsHelper:
             metrics_summary = {
                 "accumulated_metrics": {"latencyMs": 100},
                 "accumulated_usage": {"inputTokens": 50, "outputTokens": 25},
-                "tool_usage": {},
+                "tool_usage": {
+                    "tool1": {
+                        "execution_stats": {"call_count": 5, "error_count": 1, "success_count": 4}
+                    }
+                },
                 "total_cycles": 1,
                 "total_duration": 2.5,
             }
@@ -73,7 +81,7 @@ class TestMetricsHelper:
             mock_metrics = mock.Mock()
 
             # Call the underlying function directly (bypassing decorator for testing)
-            helper._emit_metrics_impl(mock_metrics, metrics_summary)
+            helper._emit_metrics_impl(mock_metrics, helper._totals(metrics_summary))
 
             # Verify metrics calls
             mock_metrics.set_namespace.assert_called_once_with("StrandsAgentMetrics")
@@ -86,6 +94,8 @@ class TestMetricsHelper:
             mock_metrics.put_metric.assert_any_call("LatencyMs", 100, "Milliseconds")
             mock_metrics.put_metric.assert_any_call("InputTokens", 50, "Count")
             mock_metrics.put_metric.assert_any_call("OutputTokens", 25, "Count")
+            mock_metrics.put_metric.assert_any_call("ErrorCount", 1, "Count")
+            mock_metrics.put_metric.assert_any_call("SuccessRate", 0.8, "None")
 
     @mock.patch("agent_builder_sdk.metrics.metrics_helper._get_current_trace_id")
     def test_emit_metrics_with_custom_dimensions(self, mock_trace_id, env_vars):
@@ -98,10 +108,85 @@ class TestMetricsHelper:
             metrics_summary = {"accumulated_metrics": {}}
 
             mock_metrics = mock.Mock()
-            helper._emit_metrics_impl(mock_metrics, metrics_summary)
+            helper._emit_metrics_impl(mock_metrics, helper._totals(metrics_summary))
 
             # Verify custom dimensions are set
             mock_metrics.set_dimensions.assert_called_once_with(**custom_dims)
+
+    def test_emit_metrics_reports_the_turn_since_the_baseline(self, env_vars):
+        first_turn = {
+            "accumulated_metrics": {"latencyMs": 100},
+            "accumulated_usage": {
+                "inputTokens": 5,
+                "outputTokens": 20,
+                "cacheReadInputTokens": 0,
+                "cacheWriteInputTokens": 900,
+            },
+            "tool_usage": {
+                "tool1": {
+                    "execution_stats": {"call_count": 2, "error_count": 2, "success_count": 0}
+                }
+            },
+            "total_cycles": 3,
+            "total_duration": 4.0,
+        }
+        after_second_turn = {
+            "accumulated_metrics": {"latencyMs": 250},
+            "accumulated_usage": {
+                "inputTokens": 8,
+                "outputTokens": 50,
+                "cacheReadInputTokens": 1800,
+                "cacheWriteInputTokens": 1000,
+            },
+            "tool_usage": first_turn["tool_usage"],
+            "total_cycles": 4,
+            "total_duration": 5.5,
+        }
+        loggers = [mock.Mock(), mock.Mock()]
+
+        with mock.patch.dict(os.environ, env_vars), mock.patch(
+            "agent_builder_sdk.metrics.metrics_helper.create_metrics_logger",
+            side_effect=loggers,
+        ):
+            helper = MetricsHelper()
+            totals = helper.emit_metrics(after_second_turn, helper.emit_metrics(first_turn))
+
+        assert totals == helper._totals(after_second_turn)
+
+        def emitted(metrics_logger):
+            return {c.args[0]: c.args[1] for c in metrics_logger.put_metric.call_args_list}
+
+        assert emitted(loggers[0])["CacheWriteInputTokens"] == 900
+        assert emitted(loggers[0])["SuccessRate"] == 0.0
+        # The second turn made no tool calls, so it has no success rate.
+        assert emitted(loggers[1]) == {
+            "LatencyMs": 150,
+            "InputTokens": 3,
+            "OutputTokens": 30,
+            "CacheReadInputTokens": 1800,
+            "CacheWriteInputTokens": 100,
+            "ToolCallCount": 0,
+            "ErrorCount": 0,
+            "SuccessCount": 0,
+            "TotalCycles": 1,
+            "TotalDuration": 1.5,
+        }
+
+    async def test_emit_metrics_in_a_running_loop_reports_the_turn(self, env_vars):
+        first = {"accumulated_usage": {"inputTokens": 5}, "total_cycles": 3}
+        second = {"accumulated_usage": {"inputTokens": 8}, "total_cycles": 4}
+
+        with mock.patch.dict(os.environ, env_vars), mock.patch.object(
+            MetricsHelper, "_emit_metrics_impl"
+        ) as emit_impl, mock.patch(
+            "aws_embedded_metrics.metric_scope.create_metrics_logger",
+            return_value=mock.AsyncMock(),
+        ):
+            helper = MetricsHelper()
+            helper.emit_metrics(second, helper.emit_metrics(first))
+            await asyncio.sleep(0)
+
+        assert [c.args[1]["InputTokens"] for c in emit_impl.call_args_list] == [5, 3]
 
     def test_extract_tool_usage_metrics_basic(self, env_vars):
         """Test basic tool usage metrics extraction."""
@@ -118,14 +203,13 @@ class TestMetricsHelper:
                 }
             }
 
-            call_count, error_count, success_count, success_rate = (
-                helper._extract_tool_usage_metrics(metrics_summary)
+            call_count, error_count, success_count = helper._extract_tool_usage_metrics(
+                metrics_summary
             )
 
             assert call_count == 5  # 3 + 2
             assert error_count == 1  # 1 + 0
             assert success_count == 4  # 2 + 2
-            assert success_rate == 0.8  # 4/5
 
     def test_extract_tool_usage_metrics_empty(self, env_vars):
         """Test tool usage metrics extraction with no tools."""
@@ -133,14 +217,13 @@ class TestMetricsHelper:
             helper = MetricsHelper()
             metrics_summary = {"tool_usage": {}}
 
-            call_count, error_count, success_count, success_rate = (
-                helper._extract_tool_usage_metrics(metrics_summary)
+            call_count, error_count, success_count = helper._extract_tool_usage_metrics(
+                metrics_summary
             )
 
             assert call_count == 0
             assert error_count == 0
             assert success_count == 0
-            assert success_rate == 0.0
 
 
 class TestGetCurrentTraceId:
@@ -176,3 +259,26 @@ class TestGetCurrentTraceId:
         trace_id = _get_current_trace_id()
 
         assert trace_id is None
+
+
+class TestEmfEnvironmentDefault:
+    """EMF writes to stdout on AgentCore unless AWS_EMF_ENVIRONMENT says otherwise."""
+
+    @pytest.fixture(autouse=True)
+    def restore_config(self):
+        saved = get_config().environment
+        yield
+        get_config().environment = saved
+
+    def test_defaults_to_local_when_unset(self):
+        get_config().environment = None
+        with mock.patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("AWS_EMF_ENVIRONMENT", None)
+            importlib.reload(metrics_helper)
+        assert get_config().environment == "local"
+
+    def test_keeps_explicit_environment(self):
+        get_config().environment = "ec2"
+        with mock.patch.dict(os.environ, {"AWS_EMF_ENVIRONMENT": "ec2"}):
+            importlib.reload(metrics_helper)
+        assert get_config().environment == "ec2"

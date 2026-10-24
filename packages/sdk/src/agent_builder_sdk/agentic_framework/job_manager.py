@@ -29,6 +29,14 @@ class JobStatus(str, Enum):
     STOPPED = "STOPPED"
 
 
+# Terminal states a job can no longer transition out of. Attempting to update
+# the status of a job already in one of these states is rejected by the service
+# with a 400 ValidationException.
+TERMINAL_STATES = frozenset(
+    {JobStatus.COMPLETED.value, JobStatus.FAILED.value, JobStatus.STOPPED.value}
+)
+
+
 class JobManager(AgenticApiHelper):
     """Manages job lifecycle operations."""
 
@@ -46,12 +54,24 @@ class JobManager(AgenticApiHelper):
             status_info: Optional status information
 
         Returns:
-            dict: Response from the API
+            dict: Response from the API, or an empty dict if the update was
+                skipped because the job is already in a terminal state.
 
         Raises:
             Exception: If there's an error updating the job status
         """
         try:
+            # Guard against updating a job that has already reached a terminal
+            # state. The service rejects such calls with a 400 ValidationException,
+            # so skip the call instead.
+            current_job_status = self.get_job_status()
+            if current_job_status in TERMINAL_STATES:
+                logger.warning(
+                    f"Skipping UpdateJobStatus to {status.value}: job is already in "
+                    f"terminal state {current_job_status}"
+                )
+                return {}
+
             input_data: Dict[str, Any] = {"status": status.value}
 
             if status_info:

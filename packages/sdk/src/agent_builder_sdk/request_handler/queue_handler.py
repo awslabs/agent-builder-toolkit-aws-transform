@@ -22,7 +22,7 @@ from ..custom_types.orchestrator_agent_types import (
 )
 from ..interfaces import AnyBaseAgent
 from ..message_queue import QueueRequest, QueueResponse, RequestQueue, RequestStatus, ResponseStore
-from ..utils import extract_text_from_strands_agent_response
+from ..utils import describe_agent_result, extract_text_from_strands_agent_response
 from .context import RequestContext
 from .interface import RequestHandler
 
@@ -242,7 +242,7 @@ class QueueRequestHandler(RequestHandler):
                         else:
                             result = await asyncio.to_thread(agent.process_message, request)
 
-                        logger.debug("Agent result: %r", result)
+                        logger.info("Agent result: %s", describe_agent_result(result))
 
                         # Handle checkpointing after successful processing
                         if checkpoint_callback_provider:

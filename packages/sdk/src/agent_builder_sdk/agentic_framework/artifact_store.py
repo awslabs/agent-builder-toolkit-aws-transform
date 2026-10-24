@@ -29,18 +29,28 @@ class ArtifactStore(AgenticApiHelper):
     client: TransformAgenticServiceClient
 
     def list_artifacts(
-        self, agent_instance_id: str, category: CategoryType | None = None
+        self,
+        agent_instance_id: str,
+        category: CategoryType | None = None,
+        next_token: str | None = None,
+        max_results: int | None = None,
     ) -> abt.ListArtifactsResponseTypeDef:
-        """List artifacts by agent instance ID and category type."""
+        """List artifacts for an agent, newest first, optionally capped at max_results."""
         agent_filter = abt.ArtifactAgentFilterTypeDef(agentInstanceId=agent_instance_id)
         if category is not None:
             agent_filter["category"] = cast(CategoryTypeType, category.value)
 
+        request: dict = {
+            "artifactFilter": {"agentFilter": agent_filter},
+            "requestContext": self._create_request_context(),
+        }
+        if next_token is not None:
+            request["nextToken"] = next_token
+        if max_results is not None:
+            request["maxResults"] = max_results
+
         try:
-            return self.client.list_artifacts(
-                artifactFilter={"agentFilter": agent_filter},
-                requestContext=self._create_request_context(),
-            )
+            return self.client.list_artifacts(**request)
         except Exception as e:
             category_str = category.value if category else None
             message = f"Error listing artifacts for agent {agent_instance_id} with category {category_str}"

@@ -64,7 +64,15 @@ AgentConfigurationAvailabilityType = Literal[
     "ANY", "NEEDS_RUNTIME_CONFIGURATION", "RUNTIME_CONFIGURATION_AVAILABLE"
 ]
 AgentInstanceStatusType = Literal[
-    "COMPLETED", "FAILED", "INVOKED", "INVOKING", "RUNNING", "STOPPED", "STOPPING", "UNRESPONSIVE"
+    "COMPLETED",
+    "FAILED",
+    "IDLE",
+    "INVOKED",
+    "INVOKING",
+    "RUNNING",
+    "STOPPED",
+    "STOPPING",
+    "UNRESPONSIVE",
 ]
 AgentTypeType = Literal["ORCHESTRATOR_AGENT", "SUB_AGENT"]
 AgentVisibilityType = Literal["PUBLIC", "RESTRICTED"]
@@ -163,6 +171,6 @@ ResourceTypeType = Literal[
 RetrievalResultLocationTypeType = Literal["S3", "WEB"]
 RetrievalScopeType = Literal["AGENT_INGESTED", "AWS", "PRODUCT"]
 SeverityType = Literal["CRITICAL", "STANDARD"]
-UpdateAgentInstanceStatusType = Literal["COMPLETED", "FAILED", "RUNNING", "STOPPED"]
+UpdateAgentInstanceStatusType = Literal["COMPLETED", "FAILED", "IDLE", "RUNNING", "STOPPED"]
 VersionStatusType = Literal["ACTIVE", "CREATED", "IN_VERIFICATION", "VERIFICATION_FAILED"]
 VisibilityType = Literal["EXTERNAL", "INTERNAL"]
