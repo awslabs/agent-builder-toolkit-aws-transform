@@ -31,6 +31,7 @@ dependencies = [
     "strands-agents-tools>=0.2",
     "uvicorn>=0.20",
     "structlog",
+    "tenacity>=8.0",
     "starlette_context",
     "defusedxml",
     "aws-embedded-metrics>=3.0",

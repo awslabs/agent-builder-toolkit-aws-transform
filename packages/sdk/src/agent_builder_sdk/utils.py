@@ -274,6 +274,7 @@ class TransformEndpointConfig:
             "eu-south-1": "MXP",  # Milan
             "me-south-1": "BAH",  # Bahrain
             "sa-east-1": "GRU",  # São Paulo
+            "us-gov-west-1": "PDT",  # GovCloud West
         }
 
         airport_code = region_mapping.get(region.lower())
@@ -281,6 +282,20 @@ class TransformEndpointConfig:
             raise ValueError(f"Unsupported AWS region: {region}")
 
         return airport_code
+
+    @staticmethod
+    def get_root_dns_domain(region: str) -> str:
+        """
+        Resolves the AWS Transform DNS apex for a region's partition.
+
+        GovCloud endpoints live under a separate child zone
+        (us-gov.elastic-gumby.ai.aws.dev), not the commercial apex. Building a gov
+        endpoint on the commercial apex yields a hostname that does not resolve
+        (botocore raises EndpointConnectionError).
+        """
+        if region.lower().startswith("us-gov-"):
+            return "us-gov.elastic-gumby.ai.aws.dev"
+        return "elastic-gumby.ai.aws.dev"
 
     @staticmethod
     def create_endpoint_url(stage: str, region: str, component_name: str) -> str:
@@ -299,7 +314,8 @@ class TransformEndpointConfig:
             ValueError: If the provided region is not supported
         """
         airport_code = TransformEndpointConfig.get_airport_code_for_region(region).lower()
-        return f"https://{airport_code}.{stage.lower()}.{component_name}.elastic-gumby.ai.aws.dev"
+        root_domain = TransformEndpointConfig.get_root_dns_domain(region)
+        return f"https://{airport_code}.{stage.lower()}.{component_name}.{root_domain}"
 
     @staticmethod
     def create_external_agenticapi_endpoint_url(stage: str, region: str):

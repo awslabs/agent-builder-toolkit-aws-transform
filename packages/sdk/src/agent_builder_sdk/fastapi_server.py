@@ -178,8 +178,6 @@ async def send_message(request: InvocationRequest) -> SendMessageOutput:
 
     This endpoint passes the input to the agent and returns the response.
     """
-    global queue
-
     if queue is None:
         logger.error("No Queue")
         return SendMessageOutput(

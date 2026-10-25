@@ -78,6 +78,7 @@ class TestTransformEndpointConfig:
             ("us-west-2", "PDX"),
             ("eu-central-1", "FRA"),
             ("ap-southeast-1", "SIN"),
+            ("us-gov-west-1", "PDT"),
         ],
     )
     def test_get_airport_code_for_region_valid(self, region, expected_code):
@@ -114,6 +115,15 @@ class TestTransformEndpointConfig:
                 "eu-central-1",
                 "agenticapi",
                 "https://fra.gamma.agenticapi.elastic-gumby.ai.aws.dev",
+            ),
+            # GovCloud endpoints must resolve under the separate us-gov child zone; the commercial
+            # apex has no DNS record for them in the gov partition. Matches the service's endpoint
+            # rules for the GovCloud partition.
+            (
+                "prod",
+                "us-gov-west-1",
+                "agenticapi",
+                "https://pdt.prod.agenticapi.us-gov.elastic-gumby.ai.aws.dev",
             ),
         ],
     )

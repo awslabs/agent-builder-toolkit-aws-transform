@@ -12,9 +12,18 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, Optional, Protocol, Sequence, cast
 
 import uvicorn
+from botocore.exceptions import ClientError, HTTPClientError
+from botocore.exceptions import ConnectionError as BotocoreConnectionError
 from fastapi import FastAPI
 from strands.tools.mcp import MCPClient
-from tenacity import before_sleep_log, retry, retry_if_result, stop_after_attempt, wait_exponential
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception,
+    retry_if_result,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from agent_builder_sdk._auth_token_refresher import (
     AuthTokenRefresher,
@@ -63,6 +72,9 @@ if TYPE_CHECKING:
     from multiprocessing.synchronize import Event as EventType
 
 logger = logging.getLogger(__name__)
+
+# ClientError codes the init status lookup retries; any other ClientError is permanent.
+_TRANSIENT_ERROR_CODES = frozenset({"ThrottlingException"})
 
 
 class AgentRuntimeServer(BaseServer):
@@ -239,18 +251,21 @@ class AgentRuntimeServer(BaseServer):
         Args:
             auth_token: Initial authentication token (optional)
         """
-        if not self.context:
+        # Capture the context once. A request handled while this method awaits can
+        # clear or replace self.context (see BaseServer.ensure_initialized).
+        context = self.context
+        if not context:
             raise ValueError("Agent context not set. Initialize context first.")
 
         logger.info(
-            f"Initializing agent for workspace: {self.context.workspace_id}, job: {self.context.job_id}"
+            f"Initializing agent for workspace: {context.workspace_id}, job: {context.job_id}"
         )
 
         # 1. Set runtime environment variables (for AgentCore)
         set_runtime_env_vars(
-            job_id=self.context.job_id,
-            workspace_id=self.context.workspace_id,
-            agent_instance_id=self.context.agent_instance_id,
+            job_id=context.job_id,
+            workspace_id=context.workspace_id,
+            agent_instance_id=context.agent_instance_id,
         )
         # 2. Set up initial token if it is provided
         if auth_token:
@@ -270,33 +285,78 @@ class AgentRuntimeServer(BaseServer):
                 logger.info("Initialization already in progress, skipping")
                 return
 
-            # 3. check agent status
-            try:
-                agent_status = get_agent_status(
-                    self.context.workspace_id, self.context.job_id, self.context.agent_instance_id
+            # 3. check agent status (with retry for transient errors)
+            agent_status = await self._get_agent_status_with_retry(context)
+            if agent_status is None:
+                logger.error("Failed to get agent status, agent will not initialize")
+                return
+
+            if agent_status == "INVOKING":
+                # Platform is still processing the InvokeAgent call (setting up
+                # resources, writing metadata). Wait in the background until the
+                # status transitions to INVOKED, then complete initialization.
+                self._initialization_task = asyncio.create_task(
+                    self._background_finalize(self._wait_for_non_invoking_and_initialize(context))
                 )
-                if agent_status == "INVOKING":
-                    self._initialization_task = asyncio.create_task(
-                        self._background_finalize(self._wait_for_non_invoking_and_initialize())
-                    )
-                    return
-                elif agent_status == "RUNNING":
-                    # Container rotation case: agent already RUNNING on the platform side,
-                    # but this container is a fresh process and needs to rebuild local state
-                    # (checkpoint restore, MCP client, agent factory). Run in the background
-                    # so health checks return fast; real requests wait on agent_ready_event
-                    # via _get_ready_agent() in the message processor.
-                    logger.info(f"Agent status is {agent_status}, starting background finalize")
-                    self._initialization_task = asyncio.create_task(
-                        self._background_finalize(self._finalize_agent_setup(agent_status))
-                    )
-                    return
-                else:
-                    logger.info(f"Agent status is {agent_status}, finalizing agent setup")
-                    await self._finalize_agent_setup(agent_status)
-                    return
-            except Exception as e:
-                logger.warning(f"Cannot initialize agent with exception: {e}")
+                return
+            elif agent_status == "RUNNING":
+                # Container rotation case: agent already RUNNING on the platform side,
+                # but this container is a fresh process and needs to rebuild local state
+                # (checkpoint restore, MCP client, agent factory). Run in the background
+                # so health checks return fast; real requests wait on agent_ready_event
+                # via _get_ready_agent() in the message processor.
+                logger.info(f"Agent status is {agent_status}, starting background finalize")
+                self._initialization_task = asyncio.create_task(
+                    self._background_finalize(self._finalize_agent_setup(agent_status, context))
+                )
+                return
+            else:
+                logger.info(f"Agent status is {agent_status}, finalizing agent setup")
+                try:
+                    await self._finalize_agent_setup(agent_status, context)
+                except Exception as e:
+                    logger.warning(f"Cannot finalize agent setup with exception: {e}")
+                return
+
+    async def _get_agent_status_with_retry(self, context: AgentRuntimeContext) -> Optional[str]:
+        """Get agent status, retrying transient errors.
+
+        Makes up to 3 attempts, each with botocore's own retries, backing off 2s
+        then 4s between them. Only transient errors are retried: connection
+        failures, timeouts and throttling. Any other error fails fast.
+
+        Runs in a worker thread so the backoff sleeps do not block the event
+        loop (health checks must keep responding).
+
+        Returns:
+            Agent status string, or None if the lookup failed.
+        """
+
+        def _is_transient(exception: BaseException) -> bool:
+            if isinstance(exception, (BotocoreConnectionError, HTTPClientError)):
+                return True
+            return (
+                isinstance(exception, ClientError)
+                and exception.response.get("Error", {}).get("Code") in _TRANSIENT_ERROR_CODES
+            )
+
+        @retry(
+            retry=retry_if_exception(_is_transient),
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=2, min=2, max=8),
+            before_sleep=before_sleep_log(logger, logging.WARNING),
+            reraise=True,
+        )
+        def _get_status():
+            return get_agent_status(
+                context.workspace_id, context.job_id, context.agent_instance_id
+            )
+
+        try:
+            return await asyncio.to_thread(_get_status)
+        except Exception:
+            logger.error("Failed to get agent status during agent initialization", exc_info=True)
+            return None
 
     async def _background_finalize(self, coro: Coroutine) -> None:
         """Run an initialization coroutine in the background with error handling.
@@ -313,19 +373,30 @@ class AgentRuntimeServer(BaseServer):
             logger.exception("Background initialization failed")
             self._initialization_task = None
 
-    async def _wait_for_non_invoking_and_initialize(self) -> None:
+    async def _wait_for_non_invoking_and_initialize(
+        self, context: Optional[AgentRuntimeContext] = None
+    ) -> None:
         """Wait for agent status to exit INVOKING state, then complete initialization."""
-        assert self.context
+        context = context or self.context
+        assert context
 
         final_status = await wait_for_agent_non_invoking(
-            self.context.workspace_id, self.context.job_id, self.context.agent_instance_id
+            context.workspace_id, context.job_id, context.agent_instance_id
         )
         if final_status != "INVOKING":
-            await self._finalize_agent_setup(final_status)
+            await self._finalize_agent_setup(final_status, context)
 
-    async def _finalize_agent_setup(self, agent_status: str = "RUNNING") -> None:
-        """Finalize agent setup with MCP client, auth refresher, and checkpointing."""
-        assert self.context
+    async def _finalize_agent_setup(
+        self, agent_status: str = "RUNNING", context: Optional[AgentRuntimeContext] = None
+    ) -> None:
+        """Finalize agent setup with MCP client, auth refresher, and checkpointing.
+
+        ``context`` is the context initialization started with (default:
+        ``self.context``). It is passed in because requests handled while
+        initialization awaits can clear or replace ``self.context``.
+        """
+        context = context or self.context
+        assert context
 
         # Use provided MCP client if available, otherwise create from binary_location
         if self.mcp_client:
@@ -336,9 +407,9 @@ class AgentRuntimeServer(BaseServer):
             agentic_api_endpoint = build_agentic_api_endpoint_from_env()
             required_mcp_args = {
                 "binaryLocation": self.binary_location,
-                "workspaceId": self.context.workspace_id,
-                "jobId": self.context.job_id,
-                "agentInstanceId": self.context.agent_instance_id,
+                "workspaceId": context.workspace_id,
+                "jobId": context.job_id,
+                "agentInstanceId": context.agent_instance_id,
                 "agenticApiEndpoint": agentic_api_endpoint,
                 "authTokenFile": get_default_auth_token_file_path(),
             }
@@ -352,17 +423,17 @@ class AgentRuntimeServer(BaseServer):
 
             # Set up auth token refresher
             self.auth_token_refresher = get_auth_token_refresher(
-                workspace_id=self.context.workspace_id,
-                job_id=self.context.job_id,
-                agent_instance_id=self.context.agent_instance_id,
-                first_token=self.context.initial_auth_token,
+                workspace_id=context.workspace_id,
+                job_id=context.job_id,
+                agent_instance_id=context.agent_instance_id,
+                first_token=context.initial_auth_token,
                 token_refresh_buffer=self.token_refresh_buffer,
                 token_refreshed_event=self.token_refreshed_event,
             )
 
             # Initialize checkpoint service
             if self.checkpoint_service:
-                self.checkpoint_service.initialize(self.context)
+                self.checkpoint_service.initialize(context)
                 await self.checkpoint_service.start_background_checkpointing()
         else:
             logger.info(f"Agent is {agent_status} - skipping auth refresher and checkpointing")
@@ -381,26 +452,27 @@ class AgentRuntimeServer(BaseServer):
                 self.message_handler.task_manager = self.task_manager
             logger.info("TaskManager created and injected into handlers")
 
-        # Always create agent (core functionality)
+        # Always create agent (core functionality). _get_agent_params() is a documented
+        # override point that reads self.context, so restore it first (no await between).
+        self.context = context
         self.agent = await self._create_agent(mcp_client, **self._get_agent_params())
 
         # Set agent to running
         if agent_status == "INVOKED":
-            set_agent_running(
-                self.context.workspace_id, self.context.job_id, self.context.agent_instance_id
-            )
+            set_agent_running(context.workspace_id, context.job_id, context.agent_instance_id)
 
         # Auto-transition job from ASSESSING to EXECUTING if enabled
         if self.auto_transition_job_to_executing:
             client = get_agentic_api_client()
             job_manager = JobManager(
-                workspace_id=self.context.workspace_id,
-                job_id=self.context.job_id,
-                agent_instance_id=self.context.agent_instance_id,
+                workspace_id=context.workspace_id,
+                job_id=context.job_id,
+                agent_instance_id=context.agent_instance_id,
                 client=client,
             )
             job_manager.transition_to_executing_if_assessing()
 
+        self.context = context  # restore it if a concurrent request cleared or replaced it
         self.initialized = True
         self.agent_ready_event.set()
         logger.info("Agent initialization completed successfully.")
