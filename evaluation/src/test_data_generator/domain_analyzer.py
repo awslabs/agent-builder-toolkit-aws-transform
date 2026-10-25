@@ -536,12 +536,12 @@ Be thorough and specific. This analysis will guide automated test generation."""
 
         return prompt
 
-    def _call_bedrock(self, prompt: str, max_tokens: int = 8000) -> str:
+    def _call_bedrock(self, prompt: str, max_tokens: int = 16000) -> str:
         """Call Bedrock API.
 
         Args:
             prompt: The prompt to send
-            max_tokens: Maximum tokens for response (default: 8000)
+            max_tokens: Maximum tokens for response, thinking included (default: 16000)
 
         Returns:
             Response text from the model
@@ -552,7 +552,6 @@ Be thorough and specific. This analysis will guide automated test generation."""
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "temperature": 0.3  # Lower for analysis consistency
         })
 
         response = self.bedrock.invoke_model(
@@ -561,7 +560,14 @@ Be thorough and specific. This analysis will guide automated test generation."""
         )
 
         response_body = json.loads(response['body'].read())
-        return response_body['content'][0]['text']
+        if response_body.get("stop_reason") in ("max_tokens", "refusal"):
+            logger.warning(f"Bedrock response stopped early ({response_body['stop_reason']}); output may be incomplete")
+        # Models with adaptive thinking can lead with a thinking block; keep only text.
+        return "".join(
+            block.get("text", "")
+            for block in response_body["content"]
+            if block.get("type", "text") == "text"
+        )
 
     def _parse_analysis_response(self, response: str) -> Dict[str, Any]:
         """Parse LLM analysis response."""

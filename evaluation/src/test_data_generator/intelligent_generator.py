@@ -20,19 +20,16 @@ class IntelligentTestGenerator:
     def __init__(
         self,
         region_name: str,
-        model_id: str,
-        temperature: float = 0.8
+        model_id: str
     ):
         """Initialize intelligent test generator.
 
         Args:
             region_name: AWS region for Bedrock
             model_id: Model ID for generation
-            temperature: Temperature for creative generation (0-1)
         """
         self.region_name = region_name
         self.model_id = model_id
-        self.temperature = temperature
 
         # Configure Bedrock client with longer timeout
         from botocore.config import Config
@@ -422,13 +419,13 @@ Generate exactly {count} complete test cases now:"""
 
     def _call_bedrock(self, prompt: str) -> str:
         """Call Bedrock API."""
+        # No temperature/top_p/top_k: Claude Opus 4.7 and later, Sonnet 5.5 included, reject them.
         body = json.dumps({
             "anthropic_version": "bedrock-2023-05-31",
             "max_tokens": 16000,  # Large for multiple test cases
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "temperature": self.temperature
         })
 
         response = self.bedrock.invoke_model(
@@ -437,7 +434,14 @@ Generate exactly {count} complete test cases now:"""
         )
 
         response_body = json.loads(response['body'].read())
-        return response_body['content'][0]['text']
+        if response_body.get("stop_reason") in ("max_tokens", "refusal"):
+            logger.warning(f"Bedrock response stopped early ({response_body['stop_reason']}); output may be incomplete")
+        # Models with adaptive thinking can lead with a thinking block; keep only text.
+        return "".join(
+            block.get("text", "")
+            for block in response_body["content"]
+            if block.get("type", "text") == "text"
+        )
 
     def _parse_generation_response(self, response: str) -> List[Dict[str, Any]]:
         """Parse LLM generation response."""
