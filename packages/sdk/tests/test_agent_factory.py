@@ -7,6 +7,8 @@ Unit tests for agent factory functions.
 import os
 from unittest import mock
 
+import pytest
+
 from agent_builder_sdk.agent_factory import (
     create_default_async_orchestrator,
     create_default_async_orchestrator_with_subagent,
@@ -895,3 +897,36 @@ class TestOrchestratorOptions:
             system_prompt="p", enable_prompt_caching=True
         )
         assert mock_orchestrator.call_args.kwargs["enable_prompt_caching"] is True
+
+
+# The 1.0 positional order of each orchestrator factory. New parameters go after these, so a
+# caller passing arguments by position keeps binding them to the same names.
+_V1_POSITIONAL = {
+    "create_default_orchestrator": [
+        "mcp_client", "storage_dir", "system_prompt", "custom_tools", "model_id", "model",
+        "with_base_guardrails", "trace_attributes", "metrics_config",
+    ],
+    "create_default_async_orchestrator": [
+        "mcp_client", "storage_dir", "system_prompt", "custom_tools", "model_id", "model",
+        "with_base_guardrails", "metrics_config",
+    ],
+    "create_default_orchestrator_with_subagent": [
+        "system_prompt", "mcp_client", "storage_dir", "custom_tools", "model_id", "model",
+        "with_base_guardrails", "metrics_config",
+    ],
+    "create_default_async_orchestrator_with_subagent": [
+        "system_prompt", "mcp_client", "storage_dir", "custom_tools", "model_id", "model",
+        "with_base_guardrails", "trace_attributes", "excluded_mcp_tool_names", "metrics_config",
+        "enable_skills", "skills_dir", "enable_code_execution",
+    ],
+}
+
+
+@pytest.mark.parametrize("name", sorted(_V1_POSITIONAL))
+def test_factory_keeps_its_positional_parameter_order(name):
+    import inspect
+
+    import agent_builder_sdk.agent_factory as agent_factory
+
+    params = list(inspect.signature(getattr(agent_factory, name)).parameters)
+    assert params[: len(_V1_POSITIONAL[name])] == _V1_POSITIONAL[name]

@@ -173,13 +173,13 @@ def create_default_orchestrator(
     custom_tools: Optional[list[Any]] = None,
     model_id: str = "anthropic.claude-sonnet-4-5-20250929-v1:0",
     model: Union[Model, str, None] = None,
-    boto_client_config: Optional[BotocoreConfig] = None,
     with_base_guardrails: bool = False,
     trace_attributes: Optional[dict[str, Any]] = None,
     metrics_config: Optional[MetricsConfig] = None,
     locale: Optional[str] = None,
     conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
     memory_manager: Optional[MemoryManager] = None,
+    boto_client_config: Optional[BotocoreConfig] = None,
 ) -> BaseOrchestrator:
     """
     Create a BaseOrchestrator instance with full memory and conversation support.
@@ -234,12 +234,12 @@ def create_default_async_orchestrator(
     custom_tools: Optional[list[Any]] = None,
     model_id: str = "anthropic.claude-sonnet-4-5-20250929-v1:0",
     model: Union[Model, str, None] = None,
-    boto_client_config: Optional[BotocoreConfig] = None,
     with_base_guardrails: bool = False,
     metrics_config: Optional[MetricsConfig] = None,
     locale: Optional[str] = None,
     conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
     memory_manager: Optional[MemoryManager] = None,
+    boto_client_config: Optional[BotocoreConfig] = None,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support.
 
@@ -289,12 +289,12 @@ def create_default_orchestrator_with_subagent(
     custom_tools: Optional[list[Any]] = None,
     model_id: str = "anthropic.claude-sonnet-4-5-20250929-v1:0",
     model: Union[Model, str, None] = None,
-    boto_client_config: Optional[BotocoreConfig] = None,
     with_base_guardrails: bool = False,
     metrics_config: Optional[MetricsConfig] = None,
     locale: Optional[str] = None,
     conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
     memory_manager: Optional[MemoryManager] = None,
+    boto_client_config: Optional[BotocoreConfig] = None,
 ) -> BaseOrchestrator:
     """Create a BaseOrchestrator instance with full memory and conversation support and subagent tools.
 
@@ -349,7 +349,6 @@ def create_default_async_orchestrator_with_subagent(
     custom_tools: Optional[list[Any]] = None,
     model_id: str = "anthropic.claude-sonnet-4-5-20250929-v1:0",
     model: Union[Model, str, None] = None,
-    boto_client_config: Optional[BotocoreConfig] = None,
     with_base_guardrails: bool = False,
     trace_attributes: Optional[dict[str, Any]] = None,
     excluded_mcp_tool_names: Optional[Set[str]] = None,
@@ -362,6 +361,7 @@ def create_default_async_orchestrator_with_subagent(
     memory_manager: Optional[MemoryManager] = None,
     enable_blank_reply_continuation: bool = False,
     enable_prompt_caching: bool = False,
+    boto_client_config: Optional[BotocoreConfig] = None,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.
 
