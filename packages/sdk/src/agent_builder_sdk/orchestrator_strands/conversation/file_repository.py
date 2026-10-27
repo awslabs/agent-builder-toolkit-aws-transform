@@ -26,6 +26,7 @@ from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     conversation_source_type,
 )
 from agent_builder_sdk.utils import (
+    drop_orphan_tool_results,
     reconcile_dangling_tool_uses,
     reconcile_unanswered_user_turns,
 )
@@ -196,6 +197,13 @@ class FileMultiSourceConversationRepository(ConversationRepository):
                 history.extend(
                     reconcile_unanswered_user_turns(notifications) if repair else notifications
                 )
+                # The merged notifications can carry their own unpaired toolUse/toolResult (a turn
+                # interrupted mid-tool, or two turns interleaving writes); repair the joined list too.
+                # Orphan results are dropped even while an interrupt is pending: only the dangling
+                # toolUse awaiting the interrupt's answer must be left alone.
+                history = drop_orphan_tool_results(history)
+                if not _interrupt_pending(agent):
+                    history = reconcile_dangling_tool_uses(history)
 
             return history
 

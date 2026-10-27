@@ -235,3 +235,26 @@ async def test_start_processing_with_factory_returning_none_sync_agent(queue_req
         # Verify workflow completed
         mock_checkpoint_provider.assert_called_once()  # Provider called
         mock_agent.process_message.assert_called_once()  # Sync message processed
+
+
+async def test_processing_waits_for_turn_lock(queue_request_handler, agent_result):
+    """A queued wake waits while another turn (a streaming chat turn) holds the job's turn lock."""
+    request = QueueRequest(context=dict(context_id="context-id"))
+    queue_request_handler.request_queue.dequeue.return_value = request
+    mock_agent = create_autospec(AsyncBaseAgent, spec_set=True, instance=True)
+    mock_agent.process_message_async.side_effect = [agent_result, asyncio.CancelledError()]
+
+    turn_lock = asyncio.Lock()
+    await turn_lock.acquire()
+    worker = asyncio.create_task(
+        queue_request_handler.start_processing(
+            AsyncMock(return_value=mock_agent), turn_lock=turn_lock
+        )
+    )
+    await asyncio.sleep(0.05)
+    mock_agent.process_message_async.assert_not_called()
+
+    turn_lock.release()
+    await asyncio.wait_for(worker, 1)
+    assert mock_agent.process_message_async.call_count == 2
+    assert not turn_lock.locked()

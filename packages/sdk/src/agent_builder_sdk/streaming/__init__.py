@@ -20,6 +20,7 @@ if TYPE_CHECKING:  # for type checkers / IDEs only — not executed at runtime
         adapt,
         to_a2a_error_frames,
         to_a2a_frames,
+        to_a2a_text_reply_frames,
         to_wire,
     )
 
@@ -31,10 +32,18 @@ __all__ = (
     "to_wire",
     "to_a2a_frames",
     "to_a2a_error_frames",
+    "to_a2a_text_reply_frames",
 )
 
 _LAZY_ADAPTER_EXPORTS = frozenset(
-    {"StreamState", "adapt", "to_a2a_frames", "to_a2a_error_frames", "to_wire"}
+    {
+        "StreamState",
+        "adapt",
+        "to_a2a_frames",
+        "to_a2a_error_frames",
+        "to_a2a_text_reply_frames",
+        "to_wire",
+    }
 )
 
 
