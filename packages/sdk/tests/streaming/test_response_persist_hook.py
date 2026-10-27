@@ -834,7 +834,6 @@ async def test_guardrail_final_does_not_carry_suggestions():
 async def test_persist_stream_error_caps_a_slow_send():
     """A slow/stuck ATX Chat send must not hold the SSE stream: persist_stream_error bounds the
     send and returns (swallowing the timeout) so the caller proceeds to emit the terminal frame."""
-    import asyncio
     import time
 
     class SlowManager:
@@ -925,7 +924,6 @@ async def test_persist_caps_a_slow_send():
     """#2: _persist runs inside the turn's asyncio.timeout scope, so a slow ATX Chat send must be
     bounded — else it eats the turn budget and can flip a good answer into a timeout terminal. The
     cap makes _safe_persist return False (send dropped), and the live chips are gated off that."""
-    import asyncio
     import time
 
     class SlowManager:
