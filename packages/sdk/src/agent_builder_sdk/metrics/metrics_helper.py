@@ -21,9 +21,14 @@ from agent_builder_sdk.env_var import (
 
 logger = logging.getLogger(__name__)
 
-# AgentCore answers the EC2 metadata probe without an imageId, so EMF's EC2 detection fails.
-# Write records to stdout, which AgentCore ships to CloudWatch Logs. AWS_EMF_ENVIRONMENT wins.
-if not os.environ.get("AWS_EMF_ENVIRONMENT"):
+# AgentCore answers the EC2 metadata probe without an imageId, so EMF's EC2 detection fails and
+# every record is lost. There, write records to stdout, which AgentCore ships to CloudWatch Logs.
+# Elsewhere EMF keeps its own detection, and AWS_EMF_ENVIRONMENT always wins.
+_AGENTCORE_EXECUTION_ENV = "AWS_BedrockAgentCore_Runtime"
+if (
+    not os.environ.get("AWS_EMF_ENVIRONMENT")
+    and os.environ.get("AWS_EXECUTION_ENV") == _AGENTCORE_EXECUTION_ENV
+):
     get_config().environment = "local"
 
 _UNITS = {

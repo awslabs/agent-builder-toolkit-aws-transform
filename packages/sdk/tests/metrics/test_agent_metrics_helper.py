@@ -262,7 +262,8 @@ class TestGetCurrentTraceId:
 
 
 class TestEmfEnvironmentDefault:
-    """EMF writes to stdout on AgentCore unless AWS_EMF_ENVIRONMENT says otherwise."""
+    """On AgentCore EMF writes to stdout unless AWS_EMF_ENVIRONMENT says otherwise; elsewhere EMF
+    keeps its own environment detection."""
 
     @pytest.fixture(autouse=True)
     def restore_config(self):
@@ -270,15 +271,23 @@ class TestEmfEnvironmentDefault:
         yield
         get_config().environment = saved
 
-    def test_defaults_to_local_when_unset(self):
-        get_config().environment = None
-        with mock.patch.dict(os.environ, {}, clear=False):
-            os.environ.pop("AWS_EMF_ENVIRONMENT", None)
+    @staticmethod
+    def _reload(env):
+        get_config().environment = env.get("AWS_EMF_ENVIRONMENT")
+        with mock.patch.dict(os.environ, env, clear=False):
+            for key in ("AWS_EMF_ENVIRONMENT", "AWS_EXECUTION_ENV"):
+                if key not in env:
+                    os.environ.pop(key, None)
             importlib.reload(metrics_helper)
-        assert get_config().environment == "local"
+        return get_config().environment
 
-    def test_keeps_explicit_environment(self):
-        get_config().environment = "ec2"
-        with mock.patch.dict(os.environ, {"AWS_EMF_ENVIRONMENT": "ec2"}):
-            importlib.reload(metrics_helper)
-        assert get_config().environment == "ec2"
+    def test_defaults_to_local_on_agentcore(self):
+        assert self._reload({"AWS_EXECUTION_ENV": "AWS_BedrockAgentCore_Runtime"}) == "local"
+
+    def test_leaves_detection_alone_off_agentcore(self):
+        assert self._reload({}) is None
+        assert self._reload({"AWS_EXECUTION_ENV": "AWS_Lambda_python3.12"}) is None
+
+    def test_keeps_explicit_environment_on_agentcore(self):
+        env = {"AWS_EXECUTION_ENV": "AWS_BedrockAgentCore_Runtime", "AWS_EMF_ENVIRONMENT": "ec2"}
+        assert self._reload(env) == "ec2"
