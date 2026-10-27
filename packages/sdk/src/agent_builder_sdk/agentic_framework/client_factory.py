@@ -32,10 +32,18 @@ PACKAGED_MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "
 
 def _register_packaged_models() -> None:
     """Add the packaged service models to the default botocore session's search path. They are
-    searched last, so a model the user registered (AWS_DATA_PATH or ~/.aws/models) still wins."""
+    searched last, so a model the user registered (AWS_DATA_PATH or ~/.aws/models) still wins.
+
+    The loader caches its service list on first use, and any earlier default-session client
+    (an STS or S3 client, say) builds it. Adding a path does not reset that list, so drop the
+    cached copy too, or the packaged services stay unknown."""
     loader = boto3._get_default_session()._session.get_component("data_loader")
     if PACKAGED_MODELS_DIR not in loader.search_paths:
         loader.search_paths.append(PACKAGED_MODELS_DIR)
+        cache = getattr(loader, "_cache", None)
+        if isinstance(cache, dict):
+            for key in [k for k in cache if k and k[0] == "list_available_services"]:
+                del cache[key]
 
 
 @functools.lru_cache(maxsize=1)

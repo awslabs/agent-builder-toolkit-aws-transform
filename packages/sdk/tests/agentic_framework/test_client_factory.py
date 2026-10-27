@@ -202,3 +202,26 @@ def test_packaged_models_let_clients_build_without_registered_models(monkeypatch
     ):
         client = boto3.client(service, region_name="us-west-2", endpoint_url="https://example.invalid")
         assert client.meta.service_model.service_name == service
+
+
+def test_packaged_models_load_after_another_default_session_client(monkeypatch, tmp_path):
+    """A default-session client built first caches the service list; the packaged models must
+    still resolve afterwards (for example after the STS client the shared-capacity session builds)."""
+    import boto3
+
+    from agent_builder_sdk.agentic_framework import client_factory
+
+    monkeypatch.setenv("AWS_DATA_PATH", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(boto3, "DEFAULT_SESSION", None)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "x")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "x")
+
+    boto3.client("s3", region_name="us-west-2")
+    agentic = client_factory.create_agentic_api_client(endpoint_url="https://example.invalid", region="us-west-2")
+    streaming = client_factory.create_streaming_agentic_api_client(
+        endpoint_url="https://example.invalid", region="us-west-2"
+    )
+
+    assert agentic.meta.service_model.service_name == client_factory.ATX_AGENTIC_API_SERVICE_NAME
+    assert streaming.meta.service_model.service_name == client_factory.ATX_STREAMING_AGENTIC_API_SERVICE_NAME
