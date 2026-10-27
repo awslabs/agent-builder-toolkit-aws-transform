@@ -187,9 +187,13 @@ async def async_iter_from_sync(
                 item = handoff.get_nowait()
             except queue.Empty:
                 # Safety net: if the producer died without a terminator (shouldn't happen), don't
-                # poll forever. Normal end/error always enqueues _StreamEnd/the exception.
+                # poll forever. Normal end/error always enqueues _StreamEnd/the exception. The
+                # producer can enqueue its last frames and exit between the get above and this
+                # check, so drain the queue before giving up.
                 if not producer.is_alive():
-                    return
+                    if handoff.empty():
+                        return
+                    continue
                 await asyncio.sleep(poll_interval)
                 continue
             if item is _StreamEnd:

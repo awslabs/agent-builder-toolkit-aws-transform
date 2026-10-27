@@ -259,3 +259,35 @@ async def test_async_iter_from_sync_blocking_producer_does_not_strand_consumer()
     finally:
         gate.set()  # release the producer so it exits cleanly, leaving no lingering thread
     assert out == [{"i": 0}, {"i": 1}]
+
+
+async def test_async_iter_from_sync_drains_frames_queued_as_the_producer_exits(monkeypatch):
+    """The consumer can see an empty queue, then the producer queues its last frames plus the end
+    marker and exits before the consumer checks is_alive(); those frames must still come out."""
+    import queue as queue_module
+    import time
+
+    from agent_builder_sdk.streaming import sse_reader
+
+    frames = [{"n": i} for i in range(3)]
+
+    class RacyQueue(queue_module.Queue):
+        """On the first empty poll, let the producer finish (all frames + end marker queued, thread
+        exited) and only then report empty, which is the window the race lands in."""
+
+        first_poll = True
+
+        def get_nowait(self):
+            if RacyQueue.first_poll:
+                RacyQueue.first_poll = False
+                while self.qsize() < len(frames) + 1:
+                    time.sleep(0.001)
+                time.sleep(0.05)  # the producer thread returns right after its last put
+                raise queue_module.Empty
+            return super().get_nowait()
+
+    monkeypatch.setattr(sse_reader.queue, "Queue", RacyQueue)
+
+    out = [f async for f in async_iter_from_sync(iter(frames))]
+
+    assert out == frames
