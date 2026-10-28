@@ -5,6 +5,7 @@ Unit tests for the messages handler.
 """
 
 import json
+import logging
 from unittest.mock import Mock, create_autospec, patch
 
 import pytest
@@ -174,11 +175,11 @@ def test_handler_initialization(mock_queue_service):
     """Test MessageHandler initialization."""
     extensions = [Mock()]
     handler = MessageHandler(
-        mock_queue_service, timeout=30, delayed_timeout=600, extension_handlers=extensions
+        mock_queue_service, timeout=20, delayed_timeout=600, extension_handlers=extensions
     )
 
     assert handler.queue == mock_queue_service
-    assert handler._timeout == 30
+    assert handler._timeout == 20
     assert handler._delayed_timeout == 600
     assert handler.extension_handlers == extensions
 
@@ -188,6 +189,18 @@ def test_handler_default_timeouts(handler):
     assert handler._timeout == 28
     assert handler._delayed_timeout == 300
     assert handler.extension_handlers is None
+
+
+def test_handler_accepts_max_send_message_timeout(mock_queue_service):
+    """28s, the largest timeout whose acknowledgment fits in the platform's 29s attempt, is accepted."""
+    assert MessageHandler(queue=mock_queue_service, timeout=28)._timeout == 28
+
+
+def test_handler_keeps_send_message_timeout_above_max_and_warns(mock_queue_service, caplog):
+    """A timeout above 28s keeps working for existing agents and logs a warning."""
+    with caplog.at_level(logging.WARNING, logger="agent_builder_sdk.constants"):
+        assert MessageHandler(queue=mock_queue_service, timeout=60)._timeout == 60
+    assert "exceeds the maximum of 28s" in caplog.text
 
 
 def test_handler_validation_both_provided(mock_queue_service):
@@ -213,16 +226,21 @@ def test_handler_validation_neither_provided():
         (AsyncBaseAgent, "process_message_async"),
     ],
 )
-async def test_send_message_with_agent(a2a_message, agent_result, agent_class, process_method):
+async def test_send_message_with_agent(
+    a2a_message, agent_result, agent_class, process_method, caplog
+):
     mock_agent = create_autospec(agent_class, spec_set=True, instance=True)
     getattr(mock_agent, process_method).return_value = agent_result
     handler = MessageHandler(agent=mock_agent)
 
-    response = await handler.send_message(InvocationRequest(a2a_message))
+    with caplog.at_level(logging.INFO, logger="agent_builder_sdk"):
+        response = await handler.send_message(InvocationRequest(a2a_message))
 
     assert response.error is None
     assert response.result is not None
     assert response.result.parts == [{"text": "test agent result", "kind": "text"}]
+    assert "Agent result: stop_reason=end_turn" in caplog.text
+    assert "test agent result" not in caplog.text
 
 
 async def test_send_message_with_acknowledgment_extension(mock_convert, handler, a2a_message):

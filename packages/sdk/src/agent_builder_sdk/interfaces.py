@@ -7,10 +7,17 @@ This module defines the fundamental protocols and interfaces that all agents
 must implement to work with the platform infrastructure.
 """
 
-__all__ = ("BaseAgent", "AsyncBaseAgent", "AnyBaseAgent")
+__all__ = ("BaseAgent", "AsyncBaseAgent", "AnyBaseAgent", "StreamingCapable")
 
 
-from typing import Protocol, TypeVar
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Protocol, TypeVar
+
+if TYPE_CHECKING:
+    from strands.hooks import HookProvider
+
+    from agent_builder_sdk.custom_types.orchestrator_agent_types import ProcessMessageRequest
+    from agent_builder_sdk.streaming.config import StreamingConfig
 
 T = TypeVar("T", contravariant=True)
 R = TypeVar("R", covariant=True)
@@ -68,3 +75,30 @@ class AsyncBaseAgent(Protocol[T, R]):
 
 
 AnyBaseAgent = BaseAgent[T, R] | AsyncBaseAgent[T, R]
+
+
+class StreamingCapable(ABC):
+    """Capability contract for agents that support streaming (message/stream).
+
+    An agent declares "I can stream" by inheriting this; not inheriting means not supported
+    (e.g. the sync agents don't). Inheriting means implementing every method below, so the
+    server can drive a streaming turn and read the agent's streaming policy without knowing
+    the concrete agent type. Streaming is async-only, so this lives only on async agents.
+    """
+
+    @abstractmethod
+    def process_message_stream(
+        self,
+        request: "ProcessMessageRequest",
+        conversation_id: str,
+        cfg: "StreamingConfig",
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """Stream one turn as A2A frames."""
+
+    @abstractmethod
+    def get_streaming_hook_providers(self, cfg: "StreamingConfig") -> "List[HookProvider]":
+        """Hooks to attach to a per-turn streaming agent (e.g. response persistence). Empty if none."""
+
+    @abstractmethod
+    def requires_context_id(self) -> bool:
+        """Whether a streaming turn must carry a contextId (the reply-routing key)."""

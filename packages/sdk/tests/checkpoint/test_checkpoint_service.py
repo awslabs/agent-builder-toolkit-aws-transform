@@ -5,6 +5,7 @@ Unit tests for CheckpointService.
 """
 
 import asyncio
+import threading
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -266,6 +267,60 @@ class TestCheckpointServiceBackgroundTask:
                 pass
 
             mock_manager.attempt_checkpoint.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_background_checkpoint_runs_off_the_event_loop_thread(
+        self, checkpoint_service, mock_context
+    ):
+        """The background task must run attempt_checkpoint OFF the loop thread.
+
+        attempt_checkpoint() does CPU-bound zip + blocking S3 I/O; running it on
+        the event loop thread starves request pickup and /ping (the production
+        bug). This drives the REAL start_background_checkpointing() and records
+        which thread the manager call actually executes on.
+
+        Regression guard: if the fix is reverted to a direct
+        self.manager.attempt_checkpoint() call, the work runs on the loop thread
+        and the final assertion fails.
+        """
+        loop_thread_id = threading.get_ident()
+        call_thread_ids = []
+
+        def record_thread():
+            call_thread_ids.append(threading.get_ident())
+
+        with patch(
+            "agent_builder_sdk.checkpoint.checkpoint_service.create_checkpoint_repository"
+        ), patch(
+            "agent_builder_sdk.checkpoint.checkpoint_service.CheckpointManager"
+        ) as mock_manager_class, patch(
+            "agent_builder_sdk.checkpoint.checkpoint_service.ConversationTurnTrigger"
+        ), patch(
+            "asyncio.sleep", new_callable=AsyncMock
+        ) as mock_sleep:
+            mock_manager = Mock()
+            mock_manager.attempt_checkpoint.side_effect = record_thread
+            mock_manager_class.return_value = mock_manager
+
+            checkpoint_service.initialize(mock_context)
+
+            # Let the loop run exactly one checkpoint attempt, then stop it by
+            # raising CancelledError from the second sleep (which is awaited
+            # before the next attempt). This is deterministic and cannot hang.
+            mock_sleep.side_effect = [None, asyncio.CancelledError()]
+
+            await checkpoint_service.start_background_checkpointing()
+            try:
+                await checkpoint_service._background_task
+            except asyncio.CancelledError:
+                pass  # expected: the mocked second sleep cancels the loop to end the test
+
+            mock_manager.attempt_checkpoint.assert_called_once()
+            assert call_thread_ids, "attempt_checkpoint was never called"
+            assert loop_thread_id not in call_thread_ids, (
+                "attempt_checkpoint ran on the event loop thread "
+                "(fix reverted: work is not offloaded via asyncio.to_thread)"
+            )
 
 
 class TestCheckpointServiceShutdown:
