@@ -1451,25 +1451,3 @@ def test_reconcile_unanswered_allows_a_continuation_right_after_a_user_message()
     messages = [tool_result, _continuation(), answer]
 
     assert reconcile_unanswered_user_turns(messages) == messages
-
-
-def test_drop_orphan_tool_results_keeps_paired_and_drops_orphans():
-    from agent_builder_sdk.utils import drop_orphan_tool_results
-
-    def result(tool_use_id):
-        return {"toolResult": {"toolUseId": tool_use_id, "content": [], "status": "success"}}
-
-    use = {
-        "role": "assistant",
-        "content": [{"toolUse": {"toolUseId": "a", "name": "t", "input": {}}}],
-    }
-    paired = {"role": "user", "content": [result("a"), result("b")]}
-    lone = {"role": "user", "content": [result("c")]}
-    messages = [use, paired, {"role": "assistant", "content": [{"text": "ok"}]}, lone]
-
-    repaired = drop_orphan_tool_results(messages)
-
-    assert repaired[1]["content"] == [result("a")]
-    assert repaired[3]["content"] == [{"text": "(stale tool result removed)"}]
-    assert paired["content"] == [result("a"), result("b")]  # input not mutated
-    assert drop_orphan_tool_results(repaired[:3]) == repaired[:3]

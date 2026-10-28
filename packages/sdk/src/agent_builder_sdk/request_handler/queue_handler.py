@@ -200,29 +200,18 @@ class QueueRequestHandler(RequestHandler):
         self,
         get_agent_func: Callable[[], Awaitable[AnyBaseAgent[ProcessMessageRequest, AgentResult]]],
         checkpoint_callback_provider: Optional[Callable[[], Optional[Callable]]] = None,
-        turn_lock: Optional[asyncio.Lock] = None,
     ) -> None:
-        """Start processing messages from the queue.
-
-        ``turn_lock`` (the server's one-turn-at-a-time lock, shared with streaming chat turns)
-        is held for each whole turn, so a buffered wake waits for an in-flight chat turn to end.
-        """
+        """Start processing messages from the queue."""
         logger.info("Starting queue message processing...")
         log_context = {}
 
         try:
             while True:
-                locked = False
                 try:
                     # Receive message from queue
                     message_data = await self.receive_request()
                     if message_data is None:
                         continue
-
-                    # Wait without a bound: a chat turn always ends, and the wake must not drop.
-                    if turn_lock is not None:
-                        await turn_lock.acquire()
-                        locked = True
 
                     log_context = {
                         "queue.request.id": message_data["request_id"],
@@ -287,8 +276,6 @@ class QueueRequestHandler(RequestHandler):
                         logger.error(f"Error processing request: {e}")
                         await self.handle_request_error(e)
                 finally:
-                    if locked and turn_lock is not None:
-                        turn_lock.release()
                     log_context.clear()
 
         except Exception as e:

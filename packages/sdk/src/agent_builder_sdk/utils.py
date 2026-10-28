@@ -703,35 +703,3 @@ def reconcile_dangling_tool_uses(messages: List[Any]) -> List[Any]:
         else:
             idx += 1
     return result
-
-
-def drop_orphan_tool_results(messages: List[Any]) -> List[Any]:
-    """Remove toolResult blocks whose toolUse is not in the message immediately before.
-
-    Bedrock rejects a toolResult with no matching toolUse just as it rejects the reverse. Two turns
-    interleaving their writes (or a notification merge) can leave one. Never mutates a message; a
-    message left with no content keeps one text block so the turn order around it is unchanged.
-    """
-    result = list(messages)
-    for idx, message in enumerate(result):
-        if not isinstance(message, dict) or message.get("role") != "user":
-            continue
-        content = message.get("content") or []
-        previous = result[idx - 1] if idx > 0 else None
-        tool_use_ids = set()
-        if isinstance(previous, dict) and previous.get("role") == "assistant":
-            for block in previous.get("content") or []:
-                if isinstance(block, dict) and isinstance(block.get("toolUse"), dict):
-                    tool_use_ids.add(block["toolUse"].get("toolUseId"))
-        kept = [
-            block
-            for block in content
-            if not (
-                isinstance(block, dict)
-                and isinstance(block.get("toolResult"), dict)
-                and block["toolResult"].get("toolUseId") not in tool_use_ids
-            )
-        ]
-        if len(kept) != len(content):
-            result[idx] = {**message, "content": kept or [{"text": "(stale tool result removed)"}]}
-    return result

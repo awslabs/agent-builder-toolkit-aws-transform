@@ -499,8 +499,7 @@ async def persist_stream_error(context_id: str, text: str, message_id: str) -> N
     """Persist a terminal error message for a streaming turn, so a reload shows the same error the
     client saw live (rather than a blank turn). The per-model-call persist hook does not fire on a
     turn that errored before/without a model message, so the streaming turn body calls this from its
-    terminal-error paths (model/MCP error, timeout, concurrency reject); the orchestrator's
-    job-busy reply uses it too. Best-effort: a persist
+    terminal-error paths (model/MCP error, timeout, concurrency reject). Best-effort: a persist
     failure OR a slow send must never mask the original error or hold the already-open SSE stream, so
     it is bounded by a short timeout and any failure is logged and swallowed. ``message_id`` is the id
     the terminal RUN_ERROR streamed under, so the live error and this persisted copy reconcile."""

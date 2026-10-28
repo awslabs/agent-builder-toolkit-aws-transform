@@ -6,14 +6,11 @@ Unit tests for Base Server implementation.
 Tests the BaseServer abstract class functionality including setup_tracing.
 """
 
-import asyncio
 from unittest import mock
 
 import pytest
 
 from agent_builder_sdk.server.base_server import BaseServer
-from agent_builder_sdk.streaming.a2a_agui_adapter import _AGUI_EXT_URI as AGUI_EXT_URI
-from agent_builder_sdk.streaming.a2a_frame_utils import RAW_EXT_URI
 
 
 class ConcreteBaseServer(BaseServer):
@@ -531,123 +528,3 @@ class TestHandleStreamingTerminalGuarantee:
         body = "".join([c async for c in resp.body_iterator])
         frames = self._parse_frames(body)
         assert frames[-1]["status"]["state"] == "completed"  # stream completed, no crash
-
-
-class TestHandleStreamingTurnLock:
-    """A streaming turn waits for the job's turn lock; past the bound it ends with a busy frame."""
-
-    @staticmethod
-    def _server(calls):
-        server = ConcreteBaseServer()
-
-        class _Agent:
-            async def process_message_stream(self, req, conversation_id=None, cfg=None):
-                calls.append(server._turn_lock.locked())
-                yield {"kind": "status-update", "taskId": "t-1", "final": True, "status": {}}
-
-        async def _get_agent(source_id, source_type):
-            return _Agent()
-
-        server._get_agent_for_streaming = _get_agent  # type: ignore[assignment]
-        server._turn_lock = asyncio.Lock()
-        return server
-
-    @staticmethod
-    def _params():
-        return {
-            "message": {
-                "role": "user",
-                "kind": "message",
-                "messageId": "m-1",
-                "contextId": "ctx-1",
-                "parts": [{"kind": "text", "text": "hi"}],
-            }
-        }
-
-    async def test_turn_runs_holding_the_lock_and_releases_it(self):
-        calls = []
-        server = self._server(calls)
-        resp = await server._handle_streaming(self._params())
-        body = "".join([c async for c in resp.body_iterator])
-        assert calls == [True]
-        assert '"taskId": "t-1"' in body
-        assert not server._turn_lock.locked()
-
-    async def test_busy_frame_when_lock_held_past_the_bound(self, monkeypatch):
-        import json
-
-        from agent_builder_sdk.server import base_server as base_server_module
-
-        monkeypatch.setattr(base_server_module, "STREAMING_TURN_LOCK_WAIT_SECONDS", 0.05)
-        calls = []
-        server = self._server(calls)
-        await server._turn_lock.acquire()
-        resp = await server._handle_streaming(self._params())
-        body = "".join([c async for c in resp.body_iterator])
-        frames = [json.loads(c[len("data: ") :]) for c in body.split("\n\n") if c]
-        assert frames[0]["kind"] == "task" and frames[0]["id"] == frames[1]["taskId"]
-        frame = frames[1]
-        assert calls == []
-        assert frame["status"]["state"] == "failed" and frame["final"] is True
-        assert frame["contextId"] == "ctx-1"
-        # Not a StreamingCapable agent: the raw failed terminal, its text where a relay reads it.
-        raw = frame["status"]["message"]["parts"][0]["data"][RAW_EXT_URI]
-        assert raw["data"] == base_server_module.BUSY_MESSAGE
-        assert server._turn_lock.locked()  # still held by the other turn, not released by us
-
-    async def test_busy_reply_is_a_normal_text_reply_for_the_orchestrator(self, monkeypatch):
-        import json
-
-        from agent_builder_sdk.interfaces import StreamingCapable
-        from agent_builder_sdk.orchestrator_strands.base_orchestrator import (
-            AsyncBaseOrchestrator,
-        )
-        from agent_builder_sdk.server import base_server as base_server_module
-        from agent_builder_sdk.streaming import response_persist_hook
-
-        monkeypatch.setattr(base_server_module, "STREAMING_TURN_LOCK_WAIT_SECONDS", 0.05)
-        persisted = mock.AsyncMock()
-        monkeypatch.setattr(response_persist_hook, "persist_stream_error", persisted)
-        server = ConcreteBaseServer()
-
-        class _Orchestrator(StreamingCapable):
-            async def process_message_stream(self, req, conversation_id=None, cfg=None):
-                raise AssertionError("must not run while the job is busy")
-                yield  # pragma: no cover
-
-            def get_streaming_hook_providers(self, cfg):
-                return []
-
-            def requires_context_id(self):
-                return True
-
-            reply_frames = AsyncBaseOrchestrator.reply_frames
-
-        async def _get_agent(source_id, source_type):
-            return _Orchestrator()
-
-        server._get_agent_for_streaming = _get_agent  # type: ignore[assignment]
-        server._turn_lock = asyncio.Lock()
-        await server._turn_lock.acquire()
-        resp = await server._handle_streaming(self._params())
-        body = "".join([c async for c in resp.body_iterator])
-        frames = [json.loads(c[len("data: ") :]) for c in body.split("\n\n") if c]
-        # What FES reads: the AG-UI event in each frame's DataPart (A2AFrameUnwrapper).
-        agui = [f["status"]["message"]["parts"][0]["data"][AGUI_EXT_URI] for f in frames]
-        assert [e["type"] for e in agui] == [
-            "RUN_STARTED",
-            "TEXT_MESSAGE_START",
-            "TEXT_MESSAGE_CONTENT",
-            "TEXT_MESSAGE_END",
-            "RUN_FINISHED",
-        ]
-        assert agui[2]["delta"] == base_server_module.BUSY_MESSAGE
-        assert frames[0]["kind"] == "task"
-        assert {f.get("taskId", f.get("id")) for f in frames} == {frames[0]["id"]}
-        assert all(f["contextId"] == "ctx-1" for f in frames)
-        assert frames[-1]["status"]["state"] == "completed" and frames[-1]["final"] is True
-        # Saved to Chat as this turn's final reply, under the id the stream showed.
-        persisted.assert_awaited_once_with(
-            "ctx-1", base_server_module.BUSY_MESSAGE, agui[1]["messageId"]
-        )
-        assert server._turn_lock.locked()

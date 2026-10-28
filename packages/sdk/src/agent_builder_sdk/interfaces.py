@@ -11,7 +11,7 @@ __all__ = ("BaseAgent", "AsyncBaseAgent", "AnyBaseAgent", "StreamingCapable")
 
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Protocol, TypeVar
 
 if TYPE_CHECKING:
     from strands.hooks import HookProvider
@@ -102,13 +102,3 @@ class StreamingCapable(ABC):
     @abstractmethod
     def requires_context_id(self) -> bool:
         """Whether a streaming turn must carry a contextId (the reply-routing key)."""
-
-    async def reply_frames(
-        self, text: str, conversation_id: str, context_id: Optional[str]
-    ) -> List[Dict[str, Any]]:
-        """Frames that end a streaming turn with ``text`` without running the agent (e.g. the
-        job-busy reply). Default: the raw agent-to-agent failed terminal, whose text a relaying
-        caller reads as the error. A chat-facing agent overrides this to emit a normal reply."""
-        from agent_builder_sdk.streaming.raw_a2a_emitter import RawStreamState, error_frames
-
-        return error_frames(RawStreamState(context_id=context_id), text)

@@ -224,9 +224,6 @@ class AgentRuntimeServer(BaseServer):
         # agents served from this pool over a dedicated, persistently-open MCP client, shaped by
         # the config's idle-TTL and emit toggles.
         self.streaming_config = streaming_config
-        # One turn at a time: this process serves one job, so this lock serializes every turn of
-        # the job — streaming chat turns and queued wakes (HITL notify, subagent result).
-        self._turn_lock = asyncio.Lock()
         self._streaming_agent_pool: Optional[StreamingAgentPool] = None
         # MCP client shared across the per-source streaming agents (opened once, kept open).
         self._shared_mcp_client: Optional[MCPClient] = None
@@ -876,7 +873,7 @@ class AgentRuntimeServer(BaseServer):
         await self.queue.start()
         self.message_processor_task = asyncio.create_task(
             self.request_handler.start_processing(
-                self._get_ready_agent, self._create_checkpoint_callback, self._turn_lock
+                self._get_ready_agent, self._create_checkpoint_callback
             )
         )
 

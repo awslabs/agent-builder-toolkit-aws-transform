@@ -800,21 +800,3 @@ class AsyncBaseOrchestrator(
     def requires_context_id(self) -> bool:
         """contextId is the key Chat routes the persisted reply by."""
         return True
-
-    async def reply_frames(
-        self, text: str, conversation_id: str, context_id: Optional[str]
-    ) -> List[Dict[str, Any]]:
-        """The same AG-UI frames as a normal short answer, so the console shows ``text``, and the
-        same text saved to Chat as this turn's final reply (the console's lasting chat comes from
-        Chat; the live stream is only an overlay). Chat only: no turn ran, so nothing is written to
-        the agent's conversation and a resend runs normally."""
-        from agent_builder_sdk.streaming import StreamState, to_a2a_text_reply_frames
-        from agent_builder_sdk.streaming.response_persist_hook import persist_stream_error
-
-        state = StreamState(thread_id=conversation_id, context_id=context_id or "")
-        frames = to_a2a_text_reply_frames(text, state)
-        if context_id:
-            # Same final-text persist the stream error paths use; keyed on the streamed text id
-            # so the live and stored copies reconcile.
-            await persist_stream_error(context_id, text, cast(str, state.final_message_id))
-        return frames

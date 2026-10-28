@@ -601,22 +601,3 @@ def to_a2a_error_frames(message: str, state: StreamState) -> List[Dict[str, Any]
     for ev in events:
         frames.extend(to_a2a_frames(ev, state))
     return frames
-
-
-def to_a2a_text_reply_frames(text: str, state: StreamState) -> List[Dict[str, Any]]:
-    """Build the frames of a one-shot assistant text reply: the run opener, one text block, then
-    RUN_FINISHED — the same frames a normal short answer streams, so the client renders it as an
-    ordinary reply (FES lifts only AG-UI DataParts; a plain text part on a terminal is dropped)."""
-    events: List[BaseEvent] = []
-    _start_run_if_needed(state, events)
-    _close_open_block(state, events)
-    message_id = str(uuid.uuid4())
-    state.final_message_id = message_id  # the id a persisted copy of this reply must use
-    events.append(TextMessageStartEvent(message_id=message_id, role="assistant"))
-    events.append(TextMessageContentEvent(message_id=message_id, delta=text))
-    events.append(TextMessageEndEvent(message_id=message_id))
-    events.append(RunFinishedEvent(thread_id=state.thread_id, run_id=state.run_id))
-    frames: List[Dict[str, Any]] = []
-    for ev in events:
-        frames.extend(to_a2a_frames(ev, state))
-    return frames

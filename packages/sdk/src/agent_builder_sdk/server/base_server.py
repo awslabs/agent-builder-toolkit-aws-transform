@@ -4,7 +4,6 @@
 Abstract base server interface.
 """
 
-import asyncio
 import json
 import logging
 import os
@@ -47,11 +46,7 @@ from agent_builder_sdk.orchestrator_strands.conversation.constants import (
 )
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 from agent_builder_sdk.streaming.a2a_frame_utils import STATE_FAILED
-from agent_builder_sdk.streaming.raw_a2a_emitter import (
-    RawStreamState,
-    error_frames,
-    status_update,
-)
+from agent_builder_sdk.streaming.raw_a2a_emitter import status_update
 from agent_builder_sdk.task_handler import TaskHandler
 from agent_builder_sdk.utils import extract_message_info
 
@@ -59,10 +54,6 @@ if TYPE_CHECKING:
     from agent_builder_sdk.streaming.config import StreamingConfig
 
 logger = logging.getLogger(__name__)
-
-# How long a streaming chat turn waits for an in-flight turn of the job before replying "busy".
-STREAMING_TURN_LOCK_WAIT_SECONDS = 120
-BUSY_MESSAGE = "The agent is still working on another step of this job. Please try again shortly."
 
 
 class BaseServer(ABC):
@@ -78,8 +69,6 @@ class BaseServer(ABC):
     # Streaming opt-in switch, shared by all servers: None = off. A subclass that supports
     # streaming sets it (AgentRuntimeServer does in __init__) and overrides _build_streaming_runtime.
     streaming_config: Optional["StreamingConfig"] = None
-    # One-turn-at-a-time lock shared with the queue worker; None = streaming turns don't wait.
-    _turn_lock: Optional[asyncio.Lock] = None
 
     @abstractmethod
     async def initialize_agent(self, auth_token: Optional[str] = None) -> None:
@@ -400,7 +389,7 @@ class BaseServer(ABC):
 
         streaming_config = self._get_streaming_config()
 
-        async def turn():
+        async def gen():
             # Track the turn's wire ids so a fallback terminal (below) can reuse them.
             task_id: Optional[str] = None
             context_id_seen: Optional[str] = None
@@ -436,37 +425,6 @@ class BaseServer(ABC):
                         task_id or str(uuid.uuid4()), context_id_seen, STATE_FAILED, final=True
                     )
                     yield f"data: {json.dumps(terminal)}\n\n"
-
-        async def gen():
-            # One turn at a time per job: wait (bounded) for a queued wake or another chat turn.
-            turn_lock = self._turn_lock
-            if turn_lock is None:
-                async for chunk in turn():
-                    yield chunk
-                return
-            try:
-                await asyncio.wait_for(turn_lock.acquire(), STREAMING_TURN_LOCK_WAIT_SECONDS)
-            except asyncio.TimeoutError:
-                logger.warning(
-                    "Streaming turn not run: the job was busy for over %ss",
-                    STREAMING_TURN_LOCK_WAIT_SECONDS,
-                )
-                if isinstance(agent, StreamingCapable):
-                    frames = await agent.reply_frames(
-                        BUSY_MESSAGE, conversation_id, message.contextId
-                    )
-                else:
-                    frames = error_frames(
-                        RawStreamState(context_id=message.contextId), BUSY_MESSAGE
-                    )
-                for frame in frames:
-                    yield f"data: {json.dumps(frame)}\n\n"
-                return
-            try:
-                async for chunk in turn():
-                    yield chunk
-            finally:
-                turn_lock.release()
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
