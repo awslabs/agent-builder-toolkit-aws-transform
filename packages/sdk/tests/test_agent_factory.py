@@ -926,7 +926,11 @@ _V1_POSITIONAL = {
 def test_factory_keeps_its_positional_parameter_order(name):
     import inspect
 
-    import agent_builder_sdk.agent_factory as agent_factory
-
-    params = list(inspect.signature(getattr(agent_factory, name)).parameters)
+    factories = {
+        "create_default_orchestrator": create_default_orchestrator,
+        "create_default_async_orchestrator": create_default_async_orchestrator,
+        "create_default_orchestrator_with_subagent": create_default_orchestrator_with_subagent,
+        "create_default_async_orchestrator_with_subagent": create_default_async_orchestrator_with_subagent,
+    }
+    params = list(inspect.signature(factories[name]).parameters)
     assert params[: len(_V1_POSITIONAL[name])] == _V1_POSITIONAL[name]
