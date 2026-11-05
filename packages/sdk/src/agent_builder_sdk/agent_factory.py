@@ -36,6 +36,7 @@ from agent_builder_sdk.orchestrator_strands.tools.send_message_tools import Send
 from agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools import (
     SubagentRegistryTools,
 )
+from agent_builder_sdk.ui_chat.a2ui import render_a2ui_surface, suggest_replies
 from agent_builder_sdk.utils import (
     get_base_guardrail_prompt,
     get_platform_skills_contract_prompt,
@@ -48,7 +49,7 @@ SubagentT = TypeVar("SubagentT", BaseSubagent, AsyncBaseSubagent)
 logger = logging.getLogger(__name__)
 
 _PLATFORM_SKILLS_DIR = Path(__file__).parent / "platform_skills"
-_MAX_PLATFORM_SKILL_FILE_BYTES = 64 * 1024
+_MAX_PLATFORM_SKILL_FILE_BYTES = 128 * 1024  # the A2UI catalog is ~84 KB
 
 
 @tool
@@ -125,6 +126,8 @@ def _create_default_orchestrator(
         skills_sources.append(str(_PLATFORM_SKILLS_DIR))
         # The skills tool only lists a skill's reference files; this tool reads them.
         custom_tools.append(read_platform_skill_file)
+        # The a2ui-rendering and a2ui-ux-patterns skills deliver through these.
+        custom_tools.extend([render_a2ui_surface, suggest_replies])
     if enable_skills:
         skills_sources.append(skills_dir or os.environ.get("STRANDS_SKILLS_DIR") or "./skills")
 

@@ -52,6 +52,7 @@ agent_builder_sdk = [
     "botocore_models/**/*.json",
     "platform_skills/*/SKILL.md",
     "platform_skills/*/references/*.md",
+    "platform_skills/*/references/*.json",
 ]
 
 [tool.pytest.ini_options]

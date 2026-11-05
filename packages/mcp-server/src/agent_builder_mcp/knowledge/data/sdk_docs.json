@@ -4131,6 +4131,78 @@
     "description": "Parameters:\n  model_id: str (required)\n  prompt: str (required) - The prompt to apply tool use prompts to"
   },
   {
+    "name": "A2UIValidationError",
+    "kind": "class",
+    "file": "agent_builder_sdk/ui_chat/a2ui.py",
+    "module": "agent_builder_sdk.ui_chat.a2ui",
+    "docstring": "A surface the web app would not render. ``issues`` lists every problem found.",
+    "signature": "A2UIValidationError(issues: list[str])",
+    "description": "Extends: ValueError\n\nParameters:\n  issues: list[str] (required)"
+  },
+  {
+    "name": "build_a2ui_block",
+    "kind": "function",
+    "file": "agent_builder_sdk/ui_chat/a2ui.py",
+    "module": "agent_builder_sdk.ui_chat.a2ui",
+    "docstring": "The validated surface as an ``atx-a2ui`` fenced block for a chat message.",
+    "signature": "build_a2ui_block(surface_id: str, component_tree: dict, data_model: Optional[dict] = None) -> str",
+    "description": "Parameters:\n  surface_id: str (required)\n  component_tree: dict (required)\n  data_model: Optional[dict] (default=None)"
+  },
+  {
+    "name": "build_a2ui_messages",
+    "kind": "function",
+    "file": "agent_builder_sdk/ui_chat/a2ui.py",
+    "module": "agent_builder_sdk.ui_chat.a2ui",
+    "docstring": "The validated three-message A2UI array for one surface.",
+    "signature": "build_a2ui_messages(surface_id: str, component_tree: dict, data_model: Optional[dict] = None) -> list[dict]",
+    "description": "Parameters:\n  surface_id: str (required)\n  component_tree: dict (required)\n  data_model: Optional[dict] (default=None)"
+  },
+  {
+    "name": "flatten",
+    "kind": "function",
+    "file": "agent_builder_sdk/ui_chat/a2ui.py",
+    "module": "agent_builder_sdk.ui_chat.a2ui",
+    "docstring": "Turn one nested component tree into the flat A2UI adjacency list.\n\nChild components nested in any prop, or in ``tabs``/``steps`` items as ``content``,\nbecome ID references. The root gets ID ``root`` and comes first; other components\nkeep their ``id`` or get a generated one.",
+    "signature": "flatten(component_tree: dict) -> list[dict]",
+    "description": "Parameters:\n  component_tree: dict (required)"
+  },
+  {
+    "name": "load_catalog",
+    "kind": "function",
+    "file": "agent_builder_sdk/ui_chat/a2ui.py",
+    "module": "agent_builder_sdk.ui_chat.a2ui",
+    "docstring": "The ``atx-hitl/v1`` catalog: components, their props, platform actions, functions.",
+    "signature": "load_catalog() -> dict",
+    "description": ""
+  },
+  {
+    "name": "render_a2ui_surface",
+    "kind": "function",
+    "file": "agent_builder_sdk/ui_chat/a2ui.py",
+    "module": "agent_builder_sdk.ui_chat.a2ui",
+    "docstring": "Validate an A2UI surface for AWS Transform chat and return the block to put in your reply.\n\nArgs:\n    surface_id: Stable kebab-case ID, e.g. \"migration-preferences\" or \"display-servers\".\n    component_tree: One nested root component, e.g. {\"component\": \"SpaceBetween\", \"children\": [...]}.\n        Nest child components directly in children, footer, actions or description, and in\n        tabs/steps items as \"content\". IDs are optional.\n    data_model: Initial data model, e.g. {\"form\": {\"region\": \"\"}}. Every bound path needs a value.\n\nReturns:\n    The fenced atx-a2ui block. Copy it unchanged into your reply. On failure, \"Error:\" and every\n    problem to fix before calling again.",
+    "signature": "render_a2ui_surface(surface_id: str, component_tree: dict, data_model: Optional[dict] = None) -> str",
+    "description": "Parameters:\n  surface_id: str (required) - Stable kebab-case ID, e.g. \"migration-preferences\" or \"display-servers\".\n  component_tree: dict (required) - One nested root component, e.g. {\"component\": \"SpaceBetween\", \"children\": [...]}. Nest child components directly in children, footer, actions or description, and in tabs/steps items as \"content\". IDs are optional.\n  data_model: Optional[dict] (default=None) - Initial data model, e.g. {\"form\": {\"region\": \"\"}}. Every bound path needs a value."
+  },
+  {
+    "name": "suggest_replies",
+    "kind": "function",
+    "file": "agent_builder_sdk/ui_chat/a2ui.py",
+    "module": "agent_builder_sdk.ui_chat.a2ui",
+    "docstring": "Attach one-click reply suggestions to your next chat message.\n\nArgs:\n    suggestions: One to five short, self-contained instructions, e.g. [\"Run the full assessment\"].\n        Clicking one sends its text as the customer's next message.\n\nReturns:\n    \"OK\", or \"Error:\" and what to fix.",
+    "signature": "suggest_replies(suggestions: list[str]) -> str",
+    "description": "Parameters:\n  suggestions: list[str] (required) - One to five short, self-contained instructions, e.g. [\"Run the full assessment\"]. Clicking one sends its text as the customer's next message."
+  },
+  {
+    "name": "validate",
+    "kind": "function",
+    "file": "agent_builder_sdk/ui_chat/a2ui.py",
+    "module": "agent_builder_sdk.ui_chat.a2ui",
+    "docstring": "Every catalog and protocol problem in a flat surface, or [] when it will render.",
+    "signature": "validate(components: list[dict], data_model: dict) -> list[str]",
+    "description": "Parameters:\n  components: list[dict] (required)\n  data_model: dict (required)"
+  },
+  {
     "name": "Deeplinks",
     "kind": "class",
     "file": "agent_builder_sdk/ui_chat/deeplinks.py",

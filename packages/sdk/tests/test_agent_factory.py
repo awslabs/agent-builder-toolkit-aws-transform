@@ -18,6 +18,7 @@ from agent_builder_sdk.agent_factory import (
     create_default_subagent,
     read_platform_skill_file,
 )
+from agent_builder_sdk.ui_chat.a2ui import render_a2ui_surface, suggest_replies
 
 
 class TestAgentFactory:
@@ -688,7 +689,8 @@ class TestPlatformKnowledge:
         assert any(str(s).endswith("platform_skills") for s in sources)
         prompt = mock_orchestrator.call_args.kwargs["system_prompt"]
         assert prompt == "task prompt\n\nCONTRACT"
-        assert read_platform_skill_file in mock_orchestrator.call_args.kwargs["custom_tools"]
+        tools = mock_orchestrator.call_args.kwargs["custom_tools"]
+        assert {read_platform_skill_file, render_a2ui_surface, suggest_replies} <= set(tools)
 
     @mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator")
     @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
@@ -709,11 +711,13 @@ class TestPlatformKnowledge:
         call_kwargs = mock_orchestrator.call_args.kwargs
         assert call_kwargs["system_prompt"] == "task prompt"
         assert call_kwargs["plugins"] is None
-        assert read_platform_skill_file not in call_kwargs["custom_tools"]
+        assert not {read_platform_skill_file, render_a2ui_surface, suggest_replies} & set(call_kwargs["custom_tools"])
 
     def test_packaged_platform_skills_load_strictly(self):
         names = {Skill.from_file(p, strict=True).name for p in _PLATFORM_SKILLS_DIR.glob("*/SKILL.md")}
         assert names == {
+            "a2ui-rendering",
+            "a2ui-ux-patterns",
             "artifact-io",
             "episodic-memory",
             "hitl-forms",
@@ -723,6 +727,10 @@ class TestPlatformKnowledge:
             "subagent-orchestration",
             "user-chat",
         }
+
+    def test_read_platform_skill_file_reads_the_a2ui_catalog(self):
+        text = read_platform_skill_file(skill_name="a2ui-rendering", path="references/catalog.json")
+        assert '"catalogId": "atx-hitl/v1"' in text
 
     def test_read_platform_skill_file_reads_a_reference(self):
         text = read_platform_skill_file(skill_name="hitl-loop", path="references/recovery.md")
@@ -743,7 +751,7 @@ class TestPlatformKnowledge:
         skill_dir.mkdir(parents=True)
         (tmp_path / "outside.md").write_text("outside")
         (skill_dir / "link.md").symlink_to(tmp_path / "outside.md")
-        (skill_dir / "big.md").write_text("x" * (64 * 1024 + 1))
+        (skill_dir / "big.md").write_text("x" * (128 * 1024 + 1))
         monkeypatch.setattr("agent_builder_sdk.agent_factory._PLATFORM_SKILLS_DIR", tmp_path / "skills")
 
         assert read_platform_skill_file(skill_name="demo", path="link.md").startswith("Error:")

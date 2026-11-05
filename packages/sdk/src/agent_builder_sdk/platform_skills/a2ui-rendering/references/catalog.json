@@ -1,0 +1,2397 @@
+{
+  "$schema": "https://a2ui.org/specification/v0_9/catalog_definition.json",
+  "catalogId": "atx-hitl/v1",
+  "version": "1.0.0",
+  "description": "ATX Foundation Cloudscape component catalog for A2UI HITL surfaces. Implements a subset of the A2UI v0.9 basic catalog mapped to AWS Cloudscape Design System components.",
+  "components": {
+    "StatusIndicator": {
+      "description": "Colored status with text using a validated Cloudscape status type",
+      "props": {
+        "type": {
+          "type": "DynamicString",
+          "values": [
+            "error",
+            "warning",
+            "success",
+            "info",
+            "stopped",
+            "pending",
+            "in-progress",
+            "loading",
+            "not-started",
+            "log"
+          ],
+          "required": true,
+          "description": "Cloudscape status type. Dynamic values outside this allowlist fall back to info."
+        },
+        "children": {
+          "type": "DynamicString",
+          "required": true,
+          "description": "Status text"
+        },
+        "colorOverride": {
+          "type": "enum",
+          "values": [
+            "blue",
+            "grey",
+            "green",
+            "red",
+            "yellow"
+          ],
+          "description": "Overrides the default color for the status indicator icon"
+        }
+      }
+    },
+    "Alert": {
+      "description": "Colored banner for important messages",
+      "props": {
+        "type": {
+          "type": "enum",
+          "values": [
+            "success",
+            "error",
+            "warning",
+            "info"
+          ],
+          "default": "info"
+        },
+        "header": {
+          "type": "DynamicString"
+        },
+        "children": {
+          "type": "DynamicString | ChildList",
+          "required": true,
+          "description": "Alert body content. A plain string for simple messages, or an array of component IDs for rich content (links, status indicators, etc.)"
+        },
+        "dismissible": {
+          "type": "boolean",
+          "default": false
+        },
+        "action": {
+          "type": "ChildList",
+          "description": "Components rendered in the action slot next to the alert message. Typically a Button or Link."
+        }
+      }
+    },
+    "Badge": {
+      "description": "Small colored label for counts or categories",
+      "props": {
+        "color": {
+          "type": "enum",
+          "values": [
+            "blue",
+            "grey",
+            "green",
+            "red",
+            "severity-critical",
+            "severity-high",
+            "severity-medium",
+            "severity-low",
+            "severity-neutral"
+          ],
+          "default": "blue"
+        },
+        "children": {
+          "type": "DynamicString",
+          "required": true
+        }
+      }
+    },
+    "Box": {
+      "description": "Basic text wrapper with variant styling",
+      "props": {
+        "variant": {
+          "type": "enum",
+          "values": [
+            "div",
+            "span",
+            "p",
+            "h1",
+            "h2",
+            "h3",
+            "h4",
+            "h5",
+            "strong",
+            "small",
+            "code",
+            "pre",
+            "awsui-key-label",
+            "awsui-value-large"
+          ],
+          "default": "div"
+        },
+        "padding": {
+          "type": "enum",
+          "values": [
+            "n",
+            "xxxs",
+            "xxs",
+            "xs",
+            "s",
+            "m",
+            "l",
+            "xl",
+            "xxl",
+            "xxxl"
+          ]
+        },
+        "margin": {
+          "type": "SpacingSize | Spacing",
+          "description": "A single size string applied to all sides, or an object with top/right/bottom/left/horizontal/vertical keys. Sizes: n, xxxs, xxs, xs, s, m, l, xl, xxl, xxxl."
+        },
+        "color": {
+          "type": "enum",
+          "values": [
+            "inherit",
+            "text-label",
+            "text-body-secondary",
+            "text-status-error",
+            "text-status-warning",
+            "text-status-success",
+            "text-status-info",
+            "text-status-inactive"
+          ]
+        },
+        "fontSize": {
+          "type": "enum",
+          "values": [
+            "body-s",
+            "body-m",
+            "heading-xs",
+            "heading-s",
+            "heading-m",
+            "heading-l",
+            "heading-xl",
+            "display-l"
+          ],
+          "description": "Overrides the font size. body-s: small body text (12px). body-m: default body text (14px). heading-xs: extra-small heading (14px bold). heading-s: small heading (16px). heading-m: medium heading (18px). heading-l: large heading (20px). heading-xl: extra-large heading (24px). display-l: hero/display text (42px)."
+        },
+        "fontWeight": {
+          "type": "enum",
+          "values": [
+            "light",
+            "normal",
+            "bold",
+            "heavy"
+          ],
+          "description": "Overrides the font weight. light: 300. normal: 400 (default). bold: 700. heavy: 900."
+        },
+        "textAlign": {
+          "type": "enum",
+          "values": [
+            "left",
+            "center",
+            "right"
+          ],
+          "description": "Defines text alignment within the element"
+        },
+        "display": {
+          "type": "enum",
+          "values": [
+            "block",
+            "inline",
+            "inline-block",
+            "none"
+          ],
+          "description": "Overrides the display of the element"
+        },
+        "children": {
+          "type": "DynamicString",
+          "required": true
+        }
+      }
+    },
+    "Button": {
+      "description": "Clickable button that dispatches an action",
+      "props": {
+        "children": {
+          "type": "DynamicString",
+          "required": true,
+          "description": "Button label"
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "primary",
+            "normal",
+            "link",
+            "icon",
+            "inline-icon",
+            "inline-link"
+          ],
+          "default": "normal"
+        },
+        "action": {
+          "type": "Action | string",
+          "description": "Event dispatched on click. A string is shorthand for an event with that name and an empty context."
+        },
+        "disabled": {
+          "type": "DynamicBoolean",
+          "description": "Disable the component to prevent interaction"
+        },
+        "disabledReason": {
+          "type": "DynamicString",
+          "description": "Tooltip explaining why the button is disabled. Shown only when 'disabled' is true, and only for the 'normal', 'primary', and 'icon' variants (ignored for 'link', 'inline-link', and 'inline-icon')."
+        },
+        "iconName": {
+          "type": "string",
+          "description": "Cloudscape icon name displayed next to the text (e.g. 'add-plus', 'download', 'external', 'copy')"
+        },
+        "loading": {
+          "type": "DynamicBoolean",
+          "description": "Renders the button in a loading state. Takes precedence over disabled."
+        },
+        "loadingText": {
+          "type": "DynamicString",
+          "description": "Text announced by screen readers when loading"
+        },
+        "fullWidth": {
+          "type": "boolean",
+          "description": "Sets the button width to 100% of the parent container"
+        }
+      },
+      "notes": "Platform-handled action names include 'atx:submit' for form submission, 'atx:cancelSubmit' for cancelling without form data, 'atx:expandToPanel' for side-panel expansion, 'atx:download-artifact' for downloading an existing artifact, and 'atx:download-snapshot' for downloading a PDF snapshot of the currently visible A2UI surface. These actions are intercepted by the renderer and never forwarded to the agent."
+    },
+    "SubmitButton": {
+      "description": "Terminal form action button. Use atx:submit or atx:submitAndClosePanel to validate and submit form data. Use atx:cancelSubmit or atx:cancelAndClosePanel to cancel without validation or form data.",
+      "props": {
+        "children": {
+          "type": "DynamicString",
+          "default": "Submit",
+          "description": "Button label"
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "primary",
+            "normal"
+          ],
+          "default": "primary"
+        },
+        "disabled": {
+          "type": "DynamicBoolean",
+          "description": "Disable the button (e.g. after submission)"
+        },
+        "disabledReason": {
+          "type": "DynamicString",
+          "description": "Tooltip explaining why the button is disabled. Shown only when 'disabled' is true."
+        },
+        "loading": {
+          "type": "DynamicBoolean",
+          "description": "Show loading spinner"
+        },
+        "action": {
+          "type": "enum",
+          "values": [
+            "atx:submit",
+            "atx:submitAndClosePanel",
+            "atx:cancelSubmit",
+            "atx:cancelAndClosePanel"
+          ],
+          "default": "atx:submit",
+          "description": "Which terminal form action to fire. atx:submit and atx:submitAndClosePanel validate and send form data. atx:cancelSubmit and atx:cancelAndClosePanel skip validation, send only a cancellation signal, and never include form values. The *AndClosePanel variants only close a side panel."
+        }
+      }
+    },
+    "MultiStepForm": {
+      "description": "A multi-part form container that shows one step at a time with built-in Back/Next navigation buttons. Only the active step's content is rendered. Clicking Next validates FormField checks within the active step's subtree before advancing. On the last step, Next becomes Submit and dispatches atx:submit. Agents assemble connector wizards and guided flows with this component.",
+      "props": {
+        "activeStep": {
+          "type": "DynamicNumber",
+          "default": 0,
+          "description": "Zero-based index of the currently visible step. Bind to a /form path (e.g. /form/__step) for two-way navigation."
+        },
+        "steps": {
+          "type": "array",
+          "required": true,
+          "items": {
+            "id": "string \u2014 unique identifier for the step",
+            "contentId": "string \u2014 component ID whose subtree is the step's body"
+          },
+          "description": "Ordered list of step definitions. Each step references a component ID that provides its content."
+        },
+        "nextButtonText": {
+          "type": "DynamicString",
+          "default": "Next",
+          "description": "Label for the Next button (shown on all steps except the last)"
+        },
+        "previousButtonText": {
+          "type": "DynamicString",
+          "default": "Back",
+          "description": "Label for the Back button"
+        },
+        "submitButtonText": {
+          "type": "DynamicString",
+          "default": "Submit",
+          "description": "Label for the button on the last step (dispatches atx:submit)"
+        },
+        "showBackButton": {
+          "type": "DynamicBoolean",
+          "default": true,
+          "description": "Whether to show the Back button when not on the first step"
+        },
+        "isLoadingNext": {
+          "type": "DynamicBoolean",
+          "description": "Renders the Next/Submit button in a loading state (e.g. while creating a connector)"
+        },
+        "disableNext": {
+          "type": "DynamicBoolean",
+          "description": "Disables the Next/Submit button (e.g. until a required selection is made)"
+        }
+      },
+      "notes": "Per-step validation: only FormField checks reachable from the active step's contentId subtree are validated before advancing. Back does not trigger validation. The activeStep path is updated automatically on navigation. On the last step, clicking the submit button dispatches atx:submit with the full form data."
+    },
+    "SpaceBetween": {
+      "description": "Adds even spacing between children",
+      "props": {
+        "direction": {
+          "type": "enum",
+          "values": [
+            "vertical",
+            "horizontal"
+          ],
+          "default": "vertical"
+        },
+        "size": {
+          "type": "enum",
+          "values": [
+            "xxxs",
+            "xxs",
+            "xs",
+            "s",
+            "m",
+            "l",
+            "xl",
+            "xxl"
+          ],
+          "default": "m"
+        },
+        "alignItems": {
+          "type": "enum",
+          "values": [
+            "center",
+            "start",
+            "end"
+          ],
+          "description": "Cross-axis alignment of children (CSS Flexbox align-items)"
+        },
+        "children": {
+          "type": "ChildList",
+          "required": true
+        }
+      }
+    },
+    "ColumnLayout": {
+      "description": "Places children in multiple columns side by side",
+      "props": {
+        "columns": {
+          "type": "number",
+          "default": 2
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "default",
+            "text-grid"
+          ],
+          "default": "default"
+        },
+        "borders": {
+          "type": "enum",
+          "values": [
+            "none",
+            "vertical",
+            "horizontal",
+            "all"
+          ],
+          "description": "Controls whether dividers are placed between rows and columns"
+        },
+        "minColumnWidth": {
+          "type": "number",
+          "description": "Minimum width in pixels for each column. Used with columns to create responsive layouts."
+        },
+        "children": {
+          "type": "ChildList",
+          "required": true
+        }
+      }
+    },
+    "Container": {
+      "description": "Bordered box that groups related content with optional header",
+      "props": {
+        "header": {
+          "type": "DynamicString",
+          "description": "Container title (renders as H2)"
+        },
+        "footer": {
+          "type": "DynamicString | ChildList",
+          "description": "Footer content. A plain string or an array of component IDs for rich footer (buttons, links, etc.)"
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "default",
+            "stacked"
+          ],
+          "default": "default",
+          "description": "Use 'stacked' when adjacent to other stacked containers"
+        },
+        "disableContentPaddings": {
+          "type": "boolean",
+          "default": false,
+          "description": "Removes the default padding from the content area"
+        },
+        "children": {
+          "type": "ChildList",
+          "required": true
+        }
+      }
+    },
+    "ExpandableSection": {
+      "description": "Collapsible section with a header",
+      "props": {
+        "headerText": {
+          "type": "DynamicString",
+          "required": true
+        },
+        "defaultExpanded": {
+          "type": "boolean",
+          "default": false
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "default",
+            "footer",
+            "container",
+            "navigation",
+            "stacked"
+          ],
+          "default": "default"
+        },
+        "headerDescription": {
+          "type": "string",
+          "description": "Supplementary text displayed below the heading"
+        },
+        "headerCounter": {
+          "type": "string",
+          "description": "Secondary text displayed to the right of the heading (e.g. item count)"
+        },
+        "children": {
+          "type": "ChildList",
+          "required": true
+        }
+      }
+    },
+    "Header": {
+      "description": "Title or heading with optional description",
+      "props": {
+        "variant": {
+          "type": "enum",
+          "values": [
+            "h1",
+            "h2",
+            "h3"
+          ],
+          "default": "h2"
+        },
+        "description": {
+          "type": "DynamicString | ChildList",
+          "description": "Supplementary text below the heading. A plain string or component IDs for rich content (links, etc.)"
+        },
+        "counter": {
+          "type": "DynamicString",
+          "description": "Secondary text displayed to the right of the heading (e.g. '(3)' for resource counts)"
+        },
+        "children": {
+          "type": "DynamicString",
+          "required": true
+        }
+      }
+    },
+    "KeyValuePairs": {
+      "description": "Displays label/value pairs in a grid layout",
+      "props": {
+        "columns": {
+          "type": "number",
+          "default": 3
+        },
+        "items": {
+          "type": "array",
+          "required": true,
+          "items": {
+            "label": {
+              "type": "string",
+              "required": true,
+              "description": "Label displayed above the value"
+            },
+            "value": {
+              "type": "DynamicString",
+              "required": true,
+              "description": "Displayed value"
+            },
+            "statusType": {
+              "type": "DynamicString",
+              "values": [
+                "error",
+                "warning",
+                "success",
+                "info",
+                "stopped",
+                "pending",
+                "in-progress",
+                "loading",
+                "not-started",
+                "log"
+              ],
+              "description": "Optional Cloudscape status type. When set, value renders as a StatusIndicator; invalid dynamic values fall back to info."
+            }
+          }
+        }
+      }
+    },
+    "Link": {
+      "description": "Clickable link",
+      "props": {
+        "href": {
+          "type": "string",
+          "required": true,
+          "description": "Must be absolute (https://...), root-relative (/path), or a fragment (#id). Bare relative paths (e.g. docs/file.pdf) are blocked for security."
+        },
+        "external": {
+          "type": "boolean",
+          "default": false
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "primary",
+            "secondary",
+            "info",
+            "awsui-value-large"
+          ],
+          "default": "secondary",
+          "description": "Visual style. 'primary' shows underline for contrast with surrounding text. 'secondary' (default) uses regular weight. 'info' for help panel links. 'awsui-value-large' for large value display links."
+        },
+        "children": {
+          "type": "DynamicString",
+          "required": true
+        }
+      }
+    },
+    "ProgressBar": {
+      "description": "Horizontal bar showing completion percentage",
+      "props": {
+        "value": {
+          "type": "DynamicNumber",
+          "required": true,
+          "description": "0-100"
+        },
+        "label": {
+          "type": "DynamicString"
+        },
+        "description": {
+          "type": "DynamicString"
+        },
+        "status": {
+          "type": "enum",
+          "values": [
+            "in-progress",
+            "success",
+            "error"
+          ]
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "standalone",
+            "key-value"
+          ],
+          "default": "standalone",
+          "description": "Use 'key-value' when displaying inside a key-value pairs layout"
+        },
+        "additionalInfo": {
+          "type": "DynamicString",
+          "description": "Information displayed below the progress bar or status text"
+        },
+        "resultText": {
+          "type": "DynamicString",
+          "description": "Content displayed when status is 'error' or 'success'"
+        }
+      }
+    },
+    "Spinner": {
+      "description": "Loading spinner",
+      "props": {
+        "size": {
+          "type": "enum",
+          "values": [
+            "normal",
+            "big",
+            "large"
+          ],
+          "default": "normal"
+        }
+      }
+    },
+    "Table": {
+      "description": "Rows and columns of data. Renders borderless with sticky header. Optionally selectable, searchable, sortable, and paginated.",
+      "props": {
+        "columnDefinitions": {
+          "type": "array",
+          "required": true,
+          "items": {
+            "id": "string",
+            "header": "string",
+            "field": "string",
+            "sortable": "boolean (optional) \u2014 set true to make this column sortable by clicking its header",
+            "sortType": "enum 'string' | 'number' (optional) \u2014 'number' sorts numerically (default is locale string compare; ISO yyyy-mm-dd dates sort chronologically as strings)"
+          }
+        },
+        "items": {
+          "type": "DynamicValue",
+          "required": true,
+          "description": "Array of row objects. Accepts a static array or a path binding (e.g. {\"path\": \"/data/servers\"}) to an array in the data model."
+        },
+        "loading": {
+          "type": "boolean",
+          "default": false
+        },
+        "loadingText": {
+          "type": "DynamicString"
+        },
+        "selectionType": {
+          "type": "enum",
+          "values": [
+            "single",
+            "multi"
+          ],
+          "description": "Enables row selection. Omit for a render-only table. 'single' writes a scalar; 'multi' writes an array and renders a header 'select all' checkbox automatically. The header select-all covers only the rows CURRENTLY VISIBLE \u2014 the filtered set, or the current page when pagination is on \u2014 not the entire dataset. Selections persist and accumulate across pages and filter changes. See selectAllBehavior."
+        },
+        "selectedItems": {
+          "type": "DynamicValue",
+          "description": "Path binding (e.g. {\"path\": \"/form/selectedRows\"}) where the selection is written and read back. Shape depends on selectionValueField: with it set, the path stores stable id values (string[] for multi, a scalar string for single); without it, the path stores full row objects (array for multi, a single row object for single). Initialize multi to [] and single to null."
+        },
+        "trackBy": {
+          "type": "string",
+          "description": "Row field used as a stable identity key for selection highlighting. Defaults to selectionValueField if set, else the first column's field."
+        },
+        "disabledField": {
+          "type": "string",
+          "description": "Row field whose truthy value disables selection of that row."
+        },
+        "selectionValueField": {
+          "type": "string",
+          "description": "Optional. Field whose VALUE is written to the selection path as a stable id, mirroring A2UI ChoicePicker.options[].value. When set, multi writes an array of id strings and single writes a scalar id string; when omitted, full row objects are written. The Table reconstructs the highlighted rows on read-back by matching the stored ids against items."
+        },
+        "filtering": {
+          "type": "boolean",
+          "description": "Enables a client-side text filter input above the table."
+        },
+        "filteringFields": {
+          "type": "array",
+          "items": "string",
+          "description": "Row fields the filter matches against. Defaults to all columnDefinitions fields."
+        },
+        "filteringPlaceholder": {
+          "type": "DynamicString",
+          "description": "Placeholder text for the filter input."
+        },
+        "pagination": {
+          "type": "boolean",
+          "description": "Enables client-side pagination below the table. Display-only state \u2014 the current page is never written to the data model."
+        },
+        "pageSize": {
+          "type": "number",
+          "default": 10,
+          "description": "Rows per page when pagination is enabled. Defaults to 10."
+        },
+        "sortingDisabled": {
+          "type": "boolean",
+          "description": "Globally disables column sorting. Per-column sorting is enabled by setting sortable:true on a columnDefinition."
+        }
+      },
+      "selectAllBehavior": "When selectionType is 'multi', Cloudscape renders a header 'select all' checkbox automatically (no extra prop needed). Its scope is the rows CURRENTLY VISIBLE in the table: with filtering active it covers the filtered set, and with pagination enabled it covers the CURRENT PAGE only (e.g. 10 rows at pageSize 10), not the whole dataset \u2014 this is standard Cloudscape behavior. To select more, the user pages through and select-alls each page, or clears the filter first. Crucially, selections ACCUMULATE and PERSIST across page and filter changes: because selection is controlled off the A2UI data model (the single source of truth) and reconstructed from the full row set, selecting rows on page 1 then paging to page 2 keeps the page-1 rows selected, and navigating or clearing the filter never silently drops already-selected rows from the written selection.",
+      "specAlignment": "Table is a Cloudscape extension (no basic-catalog equivalent). With selectionValueField set, selection write-back mirrors A2UI ChoicePicker (multipleSelection): multi writes an array of stable id strings, exactly like ChoicePicker.value. Single-select writes a SCALAR \u2014 an intentional divergence from ChoicePicker's 1-element array, chosen to match Cloudscape Select ergonomics. Without selectionValueField, full row objects are written (lossless, matches Cloudscape selectedItems). Row data lives in /data/*; only the selection goes to /form/*."
+    },
+    "Tabs": {
+      "description": "Organizes content into labeled tabs",
+      "props": {
+        "tabs": {
+          "type": "array",
+          "required": true,
+          "items": {
+            "id": "string",
+            "label": "string",
+            "contentId": "string (component ID)"
+          }
+        }
+      }
+    },
+    "TreeView": {
+      "description": "Displays hierarchical data with expandable and collapsible items using Cloudscape TreeView.",
+      "props": {
+        "items": {
+          "type": "array | DataBinding",
+          "required": true,
+          "description": "Top-level tree items, or a path binding to them. Every item requires a unique id and string content, and can recursively contain children.",
+          "items": {
+            "id": "string (required, unique across the tree)",
+            "content": "string (required)",
+            "secondaryContent": "string (optional)",
+            "announcementLabel": "string (optional; use when content alone does not clearly label the expand control)",
+            "children": "TreeView item[] (optional)"
+          }
+        },
+        "expandedItems": {
+          "type": "string[] | DataBinding",
+          "description": "IDs initially expanded. Bind to a data-model path when expansion state should be written back as the user expands or collapses items."
+        },
+        "ariaLabel": {
+          "type": "DynamicString",
+          "required": true,
+          "description": "Accessible label describing the tree."
+        },
+        "ariaDescribedby": {
+          "type": "string",
+          "description": "ID of an element that provides additional accessible description."
+        },
+        "connectorLines": {
+          "type": "enum",
+          "values": [
+            "none",
+            "vertical"
+          ],
+          "default": "none",
+          "description": "Shows vertical hierarchy connector lines when set to vertical."
+        }
+      },
+      "notes": "Use TreeView for navigable or inspectable hierarchy, not for tabular data. Keep item IDs stable and unique. Large trees should be split into smaller surfaces rather than embedding an unbounded hierarchy."
+    },
+    "BarChart": {
+      "description": "Bar chart for visualizing categorical data with multiple series. Supports stacked and horizontal bars. Always uses categorical x scale.",
+      "props": {
+        "series": {
+          "type": "DynamicValue",
+          "required": true,
+          "description": "Array of series objects or a path binding to an array in the data model.",
+          "items": {
+            "title": "string",
+            "type": "enum 'bar' | 'threshold' (default: inferred \u2014 'bar' if data present, 'threshold' if y present)",
+            "data": "[{x: string|number, y: number}] (for bar series)",
+            "y?": "number (for threshold)",
+            "color?": "string (hex)"
+          }
+        },
+        "xTitle": {
+          "type": "string"
+        },
+        "yTitle": {
+          "type": "string"
+        },
+        "height": {
+          "type": "number",
+          "default": 200
+        },
+        "yScaleType": {
+          "type": "enum",
+          "values": [
+            "linear",
+            "log"
+          ],
+          "default": "linear"
+        },
+        "xDomain": {
+          "type": "array",
+          "description": "Explicit x axis domain as array of category strings."
+        },
+        "yDomain": {
+          "type": "array",
+          "items": "number",
+          "description": "Explicit y axis domain as [min, max]."
+        },
+        "hideFilter": {
+          "type": "boolean",
+          "default": true
+        },
+        "hideLegend": {
+          "type": "boolean",
+          "default": false
+        },
+        "legendTitle": {
+          "type": "string"
+        },
+        "statusType": {
+          "type": "enum",
+          "values": [
+            "loading",
+            "finished",
+            "error"
+          ],
+          "default": "finished"
+        },
+        "emphasizeBaselineAxis": {
+          "type": "boolean",
+          "default": true
+        },
+        "detailPopoverSize": {
+          "type": "enum",
+          "values": [
+            "small",
+            "medium",
+            "large"
+          ],
+          "default": "medium"
+        },
+        "stackedBars": {
+          "type": "boolean",
+          "default": false,
+          "description": "Stack bars in the same data point instead of grouping."
+        },
+        "horizontalBars": {
+          "type": "boolean",
+          "default": false,
+          "description": "Flip axes to render bars horizontally."
+        },
+        "ariaLabel": {
+          "type": "string"
+        },
+        "ariaDescription": {
+          "type": "string"
+        }
+      }
+    },
+    "LineChart": {
+      "description": "Line chart for visualizing data trends over time or continuous values. Supports threshold lines.",
+      "props": {
+        "series": {
+          "type": "DynamicValue",
+          "required": true,
+          "description": "Array of line/threshold series or a path binding.",
+          "items": {
+            "title": "string",
+            "type": "enum 'line' | 'threshold'",
+            "data": "[{x: string|number, y: number}] (for line)",
+            "y?": "number (for threshold)",
+            "color?": "string (hex)"
+          }
+        },
+        "xTitle": {
+          "type": "string"
+        },
+        "yTitle": {
+          "type": "string"
+        },
+        "height": {
+          "type": "number",
+          "default": 200
+        },
+        "xScaleType": {
+          "type": "enum",
+          "values": [
+            "linear",
+            "log",
+            "categorical"
+          ],
+          "default": "linear"
+        },
+        "yScaleType": {
+          "type": "enum",
+          "values": [
+            "linear",
+            "log"
+          ],
+          "default": "linear"
+        },
+        "xDomain": {
+          "type": "array"
+        },
+        "yDomain": {
+          "type": "array",
+          "items": "number"
+        },
+        "hideFilter": {
+          "type": "boolean",
+          "default": true
+        },
+        "hideLegend": {
+          "type": "boolean",
+          "default": false
+        },
+        "legendTitle": {
+          "type": "string"
+        },
+        "statusType": {
+          "type": "enum",
+          "values": [
+            "loading",
+            "finished",
+            "error"
+          ],
+          "default": "finished"
+        },
+        "emphasizeBaselineAxis": {
+          "type": "boolean",
+          "default": true
+        },
+        "detailPopoverSize": {
+          "type": "enum",
+          "values": [
+            "small",
+            "medium",
+            "large"
+          ],
+          "default": "medium"
+        },
+        "ariaLabel": {
+          "type": "string"
+        },
+        "ariaDescription": {
+          "type": "string"
+        }
+      }
+    },
+    "AreaChart": {
+      "description": "Stacked area chart for visualizing part-to-whole relationships over time. Supports threshold lines. All area series must share the same x values in the same order \u2014 Cloudscape stacks by array index, not by x key.",
+      "props": {
+        "series": {
+          "type": "DynamicValue",
+          "required": true,
+          "description": "Array of area/threshold series or a path binding.",
+          "items": {
+            "title": "string",
+            "type": "enum 'area' | 'threshold'",
+            "data": "[{x: string|number, y: number}] (for area)",
+            "y?": "number (for threshold)",
+            "color?": "string (hex)"
+          }
+        },
+        "xTitle": {
+          "type": "string"
+        },
+        "yTitle": {
+          "type": "string"
+        },
+        "height": {
+          "type": "number",
+          "default": 200
+        },
+        "xScaleType": {
+          "type": "enum",
+          "values": [
+            "linear",
+            "log",
+            "categorical"
+          ],
+          "default": "linear"
+        },
+        "yScaleType": {
+          "type": "enum",
+          "values": [
+            "linear",
+            "log"
+          ],
+          "default": "linear"
+        },
+        "xDomain": {
+          "type": "array"
+        },
+        "yDomain": {
+          "type": "array",
+          "items": "number"
+        },
+        "hideFilter": {
+          "type": "boolean",
+          "default": true
+        },
+        "hideLegend": {
+          "type": "boolean",
+          "default": false
+        },
+        "legendTitle": {
+          "type": "string"
+        },
+        "statusType": {
+          "type": "enum",
+          "values": [
+            "loading",
+            "finished",
+            "error"
+          ],
+          "default": "finished"
+        },
+        "detailPopoverSize": {
+          "type": "enum",
+          "values": [
+            "small",
+            "medium",
+            "large"
+          ],
+          "default": "medium"
+        },
+        "ariaLabel": {
+          "type": "string"
+        },
+        "ariaDescription": {
+          "type": "string"
+        }
+      }
+    },
+    "PieChart": {
+      "description": "Pie or donut chart for visualizing proportional data. Donut variant supports inner metric display.",
+      "props": {
+        "data": {
+          "type": "DynamicValue",
+          "required": true,
+          "description": "Array of data items or a path binding to an array in the data model.",
+          "items": {
+            "title": "string",
+            "value": "number",
+            "color?": "string (hex)"
+          }
+        },
+        "size": {
+          "type": "enum",
+          "values": [
+            "small",
+            "medium",
+            "large"
+          ],
+          "default": "medium"
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "pie",
+            "donut"
+          ],
+          "default": "pie"
+        },
+        "hideFilter": {
+          "type": "boolean",
+          "default": true
+        },
+        "hideLegend": {
+          "type": "boolean",
+          "default": false
+        },
+        "legendTitle": {
+          "type": "string"
+        },
+        "statusType": {
+          "type": "enum",
+          "values": [
+            "loading",
+            "finished",
+            "error"
+          ],
+          "default": "finished"
+        },
+        "detailPopoverSize": {
+          "type": "enum",
+          "values": [
+            "small",
+            "medium",
+            "large"
+          ],
+          "default": "medium"
+        },
+        "innerMetricValue": {
+          "type": "string",
+          "description": "Primary metric shown in donut center."
+        },
+        "innerMetricDescription": {
+          "type": "string",
+          "description": "Description below the inner metric."
+        },
+        "ariaLabel": {
+          "type": "string"
+        },
+        "ariaDescription": {
+          "type": "string"
+        }
+      }
+    },
+    "TextContent": {
+      "description": "Block for longer text content with paragraph styling",
+      "props": {
+        "children": {
+          "type": "DynamicString | ChildList",
+          "required": true,
+          "description": "A plain string (wrapped in <p>) or an array of component IDs for rich structured content"
+        }
+      }
+    },
+    "FileUpload": {
+      "description": "File upload with drag-and-drop, progress tracking, and validation. Uploads to S3 via presigned URLs and writes artifact references to the data model.",
+      "props": {
+        "value": {
+          "type": "DataBinding",
+          "required": true,
+          "description": "Path to write uploaded file references array"
+        },
+        "label": {
+          "type": "DynamicString",
+          "description": "Button label text. Default: 'Choose files'"
+        },
+        "description": {
+          "type": "DynamicString",
+          "description": "Dropzone description text"
+        },
+        "allowedFileTypes": {
+          "type": "array",
+          "items": "string",
+          "description": "Allowed file extensions without dot (e.g. ['pdf', 'csv', 'xlsx'])"
+        },
+        "maxFiles": {
+          "type": "number",
+          "description": "Maximum number of files allowed"
+        },
+        "maxFileSizeMB": {
+          "type": "number",
+          "description": "Maximum file size in megabytes"
+        },
+        "multiple": {
+          "type": "boolean",
+          "default": true,
+          "description": "Allow multiple file selection"
+        },
+        "disabled": {
+          "type": "DynamicBoolean",
+          "description": "Disable the component to prevent interaction"
+        }
+      },
+      "notes": "Requires upload infrastructure (provided automatically by A2UIRenderer). If upload context is unavailable, renders an info alert instead."
+    },
+    "SidePanelContent": {
+      "description": "Renders a button that, when clicked, opens its child components in the side panel for expanded viewing. Children are NOT rendered inline \u2014 they are extracted and displayed in the CodePreviewPanel. Use this to give users a spacious editing surface for complex forms or large content while keeping the inline chat compact.",
+      "props": {
+        "label": {
+          "type": "DynamicString",
+          "default": "View content",
+          "description": "Button label shown inline. Should describe what the user will see in the panel."
+        },
+        "children": {
+          "type": "ChildList",
+          "required": true,
+          "description": "Components to render in the side panel when the button is clicked. These are NOT rendered inline."
+        }
+      },
+      "notes": "The click handler is injected by the platform \u2014 agents cannot define it. When rendered inside the side panel, the trigger button is non-functional (no panel handler is propagated to child renderers). Avoid nesting SidePanelContent inside panel content. The panel content is fully interactive (forms, submit, validation all work normally)."
+    },
+    "SidePanelContainer": {
+      "description": "A Container with a header (title, description, actions) and a built-in expand-to-panel button. Use as the root component when you want the surface to be viewable in the side panel. The expand button is always rendered as the last action \u2014 agents do not declare it.",
+      "props": {
+        "title": {
+          "type": "DynamicString",
+          "required": true,
+          "description": "Container header title text"
+        },
+        "description": {
+          "type": "DynamicString",
+          "description": "Subtext displayed below the title in the header"
+        },
+        "actions": {
+          "type": "ChildList",
+          "description": "Additional action components (Button, Link, etc.) rendered in the header actions slot before the expand button"
+        },
+        "children": {
+          "type": "ChildList",
+          "required": true,
+          "description": "Container body content"
+        }
+      },
+      "notes": "The expand-to-panel button is injected by the platform and always appears as the last action. The handler is provided via onExpandToPanel in PlatformContext. When no handler is available, the expand button is disabled."
+    },
+    "FormField": {
+      "description": "Wrapper that adds label, description, and validation around an input. Supports checks for protocol-native validation.",
+      "checkable": true,
+      "props": {
+        "label": {
+          "type": "DynamicString",
+          "required": true
+        },
+        "description": {
+          "type": "DynamicString"
+        },
+        "constraintText": {
+          "type": "DynamicString",
+          "description": "Always-visible hint (e.g., 'Required \u2014 exactly 12 digits')"
+        },
+        "errorText": {
+          "type": "DynamicString",
+          "description": "Manual error override. Prefer checks instead."
+        },
+        "warningText": {
+          "type": "DynamicString",
+          "description": "Warning message displayed below the control. Renders the field in a warning state."
+        },
+        "showValidation": {
+          "type": "DynamicBoolean",
+          "description": "Bind to /__showValidation path. Gates whether check errors are displayed."
+        },
+        "checks": {
+          "type": "CheckRule[]",
+          "description": "Validation rules evaluated reactively. Errors displayed when showValidation is true."
+        },
+        "children": {
+          "type": "ChildList",
+          "required": true
+        }
+      }
+    },
+    "Input": {
+      "description": "Single-line text input with two-way data binding. Maps to A2UI TextField (variant: shortText).",
+      "props": {
+        "value": {
+          "type": "DynamicString",
+          "description": "Bind to data model path for two-way sync"
+        },
+        "placeholder": {
+          "type": "DynamicString"
+        },
+        "disabled": {
+          "type": "DynamicBoolean"
+        },
+        "type": {
+          "type": "enum",
+          "values": [
+            "text",
+            "number",
+            "email",
+            "url",
+            "password",
+            "search"
+          ],
+          "default": "text",
+          "description": "Specifies the input type. When 'number', the component writes number|undefined to the bound path instead of string. Initialize the bound path with 0 or null for number inputs."
+        }
+      }
+    },
+    "Textarea": {
+      "description": "Multi-line text input with two-way data binding. Maps to A2UI TextField (variant: longText).",
+      "props": {
+        "value": {
+          "type": "DynamicString",
+          "description": "Bind to data model path for two-way sync"
+        },
+        "placeholder": {
+          "type": "DynamicString"
+        },
+        "rows": {
+          "type": "number"
+        },
+        "disabled": {
+          "type": "DynamicBoolean",
+          "description": "Disable the component to prevent interaction"
+        },
+        "readOnly": {
+          "type": "boolean",
+          "default": false,
+          "description": "Prevents modification but includes value in form submission. Use to display non-editable text in a form context."
+        }
+      }
+    },
+    "RadioGroup": {
+      "description": "Mutually exclusive options. Maps to A2UI ChoicePicker (variant: mutuallyExclusive).",
+      "props": {
+        "value": {
+          "type": "DynamicString",
+          "description": "Bind to data model path for two-way sync"
+        },
+        "items": {
+          "type": "array",
+          "required": true,
+          "items": {
+            "value": "string",
+            "label": "string",
+            "description?": "string"
+          }
+        },
+        "disabled": {
+          "type": "DynamicBoolean",
+          "description": "Disable the component to prevent interaction"
+        }
+      }
+    },
+    "Select": {
+      "description": "Dropdown menu for picking one option. Maps to A2UI ChoicePicker with dropdown display.",
+      "props": {
+        "selectedOption": {
+          "type": "DynamicString",
+          "description": "Bind to data model path"
+        },
+        "placeholder": {
+          "type": "DynamicString"
+        },
+        "options": {
+          "type": "array | DataBinding",
+          "required": true,
+          "items": {
+            "value": "string",
+            "label": "string"
+          },
+          "description": "Static array of { value, label } objects, or a DataBinding path (e.g. { \"path\": \"/data/connectors\" }) that resolves to such an array at runtime."
+        },
+        "disabled": {
+          "type": "DynamicBoolean",
+          "description": "Disable the component to prevent interaction"
+        },
+        "filteringType": {
+          "type": "enum",
+          "values": [
+            "none",
+            "auto"
+          ],
+          "default": "none",
+          "description": "Enable client-side filtering of options. Use 'auto' for long option lists (e.g. countries)."
+        },
+        "filteringPlaceholder": {
+          "type": "string",
+          "description": "Placeholder text for the filter input"
+        },
+        "filteringAriaLabel": {
+          "type": "string",
+          "description": "Accessible label for the filter input"
+        },
+        "filteringClearAriaLabel": {
+          "type": "string",
+          "description": "Accessible label for the clear filter button"
+        },
+        "filteringResultsText": {
+          "type": "string",
+          "description": "Static text shown below the filter input when filtering is active (e.g. 'Matching options')"
+        },
+        "loading": {
+          "type": "DynamicBoolean",
+          "description": "When true, displays the select in a loading state. If statusType is not explicitly set, it defaults to 'loading'."
+        },
+        "loadingText": {
+          "type": "DynamicString",
+          "description": "Text displayed in the dropdown while loading (e.g. 'Loading connectors...')"
+        },
+        "statusType": {
+          "type": "enum",
+          "values": [
+            "pending",
+            "loading",
+            "finished"
+          ],
+          "description": "Controls the dropdown's status indicator. Defaults to 'loading' when loading=true, 'finished' otherwise."
+        }
+      }
+    },
+    "Checkbox": {
+      "description": "True/false toggle. Maps to A2UI CheckBox.",
+      "props": {
+        "checked": {
+          "type": "DynamicBoolean",
+          "description": "Bind to data model path"
+        },
+        "children": {
+          "type": "DynamicString",
+          "description": "Label text"
+        },
+        "disabled": {
+          "type": "DynamicBoolean",
+          "description": "Disable the component to prevent interaction"
+        }
+      }
+    },
+    "Toggle": {
+      "description": "On/off switch. Alternative presentation of CheckBox.",
+      "props": {
+        "checked": {
+          "type": "DynamicBoolean",
+          "description": "Bind to data model path"
+        },
+        "children": {
+          "type": "DynamicString",
+          "description": "Label text"
+        },
+        "disabled": {
+          "type": "DynamicBoolean",
+          "description": "Disable the component to prevent interaction"
+        }
+      }
+    },
+    "DatePicker": {
+      "description": "Date selection input (YYYY-MM-DD format). Maps to A2UI DateTimeInput (enableDate: true).",
+      "props": {
+        "value": {
+          "type": "DynamicString",
+          "description": "Bind to data model path"
+        },
+        "placeholder": {
+          "type": "DynamicString"
+        },
+        "disabled": {
+          "type": "DynamicBoolean",
+          "description": "Disable the component to prevent interaction"
+        }
+      }
+    },
+    "Multiselect": {
+      "description": "Dropdown for picking multiple options. Maps to A2UI ChoicePicker (variant: multipleSelection).",
+      "props": {
+        "selectedOptions": {
+          "type": "DynamicValue",
+          "description": "Path binding (e.g. {\"path\": \"/form/coSellNeeds\"}) or a literal array of selected {value, label} pairs. When path-bound, the value is read from and written back to the data model on selection change."
+        },
+        "placeholder": {
+          "type": "DynamicString"
+        },
+        "options": {
+          "type": "array",
+          "required": true,
+          "items": {
+            "value": "string",
+            "label": "string"
+          }
+        },
+        "disabled": {
+          "type": "DynamicBoolean",
+          "description": "Disable the component to prevent interaction"
+        }
+      }
+    },
+    "AttributeEditor": {
+      "description": "Dynamic key-value pair editor. Users can add, edit, and remove rows. Ideal for tags, parameters, environment variables.",
+      "props": {
+        "items": {
+          "type": "DynamicValue",
+          "required": true,
+          "description": "Bind to data model path (array of objects). Each object has fields matching definition keys."
+        },
+        "definition": {
+          "type": "array",
+          "required": true,
+          "description": "Column definitions for the editor",
+          "items": {
+            "label": "string",
+            "field": "string",
+            "placeholder?": "string",
+            "type?": "enum 'input' | 'select' (default: 'input')",
+            "options?": "[{value: string, label: string}] (for select type)"
+          }
+        },
+        "addButtonText": {
+          "type": "DynamicString",
+          "default": "Add new item"
+        },
+        "removeButtonText": {
+          "type": "string",
+          "description": "Text displayed in the remove button"
+        },
+        "empty": {
+          "type": "DynamicString",
+          "description": "Text shown when no items exist"
+        },
+        "disabled": {
+          "type": "DynamicBoolean"
+        }
+      }
+    },
+    "Autosuggest": {
+      "description": "Text input with filtered suggestion dropdown. Use for free-text fields with common values.",
+      "props": {
+        "value": {
+          "type": "DynamicString",
+          "description": "Bind to data model path for two-way sync"
+        },
+        "options": {
+          "type": "array",
+          "required": true,
+          "items": {
+            "value": "string",
+            "label?": "string"
+          }
+        },
+        "placeholder": {
+          "type": "DynamicString"
+        },
+        "enteredTextLabel": {
+          "type": "string",
+          "description": "Function label for custom text entry (e.g. 'Use: {value}')"
+        },
+        "empty": {
+          "type": "DynamicString",
+          "description": "Text shown when no options match"
+        },
+        "disabled": {
+          "type": "DynamicBoolean"
+        }
+      }
+    },
+    "ButtonDropdown": {
+      "description": "Button that opens a dropdown menu with multiple actions.",
+      "props": {
+        "items": {
+          "type": "array",
+          "required": true,
+          "items": {
+            "id": "string",
+            "text": "string",
+            "disabled?": "boolean",
+            "description?": "string",
+            "iconName?": "string"
+          }
+        },
+        "children": {
+          "type": "DynamicString",
+          "required": true,
+          "description": "Button label"
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "primary",
+            "normal",
+            "icon"
+          ],
+          "default": "normal"
+        },
+        "action": {
+          "type": "Action",
+          "description": "Event dispatched on item click. Context includes { itemId: string }."
+        },
+        "disabled": {
+          "type": "DynamicBoolean"
+        }
+      }
+    },
+    "Cards": {
+      "description": "Grid of card items for displaying structured data in a visual layout. Alternative to Table for smaller datasets.",
+      "props": {
+        "items": {
+          "type": "DynamicValue",
+          "required": true,
+          "description": "Array of data objects or path binding"
+        },
+        "cardDefinition": {
+          "type": "object",
+          "required": true,
+          "description": "Defines card layout",
+          "properties": {
+            "header": "string (field name for card title)",
+            "sections": "[{header?: string, field: string}]"
+          }
+        },
+        "cardsPerRow": {
+          "type": "array",
+          "description": "Responsive breakpoints [{cards: number, minWidth?: number}]"
+        },
+        "loading": {
+          "type": "DynamicBoolean"
+        },
+        "loadingText": {
+          "type": "DynamicString"
+        },
+        "empty": {
+          "type": "DynamicString",
+          "description": "Text shown when no items"
+        },
+        "selectionType": {
+          "type": "enum",
+          "values": [
+            "single",
+            "multi"
+          ],
+          "description": "Enables card selection. Omit for render-only."
+        },
+        "selectedItems": {
+          "type": "DynamicValue",
+          "description": "Path binding for selection state"
+        },
+        "trackBy": {
+          "type": "string",
+          "description": "Field used as stable identity key"
+        }
+      }
+    },
+    "CopyToClipboard": {
+      "description": "Button that copies text to the clipboard with visual feedback.",
+      "props": {
+        "copyButtonText": {
+          "type": "DynamicString",
+          "default": "Copy"
+        },
+        "copySuccessText": {
+          "type": "DynamicString",
+          "default": "Copied"
+        },
+        "copyErrorText": {
+          "type": "DynamicString",
+          "default": "Failed to copy"
+        },
+        "textToCopy": {
+          "type": "DynamicString",
+          "required": true,
+          "description": "The text value to copy to clipboard"
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "button",
+            "icon",
+            "inline"
+          ],
+          "default": "button"
+        }
+      }
+    },
+    "Grid": {
+      "description": "Flexible CSS grid layout with responsive column spans.",
+      "props": {
+        "gridDefinition": {
+          "type": "array",
+          "required": true,
+          "description": "Array of column span objects [{colspan: number | {default: N, xxs?: N, xs?: N, s?: N, m?: N, l?: N, xl?: N, xxl?: N}}]"
+        },
+        "children": {
+          "type": "ChildList",
+          "required": true
+        }
+      }
+    },
+    "Icon": {
+      "description": "Displays a Cloudscape icon by name.",
+      "props": {
+        "name": {
+          "type": "string",
+          "required": true,
+          "description": "Cloudscape icon name (e.g. 'status-positive', 'settings', 'search', 'file', 'folder', 'lock-private', 'external', 'copy', 'download', 'upload', 'edit', 'remove', 'add-plus', 'check', 'close', 'warning', 'notification')"
+        },
+        "size": {
+          "type": "enum",
+          "values": [
+            "small",
+            "normal",
+            "medium",
+            "big",
+            "large"
+          ],
+          "default": "normal"
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "normal",
+            "disabled",
+            "error",
+            "warning",
+            "success",
+            "link",
+            "subtle",
+            "inverted"
+          ],
+          "default": "normal"
+        }
+      }
+    },
+    "MixedLineBarChart": {
+      "description": "Combined bar, line, and threshold chart for comparing different data types on the same axes. Supports stacked and horizontal bars.",
+      "props": {
+        "series": {
+          "type": "DynamicValue",
+          "required": true,
+          "description": "Array of series objects or a path binding.",
+          "items": {
+            "title": "string",
+            "type": "enum 'bar' | 'line' | 'threshold'",
+            "data": "[{x: string|number, y: number}] (for bar/line)",
+            "y?": "number (for threshold)",
+            "color?": "string (hex)"
+          }
+        },
+        "xTitle": {
+          "type": "string"
+        },
+        "yTitle": {
+          "type": "string"
+        },
+        "height": {
+          "type": "number",
+          "default": 200
+        },
+        "xScaleType": {
+          "type": "enum",
+          "values": [
+            "linear",
+            "log",
+            "categorical"
+          ],
+          "default": "categorical"
+        },
+        "yScaleType": {
+          "type": "enum",
+          "values": [
+            "linear",
+            "log"
+          ],
+          "default": "linear"
+        },
+        "xDomain": {
+          "type": "array"
+        },
+        "yDomain": {
+          "type": "array",
+          "items": "number"
+        },
+        "hideFilter": {
+          "type": "boolean",
+          "default": true
+        },
+        "hideLegend": {
+          "type": "boolean",
+          "default": false
+        },
+        "legendTitle": {
+          "type": "string"
+        },
+        "statusType": {
+          "type": "enum",
+          "values": [
+            "loading",
+            "finished",
+            "error"
+          ],
+          "default": "finished"
+        },
+        "emphasizeBaselineAxis": {
+          "type": "boolean",
+          "default": true
+        },
+        "detailPopoverSize": {
+          "type": "enum",
+          "values": [
+            "small",
+            "medium",
+            "large"
+          ],
+          "default": "medium"
+        },
+        "stackedBars": {
+          "type": "boolean",
+          "default": false
+        },
+        "horizontalBars": {
+          "type": "boolean",
+          "default": false
+        },
+        "ariaLabel": {
+          "type": "string"
+        },
+        "ariaDescription": {
+          "type": "string"
+        }
+      }
+    },
+    "MermaidDiagram": {
+      "description": "Renders Mermaid diagram syntax as SVG. Supports all Mermaid diagram types: flowchart, sequence, ER, class, state, gantt, pie, etc. Display-only \u2014 no data binding or user interaction.",
+      "props": {
+        "content": {
+          "type": "DynamicString",
+          "required": true,
+          "description": "Mermaid diagram syntax string (e.g. 'flowchart TD\\n  A --> B'). The diagram type is inferred from the syntax."
+        },
+        "maxHeight": {
+          "type": "number",
+          "default": 600,
+          "description": "Maximum height in pixels before the container scrolls."
+        },
+        "ariaLabel": {
+          "type": "string",
+          "default": "Mermaid diagram",
+          "description": "Accessible label for the diagram."
+        }
+      }
+    },
+    "Popover": {
+      "description": "Contextual overlay shown on click or hover. Use for help text, additional info, or small interactive content.",
+      "props": {
+        "triggerType": {
+          "type": "enum",
+          "values": [
+            "text",
+            "custom"
+          ],
+          "default": "text"
+        },
+        "children": {
+          "type": "DynamicString",
+          "required": true,
+          "description": "Trigger content (the clickable element)"
+        },
+        "header": {
+          "type": "DynamicString"
+        },
+        "content": {
+          "type": "DynamicString | ChildList",
+          "required": true,
+          "description": "Popover body content. A plain string or an array of component IDs for structured content."
+        },
+        "size": {
+          "type": "enum",
+          "values": [
+            "small",
+            "medium",
+            "large"
+          ],
+          "default": "medium"
+        },
+        "position": {
+          "type": "enum",
+          "values": [
+            "top",
+            "right",
+            "bottom",
+            "left"
+          ],
+          "default": "right"
+        },
+        "dismissButton": {
+          "type": "boolean",
+          "default": true
+        },
+        "fixedWidth": {
+          "type": "boolean",
+          "default": false,
+          "description": "Expands the popover body to its maximum width regardless of content"
+        }
+      }
+    },
+    "SegmentedControl": {
+      "description": "Horizontal toggle between 2-5 options. Use for view modes or filters that affect content below.",
+      "props": {
+        "selectedId": {
+          "type": "DynamicString",
+          "description": "Bind to data model path"
+        },
+        "options": {
+          "type": "array",
+          "required": true,
+          "items": {
+            "id": "string",
+            "text": "string",
+            "iconName?": "string",
+            "disabled?": "boolean"
+          }
+        },
+        "disabled": {
+          "type": "DynamicBoolean"
+        }
+      }
+    },
+    "Tiles": {
+      "description": "Visual card-based selection. Alternative to RadioGroup for options that benefit from visual emphasis or descriptions.",
+      "props": {
+        "value": {
+          "type": "DynamicString",
+          "description": "Bind to data model path"
+        },
+        "items": {
+          "type": "array",
+          "required": true,
+          "items": {
+            "value": "string",
+            "label": "string",
+            "description?": "string",
+            "image?": "string (URL)"
+          }
+        },
+        "columns": {
+          "type": "number",
+          "description": "Number of columns in the grid"
+        },
+        "disabled": {
+          "type": "DynamicBoolean"
+        }
+      }
+    },
+    "TokenGroup": {
+      "description": "Displays a list of removable tokens/tags. Use to show selected items that users can dismiss.",
+      "props": {
+        "items": {
+          "type": "DynamicValue",
+          "required": true,
+          "description": "Bind to data model path (array of {label: string, description?: string, disabled?: boolean})"
+        },
+        "alignment": {
+          "type": "enum",
+          "values": [
+            "horizontal",
+            "vertical"
+          ],
+          "default": "horizontal"
+        },
+        "limit": {
+          "type": "number",
+          "description": "Max visible tokens before 'show more'"
+        },
+        "disabled": {
+          "type": "DynamicBoolean"
+        }
+      }
+    },
+    "ActionCard": {
+      "description": "Clickable card that dispatches an action when the entire card surface is clicked. Agent-authored WebApp messages may use it for panel triggers or navigation actions, but never as an inline send-message suggestion. Use a RadioGroup form for descriptive choices and native message suggestions for short next-message actions.",
+      "props": {
+        "header": {
+          "type": "DynamicString",
+          "description": "Card title displayed at the top"
+        },
+        "description": {
+          "type": "DynamicString",
+          "description": "Subtext displayed below the header"
+        },
+        "children": {
+          "type": "DynamicString | ChildList",
+          "description": "Card body content"
+        },
+        "action": {
+          "type": "Action",
+          "required": true,
+          "description": "Event dispatched when the card is clicked. Use atx:open-panel with context.contentId to open panel content."
+        },
+        "disabled": {
+          "type": "DynamicBoolean",
+          "description": "Prevents interaction when true"
+        },
+        "variant": {
+          "type": "enum",
+          "values": [
+            "default",
+            "embedded"
+          ],
+          "default": "default",
+          "description": "'default' uses container-level border radius and padding. 'embedded' uses compact styling."
+        }
+      }
+    },
+    "SupportPromptGroup": {
+      "description": "Renderer-supported prompt chips retained for compatibility. Agents MUST NOT author this component in WebApp messages; use native message suggestions through the suggest_replies tool instead so choices disappear after use. Reserve atx:submit for real forms with a SubmitButton.",
+      "props": {
+        "items": {
+          "type": "array",
+          "required": true,
+          "description": "Authored inline (do not bind to a path). Must be non-empty.",
+          "items": {
+            "id": "string",
+            "text": "string"
+          }
+        },
+        "value": {
+          "type": "DynamicString",
+          "description": "Compatibility-only selection binding. Agents must not author SupportPromptGroup; use native message suggestions through the suggest_replies tool."
+        },
+        "alignment": {
+          "type": "string",
+          "description": "'horizontal' (default) or 'vertical'."
+        },
+        "action": {
+          "type": "Action",
+          "description": "Compatibility-only action support. Agents must not author SupportPromptGroup in WebApp messages; use native message suggestions instead."
+        }
+      }
+    }
+  },
+  "platformActions": {
+    "atx:submit": {
+      "description": "Triggers form validation and submission. The renderer sets /__showValidation to true, evaluates all FormField checks, and if valid, collects /form/* data. The agent receives the form data through the active transport: an inline chat form-submission message or A2A message/send.",
+      "dispatchedBy": [
+        "SubmitButton",
+        "SupportPromptGroup",
+        "Button",
+        "ActionCard"
+      ],
+      "notes": "Use this for actual forms. SupportPromptGroup remains renderer-compatible but is not permitted for agent-authored WebApp messages."
+    },
+    "atx:submitAndClosePanel": {
+      "description": "Submits the form exactly as atx:submit does, then waits for the agent's next surface update. The side panel closes only if that update leaves the form finished. An update carrying validation errors or more fields to fill keeps the panel open.",
+      "dispatchedBy": [
+        "SubmitButton"
+      ],
+      "notes": "Use this only on a form rendered inside SidePanelContent. An inline form has no panel to close, so there it behaves as a plain atx:submit."
+    },
+    "atx:cancelSubmit": {
+      "description": "Cancels the form without validation and without sending any form data. The host makes the form inert, shows the cancellation overlay, and sends the agent a cancellation message containing only surface correlation metadata.",
+      "dispatchedBy": [
+        "SubmitButton"
+      ],
+      "notes": "Label the SubmitButton clearly, for example 'Cancel'. The agent must treat this as the user's decision not to submit and must not infer or recover values from the abandoned form."
+    },
+    "atx:cancelAndClosePanel": {
+      "description": "Cancels exactly as atx:cancelSubmit does and closes the side panel after the cancellation message is sent successfully.",
+      "dispatchedBy": [
+        "SubmitButton"
+      ],
+      "notes": "Use this for a cancel control inside SidePanelContent. On an inline form it behaves as atx:cancelSubmit because there is no panel to close."
+    },
+    "atx:download-snapshot": {
+      "description": "Downloads a single-page PDF snapshot of the portion of the current A2UI surface that is visible when the user activates the action. Inline surfaces capture only their visible chat content; side-panel surfaces capture only their visible panel content.",
+      "context": {
+        "fileName": "string (optional) — Suggested PDF filename. The host sanitizes it and adds the .pdf extension when missing."
+      },
+      "requiredContext": [],
+      "optionalContext": [
+        "fileName"
+      ],
+      "dispatchedBy": [
+        "Button"
+      ],
+      "example": "{ \"event\": { \"name\": \"atx:download-snapshot\", \"context\": { \"fileName\": \"migration-plan-snapshot.pdf\" } } }",
+      "notes": "This is a visual snapshot, not a complete data export. The host determines the capture target from the renderer containing the button; do not provide a selector or surface target."
+    },
+    "atx:open-panel": {
+      "description": "Opens the side panel with content from a referenced component's subtree. The renderer finds the component by context.contentId, extracts its children recursively, builds a 3-message A2UI array, and sends it to the panel. The referenced component does NOT need to be in the root render tree \u2014 orphaned components (not reachable from root) remain hidden until the panel opens.",
+      "context": {
+        "contentId": "string (required) \u2014 ID of the component whose children should be rendered in the panel"
+      },
+      "dispatchedBy": [
+        "Button",
+        "ActionCard",
+        "SidePanelContent"
+      ],
+      "example": "{ \"event\": { \"name\": \"atx:open-panel\", \"context\": { \"contentId\": \"my-panel-form\" } } }",
+      "notes": "If contentId is missing or the referenced component does not exist in the surface, the action is a no-op. SidePanelContent still works as before (self-contained trigger + content) \u2014 this action enables decoupled triggers."
+    },
+    "atx:expandToPanel": {
+      "description": "Expands the current surface into the side panel. Used by SidePanelContainer's built-in expand button. The entire surface moves to the panel view.",
+      "dispatchedBy": [
+        "SidePanelContainer",
+        "Button",
+        "ActionCard"
+      ],
+      "notes": "Typically platform-injected via SidePanelContainer, but can also be dispatched manually by any component with an action prop."
+    },
+    "atx:send-message": {
+      "description": "Renderer-supported action that sends text to the platform. Agents MUST NOT author this action in inline WebApp A2UI surfaces; use the suggest_replies tool for native message suggestions or a submitted choice form when options need descriptions.",
+      "context": {
+        "message": "string (required) \u2014 The message text to send"
+      },
+      "dispatchedBy": [
+        "Button",
+        "ActionCard",
+        "ButtonDropdown",
+        "SupportPromptGroup"
+      ],
+      "example": "{ \"event\": { \"name\": \"atx:send-message\", \"context\": { \"message\": \"Approved. Proceed with migration.\" } } }",
+      "notes": "If context.message is missing or the platform handler is unavailable, the action is a no-op. The message is not forwarded to onInputChange. This action and SupportPromptGroup remain renderer-compatible but are not permitted for agent-authored WebApp messages."
+    },
+    "atx:download-artifact": {
+      "description": "Downloads an artifact through the host application's artifact download pipeline. The renderer passes the identifiers from the action context to the platform handler and does not forward the action to the agent.",
+      "context": {
+        "artifactId": "string (required) \u2014 ID of the artifact to download",
+        "workspaceId": "string (optional) \u2014 Workspace that owns the artifact; include whenever available",
+        "jobId": "string (optional) \u2014 Job that owns the artifact; include only for job-scoped artifacts when known"
+      },
+      "requiredContext": [
+        "artifactId"
+      ],
+      "optionalContext": [
+        "workspaceId",
+        "jobId"
+      ],
+      "dispatchedBy": [
+        "Button"
+      ],
+      "example": "{ \"event\": { \"name\": \"atx:download-artifact\", \"context\": { \"workspaceId\": \"ws-123\", \"jobId\": \"job-456\", \"artifactId\": \"artifact-789\" } } }",
+      "notes": "If artifactId is missing or the platform handler is unavailable, the action is a no-op. Include workspaceId whenever available. Include jobId only when the artifact is job-scoped and its owning job is known; omit jobId for workspace-scoped artifacts even when the current chat is inside a job. Preserve explicit source scope for an artifact from another job or workspace. Use the download icon on Button when presenting this as a download control."
+    }
+  },
+  "types": {
+    "DynamicString": "string | { path: '/json/pointer' } | { call: string, args: {...}, returnType: 'string' }",
+    "DynamicNumber": "number | { path: '/json/pointer' } | { call: string, args: {...}, returnType: 'number' }",
+    "DynamicBoolean": "boolean | { path: '/json/pointer' } | { call: string, args: {...}, returnType: 'boolean' }",
+    "DynamicValue": "any literal | { path: '/json/pointer' } \u2014 resolves to the value at the path (array, object, string, number, or boolean)",
+    "DataBinding": "{ path: '/json/pointer' } \u2014 always a path reference, never a literal",
+    "SpacingSize": "enum: 'n' | 'xxxs' | 'xxs' | 'xs' | 's' | 'm' | 'l' | 'xl' | 'xxl' | 'xxxl'",
+    "Spacing": "SpacingSize | { top?: SpacingSize, right?: SpacingSize, bottom?: SpacingSize, left?: SpacingSize, horizontal?: SpacingSize, vertical?: SpacingSize }",
+    "ChildList": "string[] (array of component IDs) | { componentId: string, path: string } (dynamic template from data array)",
+    "Action": "string action name | { event: { name: string, context?: Record<string, DynamicValue> } }",
+    "CheckRule": "{ condition: DynamicBoolean, message: string }",
+    "FunctionCall": "{ call: string, args: Record<string, DynamicValue>, returnType?: string }"
+  },
+  "functions": {
+    "validation": {
+      "required": {
+        "args": {
+          "value": "any"
+        },
+        "returns": "boolean",
+        "description": "True if value is not null, undefined, empty string, or empty array"
+      },
+      "regex": {
+        "args": {
+          "value": "DynamicString",
+          "pattern": "string"
+        },
+        "returns": "boolean",
+        "description": "True if value matches the regex pattern"
+      },
+      "length": {
+        "args": {
+          "value": "DynamicString",
+          "min?": "integer",
+          "max?": "integer"
+        },
+        "returns": "boolean",
+        "description": "True if string length is within [min, max]. At least one of min/max required."
+      },
+      "numeric": {
+        "args": {
+          "value": "DynamicNumber",
+          "min?": "number",
+          "max?": "number"
+        },
+        "returns": "boolean",
+        "description": "True if number is within [min, max]. Strings coerced to numbers via z.coerce.number()."
+      },
+      "email": {
+        "args": {
+          "value": "DynamicString"
+        },
+        "returns": "boolean",
+        "description": "True if value matches basic email regex"
+      }
+    },
+    "comparison": {
+      "equals": {
+        "args": {
+          "a": "any",
+          "b": "any"
+        },
+        "returns": "boolean",
+        "description": "True if a === b (strict equality)"
+      },
+      "not_equals": {
+        "args": {
+          "a": "any",
+          "b": "any"
+        },
+        "returns": "boolean",
+        "description": "True if a !== b"
+      },
+      "greater_than": {
+        "args": {
+          "a": "DynamicNumber",
+          "b": "DynamicNumber"
+        },
+        "returns": "boolean",
+        "description": "True if a > b. Strings coerced to numbers."
+      },
+      "less_than": {
+        "args": {
+          "a": "DynamicNumber",
+          "b": "DynamicNumber"
+        },
+        "returns": "boolean",
+        "description": "True if a < b. Strings coerced to numbers."
+      }
+    },
+    "logical": {
+      "and": {
+        "args": {
+          "values": "DynamicBoolean[]"
+        },
+        "returns": "boolean",
+        "description": "True if ALL values are truthy"
+      },
+      "or": {
+        "args": {
+          "values": "DynamicBoolean[]"
+        },
+        "returns": "boolean",
+        "description": "True if ANY value is truthy"
+      },
+      "not": {
+        "args": {
+          "value": "DynamicBoolean"
+        },
+        "returns": "boolean",
+        "description": "Negates the value"
+      }
+    },
+    "string": {
+      "contains": {
+        "args": {
+          "string": "DynamicString",
+          "substring": "string"
+        },
+        "returns": "boolean",
+        "description": "True if string contains substring"
+      },
+      "starts_with": {
+        "args": {
+          "string": "DynamicString",
+          "prefix": "string"
+        },
+        "returns": "boolean",
+        "description": "True if string starts with prefix"
+      },
+      "ends_with": {
+        "args": {
+          "string": "DynamicString",
+          "suffix": "string"
+        },
+        "returns": "boolean",
+        "description": "True if string ends with suffix"
+      }
+    },
+    "arithmetic": {
+      "add": {
+        "args": {
+          "a": "DynamicNumber",
+          "b": "DynamicNumber"
+        },
+        "returns": "number",
+        "description": "a + b"
+      },
+      "subtract": {
+        "args": {
+          "a": "DynamicNumber",
+          "b": "DynamicNumber"
+        },
+        "returns": "number",
+        "description": "a - b"
+      },
+      "multiply": {
+        "args": {
+          "a": "DynamicNumber",
+          "b": "DynamicNumber"
+        },
+        "returns": "number",
+        "description": "a * b"
+      },
+      "divide": {
+        "args": {
+          "a": "DynamicNumber",
+          "b": "DynamicNumber"
+        },
+        "returns": "number",
+        "description": "a / b (returns NaN for invalid, Infinity for /0)"
+      }
+    },
+    "formatting": {
+      "formatString": {
+        "args": {
+          "value": "string (template with ${expressions})"
+        },
+        "returns": "string",
+        "description": "Interpolates expressions in template string"
+      },
+      "formatNumber": {
+        "args": {
+          "value": "DynamicNumber",
+          "decimals?": "number",
+          "grouping?": "boolean"
+        },
+        "returns": "string",
+        "description": "Formats number with Intl.NumberFormat"
+      },
+      "formatCurrency": {
+        "args": {
+          "value": "DynamicNumber",
+          "currency": "string",
+          "decimals?": "number",
+          "grouping?": "boolean"
+        },
+        "returns": "string",
+        "description": "Formats as currency (e.g., $1,234.56)"
+      },
+      "formatDate": {
+        "args": {
+          "value": "DynamicString",
+          "format": "string"
+        },
+        "returns": "string",
+        "description": "Formats ISO date string using date-fns format tokens"
+      },
+      "pluralize": {
+        "args": {
+          "value": "DynamicNumber",
+          "zero?": "string",
+          "one?": "string",
+          "other": "string"
+        },
+        "returns": "string",
+        "description": "Returns plural form based on value"
+      }
+    },
+    "actions": {
+      "openUrl": {
+        "args": {
+          "url": "DynamicString"
+        },
+        "returns": "void",
+        "description": "Opens URL in new tab"
+      }
+    }
+  },
+  "dataModelConventions": {
+    "__showValidation": {
+      "type": "boolean",
+      "default": false,
+      "description": "Controls whether FormField displays validation errors from checks. Set to true on submit. Bind to FormField.showValidation via {\"path\": \"/__showValidation\"}."
+    }
+  },
+  "protocolMapping": {
+    "description": "Maps this catalog's Cloudscape components to A2UI v0.9 basic catalog equivalents",
+    "Input": "TextField (variant: shortText)",
+    "Textarea": "TextField (variant: longText)",
+    "RadioGroup": "ChoicePicker (variant: mutuallyExclusive)",
+    "Select": "ChoicePicker (dropdown)",
+    "Multiselect": "ChoicePicker (variant: multipleSelection)",
+    "Checkbox": "CheckBox",
+    "Toggle": "CheckBox (switch display)",
+    "DatePicker": "DateTimeInput (enableDate: true)",
+    "FormField": "No direct equivalent \u2014 Cloudscape wrapper that combines label + validation + child input",
+    "BarChart": "No A2UI equivalent \u2014 Cloudscape extension",
+    "LineChart": "No A2UI equivalent \u2014 Cloudscape extension. Line series with optional threshold lines.",
+    "AreaChart": "No A2UI equivalent \u2014 Cloudscape extension. Stacked area series with optional threshold lines.",
+    "PieChart": "No A2UI equivalent \u2014 Cloudscape extension",
+    "TreeView": "No basic-catalog equivalent \u2014 Cloudscape extension for expandable hierarchical data.",
+    "Table": "No basic-catalog equivalent \u2014 Cloudscape extension. Selection mirrors ChoicePicker (multipleSelection): with selectionValueField set, multi writes an array of stable id strings (like ChoicePicker.value) and single writes a scalar id (intentional divergence from ChoicePicker's 1-element array, matching Cloudscape Select ergonomics); without it, full row objects are written.",
+    "Autosuggest": "No basic-catalog equivalent \u2014 Cloudscape extension. Free-text input with filtered suggestion dropdown.",
+    "Tiles": "No basic-catalog equivalent \u2014 Cloudscape extension. Visual card-based single select.",
+    "SegmentedControl": "No basic-catalog equivalent \u2014 Cloudscape extension. Horizontal toggle for view modes.",
+    "TokenGroup": "No basic-catalog equivalent \u2014 Cloudscape extension. Removable token/tag display list.",
+    "AttributeEditor": "No basic-catalog equivalent \u2014 Cloudscape extension. Dynamic key-value pair editor.",
+    "ButtonDropdown": "No basic-catalog equivalent \u2014 Cloudscape extension. Button with multi-action dropdown.",
+    "Cards": "No basic-catalog equivalent \u2014 Cloudscape extension. Grid of card items.",
+    "CopyToClipboard": "No basic-catalog equivalent \u2014 Cloudscape extension. One-click copy button.",
+    "Grid": "No basic-catalog equivalent \u2014 Cloudscape extension. Responsive CSS grid layout.",
+    "Icon": "No basic-catalog equivalent \u2014 Cloudscape extension. Displays named icons.",
+    "Popover": "No basic-catalog equivalent \u2014 Cloudscape extension. Contextual overlay for help text.",
+    "MixedLineBarChart": "No basic-catalog equivalent \u2014 Cloudscape extension. Combined bar + line chart.",
+    "MermaidDiagram": "No basic-catalog equivalent \u2014 Cloudscape extension. Renders Mermaid diagram syntax (flowchart, sequence, ER, etc.) as SVG."
+  },
+  "universalProps": {
+    "visible": {
+      "type": "DynamicBoolean",
+      "optional": true,
+      "description": "Conditionally show or hide any component. When visible resolves to false, the component renders nothing (unmounted from DOM). Supports literal booleans, path bindings, and function calls (equals, not_equals, and, or, not). Omitting visible or setting it to true shows the component normally. NOTE: visible false unmounts the component \u2014 local useState is lost. Bind toggle-sensitive state to a data model path to preserve it across visibility changes.",
+      "examples": [
+        {
+          "literal": false,
+          "description": "Always hidden"
+        },
+        {
+          "path": "/form/showSection",
+          "description": "Bound to a boolean in the data model"
+        },
+        {
+          "call": "equals",
+          "args": {
+            "a": {
+              "path": "/form/choice"
+            },
+            "b": "OPTION_A"
+          },
+          "description": "Show only when choice equals OPTION_A"
+        }
+      ]
+    }
+  }
+}
