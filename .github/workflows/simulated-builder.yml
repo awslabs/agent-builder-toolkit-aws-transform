@@ -1,31 +1,41 @@
 name: Simulated builder
 
-# A maintainer adds the `e2e:simulated-builder` label to ask for an end-to-end run: a simulated
-# partner developer builds with the toolkit at the PR's head commit in Kiro, on a disposable AWS
-# account, and the maintainer posts the verdict as the `simulated-builder` commit status
-# (see e2e/README.md). This workflow only marks the head commit as waiting for that run: it
-# checks out nothing, runs no PR code and uses no secrets.
+# A maintainer starts an end-to-end run for one reviewed commit of a pull request: a simulated
+# partner developer builds with the toolkit at that commit in Kiro, in a test AWS account, and the
+# result comes back as the `simulated-builder` commit status (see e2e/README.md).
+# This workflow only records the request (its run name) and marks the commit as waiting. It checks
+# out nothing, runs no PR code and has no AWS access. The test account reads the public run list
+# and accepts only a manual run of this workflow on main, started by a maintainer, whose commit is
+# still the PR head.
+run-name: "simulated-builder #${{ inputs.pr }} ${{ inputs.sha }}"
+
 on:
-  pull_request_target:
-    types: [labeled, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number
+        required: true
+      sha:
+        description: The reviewed head commit (40 hex characters)
+        required: true
 
 permissions:
   statuses: write
 
 jobs:
-  queue:
-    # A new label marks the commit once; a new push or reopen re-marks the new head while the label stays.
-    if: >-
-      (github.event.action == 'labeled' && github.event.label.name == 'e2e:simulated-builder') ||
-      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'e2e:simulated-builder'))
+  request:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - name: Mark the head commit as waiting for the simulated builder
+      - name: Check the inputs and mark the commit as waiting
         env:
           GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.event.pull_request.head.sha }}
+          PR: ${{ inputs.pr }}
+          SHA: ${{ inputs.sha }}
           REPO: ${{ github.repository }}
         run: |
-          gh api "repos/$REPO/statuses/$SHA" \
-            -f state=pending -f context=simulated-builder \
-            -f description="Queued for a simulated-builder run (e2e/README.md)"
+          [[ "$PR" =~ ^[0-9]{1,6}$ && "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "pr must be a number and sha 40 hex characters"; exit 1; }
+          head=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)
+          [ "$head" = "$SHA" ] || { echo "PR #$PR head is $head, not $SHA: review the new commit and start again"; exit 1; }
+          gh api "repos/$REPO/statuses/$SHA" -f state=pending -f context=simulated-builder \
+            -f description="Requested by $GITHUB_ACTOR; waiting for the test account"
