@@ -44,10 +44,11 @@ returns the reply. Treat the exchange as a conversation with an async worker:
 
 `get_agent_instance(agent_instance_id)` returns the instance status. Poll it to decide when the
 delegated work is done. A freshly invoked instance is `INVOKING`/`INVOKED` before it reaches
-`RUNNING` — that's startup, not a hang. `RUNNING` means working; `COMPLETED`/`FAILED`/`STOPPED`
-are terminal; `UNRESPONSIVE` means the platform lost contact (treat as failed after it
-persists). Only `RUNNING`, `COMPLETED`, `FAILED`, `STOPPED` are states a subagent sets on
-itself (step 4 below).
+`RUNNING` — that's startup, not a hang. `RUNNING` means working; `IDLE` means alive but not
+working (parked, for example waiting for input) — not terminal, not a failure;
+`COMPLETED`/`FAILED`/`STOPPED` are terminal; `UNRESPONSIVE` means the platform lost contact
+(treat as failed after it persists). Only `RUNNING`, `IDLE`, `COMPLETED`, `FAILED`, `STOPPED`
+are states a subagent sets on itself (step 4 below).
 
 - Poll status rather than trusting the last message; the final message and the terminal
   status can arrive in either order.

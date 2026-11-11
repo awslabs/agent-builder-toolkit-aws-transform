@@ -903,25 +903,30 @@ class TestOrchestratorOptions:
         assert mock_orchestrator.call_args.kwargs["enable_prompt_caching"] is True
 
 
-# The 1.0 positional order of each orchestrator factory. New parameters go after these, so a
+# The released (1.1.0) positional order of each orchestrator factory. New parameters go after these, so a
 # caller passing arguments by position keeps binding them to the same names.
 _V1_POSITIONAL = {
     "create_default_orchestrator": [
         "mcp_client", "storage_dir", "system_prompt", "custom_tools", "model_id", "model",
         "with_base_guardrails", "trace_attributes", "metrics_config",
+        "locale", "conversation_repository", "memory_manager", "boto_client_config",
     ],
     "create_default_async_orchestrator": [
         "mcp_client", "storage_dir", "system_prompt", "custom_tools", "model_id", "model",
         "with_base_guardrails", "metrics_config",
+        "locale", "conversation_repository", "memory_manager", "boto_client_config",
     ],
     "create_default_orchestrator_with_subagent": [
         "system_prompt", "mcp_client", "storage_dir", "custom_tools", "model_id", "model",
         "with_base_guardrails", "metrics_config",
+        "locale", "conversation_repository", "memory_manager", "boto_client_config",
     ],
     "create_default_async_orchestrator_with_subagent": [
         "system_prompt", "mcp_client", "storage_dir", "custom_tools", "model_id", "model",
         "with_base_guardrails", "trace_attributes", "excluded_mcp_tool_names", "metrics_config",
         "enable_skills", "skills_dir", "enable_code_execution",
+        "locale", "conversation_repository", "memory_manager",
+        "enable_blank_reply_continuation", "enable_prompt_caching", "boto_client_config",
     ],
 }
 
