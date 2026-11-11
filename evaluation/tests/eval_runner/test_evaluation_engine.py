@@ -178,3 +178,85 @@ class TestEvaluationEngine:
         assert "always_fail" in summary["per_metric"]
         assert summary["per_metric"]["always_pass"]["average_score"] == 9.0
         assert summary["per_metric"]["always_fail"]["average_score"] == 2.0
+
+    def test_summary_backcompat_omits_new_keys(self):
+        """summarize() with no test_cases stays back-compat (no per_complexity/per_tag)."""
+        from eval_runner.engine import EvaluationEngine
+
+        engine = EvaluationEngine(metrics=[AlwaysPassMetric()])
+        agent = FakeAgent()
+        results = engine.evaluate_batch(agent, self._make_test_cases(2))
+
+        summary = engine.summarize(results)
+        assert "per_complexity" not in summary
+        assert "per_tag" not in summary
+
+    def test_summary_per_complexity_and_per_tag(self):
+        from eval_runner.engine import EvaluationEngine
+
+        # Two passing (hard), one failing (easy). Tags overlap across cases so a
+        # multi-tag result counts toward each of its tags.
+        engine = EvaluationEngine(metrics=[AlwaysPassMetric()])
+        agent = FakeAgent()
+        test_cases = [
+            TestCase(id="tc-0", name="A", user_message="m0",
+                     complexity="hard", tags=["a", "b"]),
+            TestCase(id="tc-1", name="B", user_message="m1",
+                     complexity="hard", tags=["b"]),
+            TestCase(id="tc-2", name="C", user_message="m2",
+                     complexity="easy", tags=[]),
+        ]
+        results = engine.evaluate_batch(agent, test_cases)
+        summary = engine.summarize(results, test_cases)
+
+        # per_complexity: single-valued bucket per result.
+        assert summary["per_complexity"]["hard"]["total"] == 2
+        assert summary["per_complexity"]["hard"]["passed"] == 2
+        assert summary["per_complexity"]["hard"]["pass_rate"] == 1.0
+        assert summary["per_complexity"]["hard"]["average_score"] == 9.0
+        assert summary["per_complexity"]["easy"]["total"] == 1
+        assert summary["per_complexity"]["easy"]["pass_rate"] == 1.0
+
+        # per_tag: multi-valued — tc-0 contributes to both "a" and "b", so the
+        # per-tag total (2 for "b") exceeds the number of results carrying tag-b
+        # only once, and total tag count (3) exceeds result count (3 - 1 untagged).
+        assert summary["per_tag"]["a"]["total"] == 1
+        assert summary["per_tag"]["b"]["total"] == 2
+        per_tag_total = sum(b["total"] for b in summary["per_tag"].values())
+        assert per_tag_total == 3  # tc-0 (a,b) + tc-1 (b); tc-2 untagged contributes none
+        assert per_tag_total > len(results) - 1
+
+    def test_summary_per_complexity_mixed_pass(self):
+        from eval_runner.engine import EvaluationEngine
+
+        # Failing metric so every result fails — pass_rate 0, avg score 2.0.
+        engine = EvaluationEngine(metrics=[AlwaysFailMetric()])
+        agent = FakeAgent()
+        test_cases = [
+            TestCase(id="tc-0", name="A", user_message="m0",
+                     complexity="hard", tags=["x"]),
+            TestCase(id="tc-1", name="B", user_message="m1",
+                     complexity="hard", tags=["x"]),
+        ]
+        results = engine.evaluate_batch(agent, test_cases)
+        summary = engine.summarize(results, test_cases)
+
+        assert summary["per_complexity"]["hard"]["total"] == 2
+        assert summary["per_complexity"]["hard"]["passed"] == 0
+        assert summary["per_complexity"]["hard"]["pass_rate"] == 0.0
+        assert summary["per_complexity"]["hard"]["average_score"] == 2.0
+        assert summary["per_tag"]["x"]["average_score"] == 2.0
+
+    def test_summary_skips_result_not_in_test_cases(self):
+        from eval_runner.engine import EvaluationEngine
+
+        engine = EvaluationEngine(metrics=[AlwaysPassMetric()])
+        agent = FakeAgent()
+        test_cases = [
+            TestCase(id="tc-0", name="A", user_message="m0", complexity="hard"),
+        ]
+        results = engine.evaluate_batch(agent, test_cases)
+        # Summarize with an EMPTY by_id mapping — the result's id is unknown.
+        summary = engine.summarize(results, test_cases=[])
+        assert summary["per_complexity"] == {}
+        assert summary["per_tag"] == {}

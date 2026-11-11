@@ -73,7 +73,11 @@ class EvaluationEngine:
             return self._batch_parallel(agent, test_cases, max_workers)
         return self._batch_sequential(agent, test_cases)
 
-    def summarize(self, results: list[EvaluationResult]) -> dict:
+    def summarize(
+        self,
+        results: list[EvaluationResult],
+        test_cases: list[TestCase] | None = None,
+    ) -> dict:
         total = len(results)
         passed = sum(1 for r in results if r.passed)
 
@@ -87,18 +91,64 @@ class EvaluationEngine:
                 if mr.passed:
                     per_metric[mr.metric_name]["passed"] += 1
 
-        for name, data in per_metric.items():
-            scores = data.pop("scores")
-            data["average_score"] = sum(scores) / len(scores) if scores else 0.0
-            data["pass_rate"] = data["passed"] / data["total"] if data["total"] else 0.0
+        for data in per_metric.values():
+            self._finalize_bucket(data)
 
-        return {
+        summary = {
             "total": total,
             "passed": passed,
             "failed": total - passed,
             "pass_rate": passed / total if total else 0.0,
             "per_metric": per_metric,
         }
+
+        # When test_cases are supplied, slice the per-result pass/score signal by
+        # the test case's complexity (single-valued) and tags (multi-valued: a
+        # result contributes to every one of its tags). Omitted entirely when no
+        # test_cases are given so callers that only have results stay back-compat.
+        if test_cases is not None:
+            by_id = {tc.id: tc for tc in test_cases}
+            per_complexity: dict[str, dict] = {}
+            per_tag: dict[str, dict] = {}
+            for result in results:
+                tc = by_id.get(result.test_case_id)
+                if tc is None:
+                    continue
+                self._accumulate_result(per_complexity, tc.complexity, result)
+                for tag in tc.tags:
+                    self._accumulate_result(per_tag, tag, result)
+            for data in per_complexity.values():
+                self._finalize_bucket(data)
+            for data in per_tag.values():
+                self._finalize_bucket(data)
+            summary["per_complexity"] = per_complexity
+            summary["per_tag"] = per_tag
+
+        return summary
+
+    @staticmethod
+    def _accumulate_result(
+        buckets: dict[str, dict], key: str, result: EvaluationResult
+    ) -> None:
+        """Add one result to ``buckets[key]``, counting results (not metrics).
+
+        ``average_score`` accumulates each result's mean metric score (0.0 when
+        the result has no metric_results); ``passed``/``total`` count results
+        via ``EvaluationResult.passed`` (all metrics pass).
+        """
+        bucket = buckets.setdefault(key, {"scores": [], "passed": 0, "total": 0})
+        scores = [mr.score for mr in result.metric_results]
+        bucket["scores"].append(sum(scores) / len(scores) if scores else 0.0)
+        bucket["total"] += 1
+        if result.passed:
+            bucket["passed"] += 1
+
+    @staticmethod
+    def _finalize_bucket(data: dict) -> None:
+        """Collapse an accumulating bucket into average_score + pass_rate."""
+        scores = data.pop("scores")
+        data["average_score"] = sum(scores) / len(scores) if scores else 0.0
+        data["pass_rate"] = data["passed"] / data["total"] if data["total"] else 0.0
 
     def save_results(self, results: list[EvaluationResult]) -> None:
         output_path = self.config.output_path

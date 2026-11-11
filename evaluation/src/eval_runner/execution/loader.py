@@ -127,6 +127,7 @@ def _parse_scenario(data: dict[str, Any], scenario_file: Path | None = None) -> 
         prompt=data["prompt"],
         description=data["description"],
         assertions=data["assertions"],
+        complexity=data.get("complexity", "medium"),
         tags=data.get("tags", []),
         targets=data.get("targets", []),
         max_turns=data.get("max_turns", 10),

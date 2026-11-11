@@ -73,6 +73,7 @@ class EvalCase:
         prompt: Initial prompt to send to the agent under test.
         description: Scenario goal — guides the simulated human agent.
         assertions: List of assertions to check against the transcript.
+        complexity: Difficulty bucket for aggregation (e.g., "easy"/"medium"/"hard").
         tags: Tags for filtering (e.g., ["journey", "foundation"]).
         targets: Runtime formats this scenario is compatible with (e.g., ["power", "plugin"]).
             Empty means compatible with both.
@@ -92,6 +93,7 @@ class EvalCase:
     prompt: str
     description: str
     assertions: list[dict[str, Any]]
+    complexity: str = "medium"
     tags: list[str] = field(default_factory=list)
     targets: list[str] = field(default_factory=list)
     max_turns: int = 10
@@ -968,6 +970,7 @@ class EvalOrchestrator:
             "name": scenario.name,
             "prompt": scenario.prompt,
             "description": scenario.description,
+            "complexity": scenario.complexity,
             "tags": scenario.tags,
             "max_turns": scenario.max_turns,
             "timeout_seconds": scenario.timeout_seconds,
