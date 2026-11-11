@@ -160,6 +160,35 @@ class AgentInstanceManager(AgenticApiHelper):
         logger.info(f"Setting agent instance {agent_instance_id} to FAILED")
         return self.update_status(agent_instance_id, "FAILED", status_reason=reason)
 
+    def set_idle(self, agent_instance_id: str, reason: Optional[str] = None) -> dict:
+        """Set agent instance status to IDLE."""
+        logger.info(f"Setting agent instance {agent_instance_id} to IDLE")
+        return self.update_status(agent_instance_id, "IDLE", status_reason=reason)
+
+    def restore(self, agent_id: str, agent_type: str) -> dict:
+        """Trigger agent restoration for session chaining.
+
+        Args:
+            agent_id: The agent identifier
+            agent_type: The agent type (ORCHESTRATOR_AGENT / SUB_AGENT)
+
+        Returns:
+            dict: Response from the RestoreAgent API
+        """
+
+        request_data = {
+            "agentId": agent_id,
+            "agentInstanceId": self.agent_instance_id,
+            "agentType": agent_type,
+        }
+
+        try:
+            request = self._inject_request_context(request_data)
+            return self.client.restore_agent(**request)
+        except Exception:
+            logger.error(f"Failed to restore agent {agent_id}")
+            raise
+
     def is_invoked(self) -> bool:
         status = self.get_status(self.agent_instance_id).get("agentInstanceStatus")
         return status == "INVOKED"
@@ -251,6 +280,20 @@ def shutdown_base_orchestrator_agent_instance(reason: Optional[str] = None) -> b
         return False
 
 
+def idle_base_orchestrator_agent_instance(reason: Optional[str] = None) -> bool:
+    """Set base orchestrator instance to IDLE using environment variables."""
+    try:
+        manager = get_agent_instance_manager()
+        manager.set_idle(manager.agent_instance_id, reason)
+        logger.info(f"Set orchestrator agent instance to IDLE: {manager.agent_instance_id}")
+        return True
+    except Exception as e:
+        logger.warning(
+            f"Failed to set orchestrator agent instance to IDLE {manager.agent_instance_id}: {e}"
+        )
+        return False
+
+
 def shutdown_subagent_instance(subagent_instance_id: str) -> bool:
     """Shutdown subagent instance using environment variables.
 
@@ -330,7 +373,7 @@ async def wait_for_agent_non_invoking(
         workspace_id: The workspace ID
         job_id: The job ID
         agent_instance_id: The agent instance ID
-        timeout: Maximum time to wait in seconds (default: 10)
+        timeout: Maximum time to wait in seconds
 
     Returns:
         Final agent status after waiting (could be RUNNING, INVOKED, etc.)
@@ -355,9 +398,36 @@ async def wait_for_agent_non_invoking(
         except Exception as e:
             logger.warning(f"Failed to check agent status on attempt {attempt}: {e}")
 
-        await asyncio.sleep(0.5)  # Wait 0.5 second between attempts
+        await asyncio.sleep(0.5)
 
     if status == "INVOKING":
         logger.warning(f"Timeout: Agent remained in INVOKING state after {timeout} seconds")
 
     return status
+
+
+def restore_agent(
+    workspace_id: str,
+    job_id: str,
+    agent_instance_id: str,
+    agent_id: str,
+    agent_type: str,
+) -> None:
+    """Call RestoreAgent API to trigger session chaining.
+
+    Invokes a new agent instance that restores from the current instance checkpoint,
+    enabling seamless continuation across compute session boundaries.
+    The restored instance uses the same agent version as the running job.
+
+    Args:
+        workspace_id: The workspace ID
+        job_id: The job ID
+        agent_instance_id: The current agent instance ID to restore from
+        agent_id: The agent identifier
+        agent_type: The agent type (ORCHESTRATOR_AGENT / SUB_AGENT)
+    """
+    manager = get_agent_instance_manager_with_context(workspace_id, job_id, agent_instance_id)
+    manager.restore(agent_id, agent_type)
+    logger.info(
+        f"RestoreAgent called successfully for agent {agent_id} instance {agent_instance_id}"
+    )

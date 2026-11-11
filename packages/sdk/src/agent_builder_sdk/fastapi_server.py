@@ -13,6 +13,10 @@ import uvicorn
 from fastapi import Depends, FastAPI
 
 from agent_builder_sdk.agentic_framework.client_factory import get_agentic_api_client
+from agent_builder_sdk.constants import (
+    DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS,
+    DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS,
+)
 from agent_builder_sdk.custom_types.common_types import (
     A2AError,
     A2AErrorCode,
@@ -49,8 +53,8 @@ def get_task_handler() -> TaskHandler:
     return TaskHandler()
 
 
-_TIMEOUT = 28
-_DELAYED_TIMEOUT = 60 * 5
+_TIMEOUT = DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS
+_DELAYED_TIMEOUT = DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS
 
 
 async def handle_delayed_response(
@@ -178,8 +182,6 @@ async def send_message(request: InvocationRequest) -> SendMessageOutput:
 
     This endpoint passes the input to the agent and returns the response.
     """
-    global queue
-
     if queue is None:
         logger.error("No Queue")
         return SendMessageOutput(

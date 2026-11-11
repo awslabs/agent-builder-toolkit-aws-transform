@@ -40,4 +40,5 @@ class JsonRpcMethods:
 
     # A2A endpoints
     MESSAGE_SEND = "message/send"
+    MESSAGE_STREAM = "message/stream"
     TASKS_GET = "tasks/get"
