@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-builder-sdk-aws-transform"
-version = "1.0.3"
+version = "1.1.0"
 description = "Base agent SDK for building orchestrator and subagents on AWS Transform"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -19,7 +19,7 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "agent-builder-types-aws-transform>=1.0",
+    "agent-builder-types-aws-transform>=1.1",
     "agent-builder-mcp-client-aws-transform>=1.0",
     "boto3>=1.28",
     "botocore>=1.28",
@@ -34,6 +34,10 @@ dependencies = [
     "starlette_context",
     "defusedxml",
     "aws-embedded-metrics>=3.0",
+    "tenacity>=9.0",
+    # Streaming: A2A task states and AG-UI events. Both are pre-1.0, so stay on the tested minor.
+    "a2a-sdk>=0.3.7,<0.4",
+    "ag-ui-protocol>=0.1.19,<0.2",
 ]
 
 [project.optional-dependencies]

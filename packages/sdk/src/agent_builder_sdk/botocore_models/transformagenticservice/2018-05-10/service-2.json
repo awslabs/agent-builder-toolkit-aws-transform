@@ -1313,7 +1313,8 @@
         "STOPPED",
         "COMPLETED",
         "INVOKING",
-        "STOPPING"
+        "STOPPING",
+        "IDLE"
       ]
     },
     "AgentInstanceSummaries":{
@@ -4100,7 +4101,8 @@
         "RUNNING",
         "FAILED",
         "COMPLETED",
-        "STOPPED"
+        "STOPPED",
+        "IDLE"
       ]
     },
     "UpdateJobPlanStepRequest":{

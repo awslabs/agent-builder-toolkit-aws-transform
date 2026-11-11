@@ -7,12 +7,16 @@ from typing import Any, Optional
 
 from strands.hooks.events import AfterInvocationEvent, BeforeInvocationEvent, MessageAddedEvent
 from strands.hooks.registry import HookProvider, HookRegistry
+from strands.types.content import Message
 
 from agent_builder_sdk.orchestrator_strands.conversation.file_repository import (
     FileMultiSourceConversationRepository,
 )
 from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     ConversationRepository,
+)
+from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
+    drop_unanswered_continuations,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,7 +70,7 @@ class ConversationHookProvider(HookProvider):
         history = self.repository.get_conversation_history_for_agent(event.agent)
 
         # Update the agent's conversation with the relevant history
-        event.agent.messages = history
+        event.agent.messages = drop_unanswered_continuations(history)
 
         logger.info(
             f"Set conversation history for agent {event.agent.agent_id} with history length: {len(history)}"
@@ -89,5 +93,16 @@ class ConversationHookProvider(HookProvider):
         Args:
             event: The AfterInvocationEvent containing the agent
         """
+        # A terminating tool (stop_event_loop) ends the turn on its toolResult, so Strands stores no
+        # reply; the answer the user got is only in force_stop_response. Store it as the reply, so
+        # the saved turn is complete (not mistaken for an unanswered one on the next load) and the
+        # next turn sees what the user was told.
+        state = getattr(event.result, "state", None)
+        answer = state.get("force_stop_response") if isinstance(state, dict) else None
+        if answer and event.agent.messages and event.agent.messages[-1].get("role") == "user":
+            reply: Message = {"role": "assistant", "content": [{"text": answer}]}
+            event.agent.messages.append(reply)
+            self.repository.add_message_for_agent(reply, event.agent)
+
         # Save conversation state
         self.repository.save()

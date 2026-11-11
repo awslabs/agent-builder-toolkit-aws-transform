@@ -15,12 +15,18 @@ from agent_builder_sdk.custom_types.task_types import A2ATask, TaskState, TaskSt
 
 @pytest.fixture
 def mock_client():
-    """Create a mock boto3 client."""
+    """Create a mock boto3 client (the sync agentic API client)."""
     return mock.Mock()
 
 
 @pytest.fixture
-def a2a_manager(mock_client, monkeypatch):
+def mock_streaming_client():
+    """Mock the dedicated streaming (ConverseStream) client, injected into the manager."""
+    return mock.Mock()
+
+
+@pytest.fixture
+def a2a_manager(mock_client, mock_streaming_client, monkeypatch):
     """Create an A2AManager instance with mocked dependencies."""
     # Create temporary auth token file
     with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
@@ -35,6 +41,7 @@ def a2a_manager(mock_client, monkeypatch):
         job_id="test-job",
         agent_instance_id="test-agent-instance",
         client=mock_client,
+        streaming_client=mock_streaming_client,
     )
 
 
@@ -251,11 +258,15 @@ class TestA2AManagerFactory:
         monkeypatch.setenv("AGENT_INSTANCE_ID", "test-agent")
         monkeypatch.setenv("QT_AGENTIC_API_ENDPOINT", "https://test.endpoint.com")
 
-        # Mock the client factory to avoid real boto3 client creation
+        # Mock both client factories to avoid real boto3 client creation
         mock_client = mock.Mock()
+        mock_streaming_client = mock.Mock()
         with mock.patch(
             "agent_builder_sdk.agentic_framework.a2a_manager.get_agentic_api_client",
             return_value=mock_client,
+        ), mock.patch(
+            "agent_builder_sdk.agentic_framework.a2a_manager.get_streaming_agentic_api_client",
+            return_value=mock_streaming_client,
         ):
             from agent_builder_sdk.agentic_framework.a2a_manager import get_a2a_manager
 
@@ -264,3 +275,120 @@ class TestA2AManagerFactory:
             assert manager.workspace_id == "test-workspace"
             assert manager.job_id == "test-job"
             assert manager.agent_instance_id == "test-agent"
+            assert manager.client is mock_client
+            # Built lazily, so buffered-only callers never need the streaming service model.
+            assert manager.streaming_client is None
+
+            mock_streaming_client.converse_stream.return_value = {"stream": _FakeBody(b"")}
+            with mock.patch(
+                "agent_builder_sdk.agentic_framework.a2a_manager.get_streaming_agentic_api_client",
+                return_value=mock_streaming_client,
+            ):
+                list(manager.stream_send_message(agent_instance_id="sub-1", message=mock.Mock()))
+            assert manager.streaming_client is mock_streaming_client
+
+
+def test_streaming_client_built_once_under_concurrent_first_calls(a2a_manager):
+    """stream_send_message runs in worker threads; concurrent first calls build one client."""
+    import threading
+    import time
+
+    a2a_manager.streaming_client = None
+    client = mock.Mock()
+    client.converse_stream.return_value = {"stream": _FakeBody(b"")}
+    builds = []
+
+    def build():
+        builds.append(1)
+        time.sleep(0.05)
+        return client
+
+    with mock.patch(
+        "agent_builder_sdk.agentic_framework.a2a_manager.get_streaming_agentic_api_client",
+        side_effect=build,
+    ):
+        threads = [
+            threading.Thread(
+                target=lambda: list(
+                    a2a_manager.stream_send_message(agent_instance_id="sub-1", message=mock.Mock())
+                )
+            )
+            for _ in range(3)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+    assert len(builds) == 1
+    assert a2a_manager.streaming_client is client
+
+
+class _FakeBody:
+    """Minimal StreamingBody stand-in yielding SSE bytes."""
+
+    def __init__(self, data: bytes):
+        self._data = data
+
+    def iter_chunks(self, chunk_size):
+        for i in range(0, len(self._data), chunk_size):
+            yield self._data[i : i + chunk_size]
+
+
+def _sse(*objs):
+    import json
+
+    return "".join(f"data: {json.dumps(o)}\n\n" for o in objs).encode("utf-8")
+
+
+class TestStreamSendMessage:
+    """Tests for stream_send_message (ConverseStream)."""
+
+    def test_stream_send_message_uses_streaming_client(
+        self, a2a_manager, mock_client, mock_streaming_client, sample_message
+    ):
+        """ConverseStream must be issued on the streaming client, never the sync client."""
+        body = _FakeBody(_sse({"kind": "task"}, {"status": {"state": "completed"}}))
+        mock_streaming_client.converse_stream.return_value = {"stream": body}
+
+        frames = list(
+            a2a_manager.stream_send_message(
+                agent_instance_id="target-agent", message=sample_message
+            )
+        )
+
+        assert frames[0] == {"kind": "task"}
+        assert frames[-1] == {"status": {"state": "completed"}}
+        mock_streaming_client.converse_stream.assert_called_once()
+        mock_client.converse_stream.assert_not_called()
+
+    def test_stream_send_message_injects_context_and_params(
+        self, a2a_manager, mock_streaming_client, sample_message
+    ):
+        mock_streaming_client.converse_stream.return_value = {
+            "stream": _FakeBody(_sse({"final": True}))
+        }
+
+        list(
+            a2a_manager.stream_send_message(
+                agent_instance_id="target-agent", message=sample_message
+            )
+        )
+
+        call_args = mock_streaming_client.converse_stream.call_args[1]
+        assert call_args["agentInstanceId"] == "target-agent"
+        assert call_args["params"]["message"]["contextId"] == "ctx-456"
+        assert "requestContext" in call_args
+
+    def test_stream_send_message_raises_on_client_error(
+        self, a2a_manager, mock_streaming_client, sample_message
+    ):
+        mock_streaming_client.converse_stream.side_effect = ClientError(
+            {"Error": {"Code": "Boom", "Message": "no"}}, "ConverseStream"
+        )
+        with pytest.raises(ClientError):
+            list(
+                a2a_manager.stream_send_message(
+                    agent_instance_id="target-agent", message=sample_message
+                )
+            )

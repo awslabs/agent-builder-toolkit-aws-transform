@@ -5,6 +5,8 @@
 from dataclasses import dataclass
 from typing import Optional
 
+from agent_builder_sdk.locale_utils import get_locale_instruction
+
 
 @dataclass
 class AgentRuntimeContext:
@@ -17,3 +19,8 @@ class AgentRuntimeContext:
     agent_version: Optional[str] = None
     initial_auth_token: Optional[str] = None
     tenant_account_id: Optional[str] = None
+    locale: Optional[str] = None
+
+    def get_locale_instruction(self) -> str:
+        """Return a system prompt instruction for the agent's current locale."""
+        return get_locale_instruction(self.locale)
