@@ -2092,7 +2092,7 @@ Both use the same BaseOrchestrator and agent factory pattern, so you can switch 
 
 ### How can my agent show tables, forms, or charts in chat?
 
-Send an A2UI surface. The AWS Transform web app renders an `atx-a2ui` fenced block in a chat message as an interactive surface built from the `atx-hitl/v1` component catalog (tables, forms with validation, charts, Mermaid diagrams, side panels). Form submissions come back to your agent as a chat message with the `/form/*` values.
+Send an A2UI surface. Form submissions come back to your agent as a chat message with the `/form/*` values.
 
 - **LLM orchestrators**: create the orchestrator with `enable_platform_skills=True`. That loads the `a2ui-rendering` and `a2ui-ux-patterns` skills and adds two tools: `render_a2ui_surface`, which validates a nested component tree against the catalog and returns the block to put in the reply, and `suggest_replies`, which attaches one-click reply suggestions.
 - **Code**: build the block yourself.
@@ -2111,6 +2111,8 @@ block = build_a2ui_block(
 )
 reply = f"Pick a target region.\n\n{block}"
 ```
+
+The AWS Transform web app renders an `atx-a2ui` fenced block in a chat message as an interactive surface built from the `atx-hitl/v1` component catalog (tables, forms with validation, charts, Mermaid diagrams, side panels).
 
 `build_a2ui_block` raises `A2UIValidationError` with every problem it finds (unknown components or props, missing required props, broken child references, bound paths with no initial value). An agent that returns an A2A task can put `build_a2ui_messages(...)` in the task artifact metadata under `A2UI_EXTENSION_KEY` instead. The full protocol and catalog ship with the SDK under `platform_skills/a2ui-rendering/references/`.
 
