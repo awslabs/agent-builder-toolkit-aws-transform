@@ -40,7 +40,7 @@ def test_export_agent_instance_metadata():
         workspaceId="test-workspace",
         jobId="test-job",
         agentInstanceId="test-agent",
-        agenticApiEndpoint="https://test-endpoint.aws.dev",
+        agenticApiEndpoint="https://test-endpoint.example.com",
         region="us-east-1",
     )
 
@@ -56,7 +56,7 @@ def test_export_agent_instance_metadata():
                 assert os.environ[env_var.ENV_KEY_AWS_REGION] == "us-east-1"
                 assert (
                     os.environ[env_var.ENV_KEY_QT_AGENTIC_API_ENDPOINT]
-                    == "https://test-endpoint.aws.dev"
+                    == "https://test-endpoint.example.com"
                 )
                 assert env_var.ENV_KEY_QT_AUTH_TOKEN_FILE in os.environ
 
@@ -77,7 +77,7 @@ def test_export_agent_instance_metadata_when_region_not_specified_should_use_env
         workspaceId="test-workspace",
         jobId="test-job",
         agentInstanceId="test-agent",
-        agenticApiEndpoint="https://test-endpoint.aws.dev",
+        agenticApiEndpoint="https://test-endpoint.example.com",
     )
 
     with mock.patch.dict(os.environ, {"AWS_REGION": "us-west-2"}, clear=True):
@@ -90,6 +90,6 @@ def test_export_agent_instance_metadata_when_region_not_specified_should_use_env
             assert os.environ[env_var.ENV_KEY_AWS_REGION] == "us-west-2"
             assert (
                 os.environ[env_var.ENV_KEY_QT_AGENTIC_API_ENDPOINT]
-                == "https://test-endpoint.aws.dev"
+                == "https://test-endpoint.example.com"
             )
             assert env_var.ENV_KEY_QT_AUTH_TOKEN_FILE in os.environ

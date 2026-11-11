@@ -8,8 +8,8 @@
   <rect x="0.5" y="0.5" width="1083" height="759" fill="#ffffff" stroke="#e9ebed"/>
 
   <!-- title -->
-  <text x="40" y="58" class="ink" font-size="26" font-weight="700">Certificate Viewer: iad.prod.agenticapi.elastic-</text>
-  <text x="40" y="92" class="ink" font-size="26" font-weight="700">gumby.ai.aws.dev</text>
+  <text x="40" y="58" class="ink" font-size="26" font-weight="700">Certificate Viewer: iad.prod.agenticapi.</text>
+  <text x="40" y="92" class="ink" font-size="26" font-weight="700">elastic-gumby.ai.aws.dev</text>
   <!-- close -->
   <path d="M1020 46 l22 22 M1042 46 l-22 22" stroke="#16191f" stroke-width="2" stroke-linecap="round"/>
 

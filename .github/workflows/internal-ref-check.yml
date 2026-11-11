@@ -1,0 +1,44 @@
+name: Internal Reference Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  internal-ref-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check for non-public references and access keys
+        run: |
+          # -a scans binary files as text, so their hits are listed too.
+          # amazon.com / amazon.dev hosts other than the public aws.amazon.com
+          # sites, and aws.dev hosts other than the product API endpoints.
+          # '}' and '>' also catch hosts whose leading label is a template
+          # placeholder, as in {stage} or <host> followed by the domain.
+          hosts=$(git grep -anoiE '[a-z0-9.-]*[a-z0-9}>]([.-]amazon\.(com|dev)|\.aws\.dev)' \
+            | grep -viE '[:.]([a-z0-9-]+\.)*(aws\.amazon\.com|elastic-gumby\.ai\.aws\.dev)$' || true)
+          # amazon.com / amazon.dev email addresses other than the public
+          # code-of-conduct contact.
+          emails=$(git grep -anoiE '[a-z0-9._%+-]+@amazon\.(com|dev)' \
+            | grep -viE ':opensource-codeofconduct@amazon\.com$' || true)
+          # Slack channel and message links.
+          chat=$(git grep -anoiE 'slack\.com/archives' || true)
+          # AWS access key IDs, long-term (AKIA) and temporary (ASIA), except
+          # the documented ...EXAMPLE placeholders.
+          keys=$(git grep -anoE '(AKIA|ASIA)[0-9A-Z]{16}' | grep -v 'EXAMPLE$' || true)
+          hits=$(printf '%s\n' "$hosts" "$emails" "$chat" "$keys" | sed '/^$/d')
+
+          if [[ -n "$hits" ]]; then
+            echo "::error::Non-public references or access keys found. Remove them before merging:"
+            echo "$hits"
+            exit 1
+          fi
+
+          echo "No non-public references or access keys found."

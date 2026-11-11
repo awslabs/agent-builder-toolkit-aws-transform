@@ -69,7 +69,7 @@ class SubagentRegistryTools:
                 capabilities=AgentCapabilities(push_notifications=True, streaming=False),
                 provider=AgentProvider(
                     organization="ATX Foundation Partner",
-                    url="https://mock-atx-foundation-partner.amazon.com",
+                    url="https://mock-atx-foundation-partner.example.com",
                 ),
             )
 

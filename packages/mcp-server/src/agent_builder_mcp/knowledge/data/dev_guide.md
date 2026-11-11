@@ -1141,8 +1141,8 @@ Other New optional fields
   "metadata": {
     "type": "ORCHESTRATOR_AGENT",
     "description": "Deep",
-    "ownerName": "linchenk",
-    "ownerContactInfo": "linchenk+test@amazon.com",
+    "ownerName": "example-owner",
+    "ownerContactInfo": "agent-owner@example.com",
     "ownerType": "DIRECT_AGENT",
     "customerConfigurationRequired": false,
     "jobOrchestrator": true,
@@ -1851,9 +1851,9 @@ Expected response
     "metadata": {
         "type": "ORCHESTRATOR_AGENT",
         "description": "Deep",
-        "ownerName": "linchenk",
+        "ownerName": "example-owner",
         "ownerAccountId": "<Account-A>",
-        "ownerContactInfo": "linchenk+test@amazon.com",
+        "ownerContactInfo": "agent-owner@example.com",
         "ownerType": "DIRECT_AGENT",
         "customerConfigurationRequired": false,
         "customerConfiguredAgentDependencies": []
@@ -1878,11 +1878,11 @@ Expected response
                         "name": "Agent Provider",
                         "description": "Agent owner information.",
                         "params": {
-                            "name": "linchenk",
+                            "name": "example-owner",
                             "accountId": "<Account-A>",
                             "ownerType": "DIRECT_AGENT",
                             "contactInfo": [
-                                { "type": "email", "value": "linchenk+test@amazon.com" }
+                                { "type": "email", "value": "agent-owner@example.com" }
                             ]
                         }
                     },

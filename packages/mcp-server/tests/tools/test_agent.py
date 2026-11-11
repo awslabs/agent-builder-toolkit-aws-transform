@@ -100,7 +100,7 @@ class TestUpdateAgent:
                 description="Updated",
                 owner_name="NewTeam",
                 deprecated=True,
-                owner_contact_info="team@amazon.com",
+                owner_contact_info="team@example.com",
             )
 
         mock_client.update_agent.assert_called_once_with(
@@ -108,7 +108,7 @@ class TestUpdateAgent:
             description="Updated",
             ownerName="NewTeam",
             deprecated=True,
-            ownerContactInfo="team@amazon.com",
+            ownerContactInfo="team@example.com",
         )
 
     def test_update_agent_job_orchestrator(self):
