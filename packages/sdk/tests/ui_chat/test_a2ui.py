@@ -101,6 +101,26 @@ def test_renderer_owned_paths_need_no_initial_value():
     build_a2ui_messages("s", tree, {"form": {"name": ""}})
 
 
+def test_table_columns_must_use_the_catalog_keys():
+    # The simulated-builder run on this PR: columns with `key` rendered three empty rows.
+    rows = [{"name": "payments-api"}]
+    bad = {"component": "Table", "items": rows, "columnDefinitions": [{"id": "name", "header": "Name", "key": "name"}]}
+    assert _issues(bad) == [
+        "root: Table.columnDefinitions[0] has no key 'key' (allowed: field, header, id, sortType, sortable)",
+        "root: Table.columnDefinitions[0] is missing 'field'",
+    ]
+    good = {"component": "Table", "items": rows, "columnDefinitions": [{"id": "name", "header": "Name", "field": "name"}]}
+    assert build_a2ui_messages("s", good)
+
+
+def test_optional_item_keys_may_be_left_out():
+    tree = {"component": "SpaceBetween", "children": [
+        {"component": "Autosuggest", "value": {"path": "/q"}, "options": [{"value": "a"}]},
+        {"component": "BarChart", "series": [{"title": "Lines", "data": [{"x": "a", "y": 1}]}]},
+    ]}
+    assert build_a2ui_messages("s", tree, {"q": ""})
+
+
 def test_rejects_a_bad_surface_id_or_root():
     with pytest.raises(A2UIValidationError):
         build_a2ui_messages("", FORM)

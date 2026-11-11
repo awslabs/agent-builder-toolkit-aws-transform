@@ -134,6 +134,30 @@ def _resolves(model: Any, path: str) -> bool:
     return True
 
 
+def _item_issues(where: str, item_spec: dict, items: list) -> list[str]:
+    """Unknown and missing keys in the items of an array prop, e.g. Table columnDefinitions.
+
+    The web app reads only the keys the catalog names, so a column with `key` instead of
+    `field` renders as an empty column. A key is optional when its catalog entry ends in "?"
+    or says "optional", "default" or "(for ...)"; every other key is required.
+    """
+    allowed, required = set(), set()
+    for k, v in item_spec.items():
+        name = k.rstrip("?")
+        allowed.add(name)
+        text = json.dumps(v).lower()
+        optional = k.endswith("?") or any(w in text for w in ("optional", "default", "(for "))
+        if (isinstance(v, dict) and v.get("required")) or (not isinstance(v, dict) and not optional):
+            required.add(name)
+    issues = []
+    for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            continue
+        issues += [f"{where}[{i}] has no key '{k}' (allowed: {', '.join(sorted(allowed))})" for k in sorted(item.keys() - allowed)]
+        issues += [f"{where}[{i}] is missing '{k}'" for k in sorted(required - item.keys())]
+    return issues
+
+
 def validate(components: list[dict], data_model: dict) -> list[str]:
     """Every catalog and protocol problem in a flat surface, or [] when it will render."""
     catalog = load_catalog()
@@ -160,6 +184,9 @@ def validate(components: list[dict], data_model: dict) -> list[str]:
             if "ChildList" in str(prop_spec.get("type")) and isinstance(c.get(prop), list):
                 refs = [r for r in c[prop] if isinstance(r, str)]
                 issues += [f"{cid}: '{prop}' references unknown component '{r}'" for r in refs if r not in known]
+        for prop, prop_spec in props.items():
+            if isinstance(prop_spec.get("items"), dict) and isinstance(c.get(prop), list):
+                issues += _item_issues(f"{cid}: {name}.{prop}", prop_spec["items"], c[prop])
         for prop in sorted(_ITEM_CONTENT_PROPS & c.keys()):
             items = c[prop] if isinstance(c[prop], list) else []
             refs = [i.get("contentId") for i in items if isinstance(i, dict) and "contentId" in i]

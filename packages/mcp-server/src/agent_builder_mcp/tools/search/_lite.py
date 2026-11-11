@@ -3,6 +3,7 @@
 """Search tools using BM25 keyword search."""
 
 import json
+import re
 
 from ...knowledge._lite import (
     DATA_DIR,
@@ -15,6 +16,23 @@ from ...knowledge._lite import (
 
 # Maximum characters to return per search result
 MAX_CONTENT_LENGTH = 500
+
+
+def _excerpt(doc: str, query_tokens: list[str]) -> str:
+    """The MAX_CONTENT_LENGTH characters of a chunk from the heading that best matches the query.
+
+    A chunk can hold several FAQ answers; cutting it from the start would show the first answer,
+    not the one that matched (e.g. the A2UI answer sits 1255 characters into its chunk).
+    """
+    starts = [0] + [m.start() for m in re.finditer(r"#{2,4} ", doc) if m.start() > 0]
+    wanted = set(query_tokens)
+
+    def hits(i: int) -> int:
+        end = starts[i + 1] if i + 1 < len(starts) else len(doc)
+        return len(wanted & set(tokenize(doc[starts[i] : end])))
+
+    best = max(range(len(starts)), key=lambda i: (hits(i), -i))
+    return doc[starts[best] : starts[best] + MAX_CONTENT_LENGTH]
 
 
 def keyword_search(query: str, top_k: int = 5) -> str:
@@ -37,7 +55,7 @@ def keyword_search(query: str, top_k: int = 5) -> str:
             continue
         doc, meta = documents[idx]
         result: dict[str, object] = {
-            "content": doc[:MAX_CONTENT_LENGTH],
+            "content": _excerpt(doc, query_tokens),
             "score": round(float(scores[idx]), 3),
             "source": meta.get("source", "unknown"),
             "citation": f"[{meta.get('source', 'unknown')}:{meta.get('name', meta.get('operation', 'doc'))}]",
@@ -72,7 +90,7 @@ def search_by_source(query: str, source: str, top_k: int = 5) -> str:
         if meta.get("source") != source_name:
             continue
         result: dict[str, object] = {
-            "content": doc[:MAX_CONTENT_LENGTH],
+            "content": _excerpt(doc, query_tokens),
             "score": round(float(scores[idx]), 3),
             "source": meta.get("source", "unknown"),
             "citation": f"[{meta.get('source', 'unknown')}:{meta.get('name', meta.get('operation', 'doc'))}]",
