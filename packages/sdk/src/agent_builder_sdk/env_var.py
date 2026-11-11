@@ -233,6 +233,9 @@ def get_initial_agent_runtime_context_from_env() -> AgentRuntimeContext:
     agent_instance_id = os.getenv(ENV_KEY_AGENT_INSTANCE_ID)
     initial_auth_token = os.getenv(ENV_KEY_AUTHORIZATION_TOKEN)
 
+    agent_id = os.getenv(ENV_KEY_AGENT_ID)
+    agent_version = os.getenv(ENV_KEY_AGENT_VERSION)
+
     locale = os.getenv("INVOCATION_USER_CURRENT_LOCALE")
     if locale:
         logger.info("Locale from MDE env var: %s", locale)
@@ -241,6 +244,8 @@ def get_initial_agent_runtime_context_from_env() -> AgentRuntimeContext:
         workspace_id=str(workspace_id),
         job_id=str(job_id),
         agent_instance_id=str(agent_instance_id),
+        agent_id=agent_id,
+        agent_version=agent_version,
         initial_auth_token=initial_auth_token,
         locale=locale,
     )
