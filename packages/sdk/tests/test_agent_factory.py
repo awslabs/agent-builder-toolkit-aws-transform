@@ -934,3 +934,55 @@ def test_factory_keeps_its_positional_parameter_order(name):
     }
     params = list(inspect.signature(factories[name]).parameters)
     assert params[: len(_V1_POSITIONAL[name])] == _V1_POSITIONAL[name]
+
+
+class TestExperimentalToolWiring:
+    """Factory wiring for the opt-in experimental tools."""
+
+    @mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
+    @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
+    def test_code_interpreter_tools_added_when_enabled(self, *mocks):
+        mock_orchestrator = mocks[-1]
+        mock_orchestrator.return_value = mock.Mock()
+
+        fake_tools = [mock.Mock(name="code_interpreter"), mock.Mock(name="stage_file_to_sandbox")]
+        with mock.patch(
+            "agent_builder_sdk.experimental.code_interpreter.create_code_interpreter_tool",
+            return_value=fake_tools,
+        ):
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="p", enable_code_interpreter=True
+            )
+
+        custom_tools = mock_orchestrator.call_args.kwargs["custom_tools"]
+        assert fake_tools[0] in custom_tools
+        assert fake_tools[1] in custom_tools
+
+    @mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
+    @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
+    def test_execute_shell_added_when_enabled(self, *mocks):
+        mock_orchestrator = mocks[-1]
+        mock_orchestrator.return_value = mock.Mock()
+
+        create_default_async_orchestrator_with_subagent(system_prompt="p", enable_shell=True)
+
+        custom_tools = mock_orchestrator.call_args.kwargs["custom_tools"]
+        from agent_builder_sdk.experimental.shell_execution import execute_shell
+
+        assert execute_shell in custom_tools
