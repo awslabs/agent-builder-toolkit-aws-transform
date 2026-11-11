@@ -27,7 +27,9 @@ dependencies = [
     # Pin to the mcp 1.x major the toolkit is tested against; mcp 2.0.0 is a
     # breaking release (see issue #77). Widen once verified against 2.x.
     "mcp>=1.0,<2.0",
-    "strands-agents>=1.30.0",
+    # 1.50.2 keeps every thinking block and its own signature when a turn has several
+    # (Claude 5.5 does); earlier versions drop or corrupt them.
+    "strands-agents>=1.50.2",
     "strands-agents-tools>=0.2",
     "uvicorn>=0.20",
     "structlog",

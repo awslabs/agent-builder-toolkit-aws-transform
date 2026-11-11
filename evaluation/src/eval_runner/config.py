@@ -121,7 +121,7 @@ class EvalConfig:
     agent_class: str | None = None
     metrics: list[str] = field(default_factory=lambda: ["assertion_pass_rate"])
     max_workers: int = 1
-    model_id: str = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+    model_id: str = "us.anthropic.claude-sonnet-5-5"
     output_path: Path = field(default_factory=lambda: Path("results.json"))
     # ACP execution settings (set when using ACPAgent). None for the
     # execution-free scoring path.
@@ -135,7 +135,7 @@ class EvalConfig:
             agent_class=data.get("agent_class"),
             metrics=data.get("metrics", ["assertion_pass_rate"]),
             max_workers=data.get("max_workers", 1),
-            model_id=data.get("model_id", "us.anthropic.claude-sonnet-4-20250514-v1:0"),
+            model_id=data.get("model_id", "us.anthropic.claude-sonnet-5-5"),
             output_path=Path(data["output_path"]) if "output_path" in data else Path("results.json"),
             execution_config=cls._execution_config_from_dict(data.get("agent")),
         )
@@ -175,7 +175,7 @@ class EvolutionConfig(EvalConfig):
             agent_class=data.get("agent_class"),
             metrics=data.get("metrics", ["assertion_pass_rate"]),
             max_workers=data.get("max_workers", 1),
-            model_id=data.get("model_id", "us.anthropic.claude-sonnet-4-20250514-v1:0"),
+            model_id=data.get("model_id", "us.anthropic.claude-sonnet-5-5"),
             output_path=Path(data["output_path"]) if "output_path" in data else Path("results.json"),
             target=data.get("target", "prompt"),
             max_iterations=data.get("max_iterations", 5),

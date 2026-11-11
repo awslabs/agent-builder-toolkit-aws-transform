@@ -124,7 +124,7 @@ class BaseAgentServer:
         custom_tools: Optional[List[Any]] = None,
         custom_mcp_clients: Optional[List[MCPClient]] = None,
         agent_lifecycle_hooks: Optional[List[HookProvider]] = None,
-        model_id: str = "anthropic.claude-sonnet-4-5-20250929-v1:0",
+        model_id: str = "anthropic.claude-sonnet-5-5",
         agent_evaluation_card: Optional[EvaluationCard] = None,
         agent_config_override: Dict[str, Any] = {},
     ):

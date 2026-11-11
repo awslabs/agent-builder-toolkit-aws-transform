@@ -41,7 +41,7 @@ def test_create_parser_defaults(parser):
 
     # Check default values
     assert args.binary_location == "/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp"
-    assert args.model_id == "anthropic.claude-sonnet-4-5-20250929-v1:0"
+    assert args.model_id == "anthropic.claude-sonnet-5-5"
     assert args.region == "us-west-2"
     assert args.local_testing is False
     assert args.guardrail_version == "1"

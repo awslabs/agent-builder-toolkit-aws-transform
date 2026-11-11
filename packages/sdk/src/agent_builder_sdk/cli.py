@@ -89,7 +89,7 @@ def create_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--model_id",
-        default="anthropic.claude-sonnet-4-5-20250929-v1:0",
+        default="anthropic.claude-sonnet-5-5",
         help="Bedrock model ID to use",
     )
 

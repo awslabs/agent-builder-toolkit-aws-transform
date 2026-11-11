@@ -242,7 +242,6 @@ python -m test_data_generator.cli \
   --source-context /path/to/agent/source/ \
   --count 20 \
   --diversity 0.95 \
-  --temperature 0.9 \
   --output generated_tests/edge_cases/
 ```
 
@@ -344,13 +343,12 @@ python -m test_data_generator.cli \
 
 
 ```bash
-# Generate stable, deterministic tests
+# Lower diversity for a stable regression suite
 python -m test_data_generator.cli \
   --teacher-samples test_samples/ \
   --source-context /path/to/agent/ \
   --count 40 \
   --diversity 0.5 \
-  --temperature 0.7 \
   --output regression_suite/
 ```
 

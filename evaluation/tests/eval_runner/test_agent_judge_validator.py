@@ -77,8 +77,8 @@ class TestAgentJudgeValidator:
         client = FakeLLMClient(
             response='{"verdict": "ACCEPT", "reasoning": "ok"}'
         )
-        v = AgentJudgeValidator(llm_client=client, model_id="anthropic.claude-opus-4-0-20250514")
-        assert v.model_id == "anthropic.claude-opus-4-0-20250514"
+        v = AgentJudgeValidator(llm_client=client, model_id="anthropic.claude-opus-5-5")
+        assert v.model_id == "anthropic.claude-opus-5-5"
 
     def test_details_contain_raw_response(self):
         raw = '{"verdict": "ACCEPT", "reasoning": "looks good"}'

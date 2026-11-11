@@ -29,7 +29,7 @@ def run_smoke_tests():
     try:
         analyzer = DomainAnalyzer(
             region_name='us-west-2',
-            model_id='us.anthropic.claude-opus-4-5-20251101-v1:0'
+            model_id='us.anthropic.claude-opus-5-5'
         )
         print(f"PASS: DomainAnalyzer initialized")
     except Exception as e:

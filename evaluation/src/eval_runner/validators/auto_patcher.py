@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from eval_runner.validators.interface import LLMClient, PatchResult
 
-_DEFAULT_MODEL_ID = "anthropic.claude-sonnet-4-20250514"
+_DEFAULT_MODEL_ID = "anthropic.claude-sonnet-5-5"
 
 
 class AutoPatcher:

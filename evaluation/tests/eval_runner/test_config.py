@@ -15,7 +15,7 @@ class TestEvalConfig:
         assert config.agent_class is None
         assert config.metrics == ["assertion_pass_rate"]
         assert config.max_workers == 1
-        assert config.model_id == "us.anthropic.claude-sonnet-4-20250514-v1:0"
+        assert config.model_id == "us.anthropic.claude-sonnet-5-5"
         assert config.output_path == Path("results.json")
 
     def test_custom_values(self):

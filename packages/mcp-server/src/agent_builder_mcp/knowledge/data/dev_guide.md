@@ -672,9 +672,9 @@ Minimal IAM user/role policy:
 }
 ```
 
-Default Bedrock Model: us.anthropic.claude-sonnet-4-5-20250929-v1:0
+Default Bedrock Model: us.anthropic.claude-sonnet-5-5
 
-IMPORTANT: Always use cross-region inference profile IDs (prefixed with "us.") instead of raw model IDs when calling Bedrock. Raw model IDs like "anthropic.claude-sonnet-4-5-20250929-v1:0" will fail with "Invocation with on-demand throughput isn't supported". Use "us.anthropic.claude-sonnet-4-5-20250929-v1:0" instead.
+IMPORTANT: Always use cross-region inference profile IDs (prefixed with "us.") instead of raw model IDs when calling Bedrock. Raw model IDs like "anthropic.claude-sonnet-5-5" will fail with "Invocation with on-demand throughput isn't supported". Use "us.anthropic.claude-sonnet-5-5" instead.
 
 NOTE: When adding permissions for transform-agents using the IAM console, it may show an Error indicating Invalid Service in Action (sample image below). This is because the service is not yet a public AWS Service. This is not a blocker, and clicking the Next should create the IAM policy.
 
