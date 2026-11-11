@@ -8,14 +8,17 @@ import os
 from unittest import mock
 
 import pytest
+from strands.vended_plugins.skills import Skill
 
 from agent_builder_sdk.agent_factory import (
+    _PLATFORM_SKILLS_DIR,
     create_default_async_orchestrator,
     create_default_async_orchestrator_with_subagent,
     create_default_async_subagent,
     create_default_orchestrator,
     create_default_orchestrator_with_subagent,
     create_default_subagent,
+    read_platform_skill_file,
 )
 from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
     BlankReplyHookProvider,
@@ -899,25 +902,30 @@ class TestOrchestratorOptions:
         assert mock_orchestrator.call_args.kwargs["enable_prompt_caching"] is True
 
 
-# The 1.0 positional order of each orchestrator factory. New parameters go after these, so a
+# The released (1.1.0) positional order of each orchestrator factory. New parameters go after these, so a
 # caller passing arguments by position keeps binding them to the same names.
 _V1_POSITIONAL = {
     "create_default_orchestrator": [
         "mcp_client", "storage_dir", "system_prompt", "custom_tools", "model_id", "model",
         "with_base_guardrails", "trace_attributes", "metrics_config",
+        "locale", "conversation_repository", "memory_manager", "boto_client_config",
     ],
     "create_default_async_orchestrator": [
         "mcp_client", "storage_dir", "system_prompt", "custom_tools", "model_id", "model",
         "with_base_guardrails", "metrics_config",
+        "locale", "conversation_repository", "memory_manager", "boto_client_config",
     ],
     "create_default_orchestrator_with_subagent": [
         "system_prompt", "mcp_client", "storage_dir", "custom_tools", "model_id", "model",
         "with_base_guardrails", "metrics_config",
+        "locale", "conversation_repository", "memory_manager", "boto_client_config",
     ],
     "create_default_async_orchestrator_with_subagent": [
         "system_prompt", "mcp_client", "storage_dir", "custom_tools", "model_id", "model",
         "with_base_guardrails", "trace_attributes", "excluded_mcp_tool_names", "metrics_config",
         "enable_skills", "skills_dir", "enable_code_execution",
+        "locale", "conversation_repository", "memory_manager",
+        "enable_blank_reply_continuation", "enable_prompt_caching", "boto_client_config",
     ],
 }
 
@@ -934,3 +942,95 @@ def test_factory_keeps_its_positional_parameter_order(name):
     }
     params = list(inspect.signature(factories[name]).parameters)
     assert params[: len(_V1_POSITIONAL[name])] == _V1_POSITIONAL[name]
+
+
+class TestPlatformKnowledge:
+    """enable_platform_skills loads the platform skills and appends the platform contract;
+    with it off (the default for every 1.0 consumer) neither happens."""
+
+    @mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
+    @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
+    def test_platform_skills_on_loads_skills_and_appends_contract(self, *mocks):
+        mock_orchestrator = mocks[-1]
+        mock_orchestrator.return_value = mock.Mock()
+
+        with mock.patch("strands.vended_plugins.skills.AgentSkills") as mock_skills, mock.patch(
+            "agent_builder_sdk.agent_factory.get_platform_skills_contract_prompt",
+            return_value="CONTRACT",
+        ):
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt", enable_platform_skills=True
+            )
+
+        sources = mock_skills.call_args.kwargs["skills"]
+        assert any(str(s).endswith("platform_skills") for s in sources)
+        prompt = mock_orchestrator.call_args.kwargs["system_prompt"]
+        assert prompt == "task prompt\n\nCONTRACT"
+        assert read_platform_skill_file in mock_orchestrator.call_args.kwargs["custom_tools"]
+
+    @mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
+    @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
+    def test_platform_skills_off_leaves_prompt_and_plugins_untouched(self, *mocks):
+        mock_orchestrator = mocks[-1]
+        mock_orchestrator.return_value = mock.Mock()
+
+        create_default_async_orchestrator_with_subagent(system_prompt="task prompt")
+
+        call_kwargs = mock_orchestrator.call_args.kwargs
+        assert call_kwargs["system_prompt"] == "task prompt"
+        assert call_kwargs["plugins"] is None
+        assert read_platform_skill_file not in call_kwargs["custom_tools"]
+
+    def test_packaged_platform_skills_load_strictly(self):
+        names = {Skill.from_file(p, strict=True).name for p in _PLATFORM_SKILLS_DIR.glob("*/SKILL.md")}
+        assert names == {
+            "artifact-io",
+            "episodic-memory",
+            "hitl-forms",
+            "hitl-loop",
+            "job-plan",
+            "knowledge-base",
+            "subagent-orchestration",
+            "user-chat",
+        }
+
+    def test_read_platform_skill_file_reads_a_reference(self):
+        text = read_platform_skill_file(skill_name="hitl-loop", path="references/recovery.md")
+        assert text.startswith("# HITL Recovery")
+
+    def test_read_platform_skill_file_stays_inside_platform_skills(self):
+        for skill_name, path in [
+            ("hitl-loop", "../../agent_factory.py"),
+            ("..", "agent_factory.py"),
+            ("hitl-loop", "/etc/passwd"),
+            ("/etc", "passwd"),
+            ("hitl-loop", "references/missing.md"),
+        ]:
+            assert read_platform_skill_file(skill_name=skill_name, path=path).startswith("Error:")
+
+    def test_read_platform_skill_file_rejects_symlink_escape_and_oversize(self, tmp_path, monkeypatch):
+        skill_dir = tmp_path / "skills" / "demo"
+        skill_dir.mkdir(parents=True)
+        (tmp_path / "outside.md").write_text("outside")
+        (skill_dir / "link.md").symlink_to(tmp_path / "outside.md")
+        (skill_dir / "big.md").write_text("x" * (64 * 1024 + 1))
+        monkeypatch.setattr("agent_builder_sdk.agent_factory._PLATFORM_SKILLS_DIR", tmp_path / "skills")
+
+        assert read_platform_skill_file(skill_name="demo", path="link.md").startswith("Error:")
+        assert read_platform_skill_file(skill_name="demo", path="big.md").startswith("Error:")

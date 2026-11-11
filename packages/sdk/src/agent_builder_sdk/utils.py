@@ -44,6 +44,10 @@ def get_base_guardrail_prompt() -> str:
     return get_prompt_with_name("base_guardrails")
 
 
+def get_platform_skills_contract_prompt() -> str:
+    return get_prompt_with_name("platform_skills_contract")
+
+
 def get_prompt_with_name(file_name: str) -> str:
     return read_text("agent_builder_sdk.prompts", f"{file_name}.md").strip()
 

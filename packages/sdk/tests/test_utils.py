@@ -27,6 +27,7 @@ from agent_builder_sdk.utils import (
     describe_agent_result,
     extract_source_information,
     extract_text_from_strands_agent_response,
+    get_platform_skills_contract_prompt,
     get_prompt,
     mcp_session_active,
     process_extension_handlers,
@@ -1179,6 +1180,13 @@ class TestWriteContentToFile:
 
             # Verify directory was created
             assert os.path.exists(os.path.dirname(file_path))
+
+
+def test_get_platform_skills_contract_prompt_ships():
+    # Reads the real prompt file (no mock) through importlib.resources.
+    contract = get_platform_skills_contract_prompt()
+    assert "Orient, then plan" in contract
+    assert "plan step id" in contract
 
 
 def _assert_tool_uses_immediately_resolved(messages):
