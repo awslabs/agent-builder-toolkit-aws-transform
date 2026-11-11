@@ -630,6 +630,6 @@ You can combine multiple patterns for complex UIs:
 
 ## Next Steps
 
-- Test patterns in Storybook: `https://assets.transform-alpha-intg.us-west-2.on.aws/storybook/index.html?path=/story/components-hitlenginerenderer--playground&globals=locale:en`
+- Test patterns in the rendering engine's Storybook playground
 - Validate JSON: Ask me to validate your customized pattern
 - Learn more: See `component-library.md` for all available components

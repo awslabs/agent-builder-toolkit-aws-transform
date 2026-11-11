@@ -60,7 +60,7 @@ CORRECT: { "data": [{ "title": "Healthy", "value": 45 }, { "title": "Warning", "
 ## Testing in Storybook
 
 1. Copy generated JSON
-2. Open: `https://assets.transform-alpha-intg.us-west-2.on.aws/storybook/index.html?path=/story/components-hitlenginerenderer--playground&globals=locale:en`
+2. Open the rendering engine's Storybook playground
 3. Paste into input area → see rendered UI
 4. Test interactions (type in fields, upload files, select options)
 5. Iterate as needed

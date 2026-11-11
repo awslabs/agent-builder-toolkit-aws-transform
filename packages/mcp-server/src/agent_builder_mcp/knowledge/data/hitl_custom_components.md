@@ -38,7 +38,7 @@ Create a file in `TransformUIComponents/src/DynamicHITLRenderEngine/Atoms/`:
 
 ```typescript
 // MyWrappedSelect.tsx
-import Select, { SelectProps } from '@amzn/awsui-components-react/polaris/select';
+import Select, { SelectProps } from '@cloudscape-design/components/select';
 import { FC, useState } from 'react';
 import { useFieldInput } from '../HITLCallbackContext';
 
@@ -130,7 +130,7 @@ And optionally add prop validation:
 ### Step 5: Test
 
 1. Build the package: `npm run build`
-2. Open Storybook: `https://assets.transform-alpha-intg.us-west-2.on.aws/storybook/index.html?path=/story/components-hitlenginerenderer--playground&globals=locale:en`
+2. Open the rendering engine's Storybook playground
 3. Paste test JSON:
 ```json
 {
@@ -152,12 +152,6 @@ And optionally add prop validation:
 }
 ```
 4. Verify: Component renders, selection works, submit button enables after selection
-
-### Step 6: Create CR and Deploy
-
-1. Commit changes to `TransformUIComponents`
-2. Create CR: `cr --summary "[TransformUIComponents] Add wrapped Select component"`
-3. After merge, the component is available to all teams using the rendering engine
 
 ---
 
@@ -292,9 +286,3 @@ These are already registered in the engine — study them as examples:
 | ContentLoaderWrapper | `Atoms/ContentLoader.tsx` | No | Skeleton animation |
 
 **Source:** `TransformUIComponents/src/DynamicHITLRenderEngine/Atoms`
-
----
-
-## Support
-
-- **Slack:** #atx-foundation-partner-ux

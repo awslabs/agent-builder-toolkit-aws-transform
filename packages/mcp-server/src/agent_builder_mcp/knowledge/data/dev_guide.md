@@ -139,8 +139,6 @@
     - [RefreshAuthToken](#refreshauthtoken)
     - [SendMessage](#sendmessage)
     - [CreateWorklog](#createworklog)
-    - [TestOperation](#testoperation)
-    - [PreProdTestOperation](#preprodtestoperation)
   - [AWS Transform Agent Registry External API Specification](#aws-transform-agent-registry-external-api-specification)
     - [Common Error Responses](#common-error-responses)
     - [Data Types and Constraints](#data-types-and-constraints)
@@ -3339,32 +3337,6 @@ Request Parameters:
 
 Response: - worklogId (String) - REQUIRED - UUID of created worklog
 
-### TestOperation
-
-Purpose: Test operation for development/debugging
-
-Request Parameters:
-
-```
-- requestContext (RequestContext) - REQUIRED
-- testPayload (TestPayload) - Test data
-```
-
-Response: - result (TestResult) - REQUIRED - Test execution result
-
-### PreProdTestOperation
-
-Purpose: Pre-production test operation
-
-Request Parameters:
-
-```
-- requestContext (RequestContext) - REQUIRED
-- testConfig (PreProdTestConfig) - REQUIRED - Test configuration
-```
-
-Response: - testResults (PreProdTestResults) - REQUIRED - Test execution results
-
 ## AWS Transform Agent Registry External API Specification
 
 This section provides comprehensive API documentation for the AWS Transform Dynamic Agent Registry, including new features for access control, provisioned compute support, and customer configuration management.
@@ -4331,14 +4303,7 @@ Output schema
 
 # Reference
 
-- [🚧 WIP] AWS Transform Agent Developer Guide
-- [WIP][External][Confidential] AWS Transform Agent Developer Guide
-
 Agent Builder Base Agent SDK readme https://github.com/awslabs/agent-builder-toolkit-aws-transform/blob/main/packages/sdk/README.md
-
-AWS Transform integration with Genesis
-
-- Partner Engagement for Q Transform Platform
 
 | Roles | Used by | Purpose |
 | --- | --- | --- |

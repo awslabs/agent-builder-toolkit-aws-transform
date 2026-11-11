@@ -222,7 +222,6 @@ The system enforces purely declarative JSON. The rendering engine:
 | Wrapped Components (Atoms) | `TransformUIComponents/src/DynamicHITLRenderEngine/Atoms/` |
 | Component Registry | `TransformUIComponents/src/componentRegistry.ts` |
 | Schema Registry | `TransformUIComponents/schemaRegistry/` |
-| Storybook Playground | `https://assets.transform-alpha-intg.us-west-2.on.aws/storybook/index.html?path=/story/components-hitlenginerenderer--playground` |
 
 ## CRITICAL Severity Approval Workflow
 
