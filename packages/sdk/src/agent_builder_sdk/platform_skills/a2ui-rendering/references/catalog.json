@@ -870,7 +870,7 @@
           "description": "Array of line/threshold series or a path binding.",
           "items": {
             "title": "string",
-            "type": "enum 'line' | 'threshold'",
+            "type": "enum 'line' | 'threshold' (default: inferred \u2014 'threshold' if only y is present)",
             "data": "[{x: string|number, y: number}] (for line)",
             "y?": "number (for threshold)",
             "color?": "string (hex)"
@@ -960,7 +960,7 @@
           "description": "Array of area/threshold series or a path binding.",
           "items": {
             "title": "string",
-            "type": "enum 'area' | 'threshold'",
+            "type": "enum 'area' | 'threshold' (default: inferred \u2014 'threshold' if only y is present)",
             "data": "[{x: string|number, y: number}] (for area)",
             "y?": "number (for threshold)",
             "color?": "string (hex)"

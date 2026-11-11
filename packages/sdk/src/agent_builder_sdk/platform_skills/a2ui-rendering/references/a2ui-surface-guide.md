@@ -599,7 +599,7 @@ All cartesian charts (BarChart, LineChart, AreaChart, MixedLineBarChart) share t
 
 PieChart uses `data` (array of `{title, value, color?}`) instead of `series`. Set `variant: "donut"` with `innerMetricValue` and `innerMetricDescription` for donut charts with a center metric.
 
-For threshold lines, use `{title, type: "threshold", y: 100}` — if `type` is omitted, the renderer infers `threshold` when only `y` is present (no `data`). BarChart also supports threshold series alongside bars.
+For threshold lines, use `{title, type: "threshold", y: 100}` — if `type` is omitted on a BarChart, LineChart or AreaChart series, the renderer infers `threshold` when only `y` is present (no `data`). BarChart also supports threshold series alongside bars.
 
 AreaChart requires all area series to share the same x values in the same order — Cloudscape stacks by array index, not by x key.
 

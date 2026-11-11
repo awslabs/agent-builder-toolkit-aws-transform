@@ -38,7 +38,7 @@ owns only the component catalog, protocol, bindings, validation, and delivery co
 
 Do not hand-author an `atx-a2ui` block; the tool validates it against the catalog.
 
-Describe one nested root component. When `children`, `footer`, `actions` or `description`
+Describe one nested root component. When `children`, `footer`, `actions` or a `Header` `description`
 holds child components, nest those component objects directly. Keep text-valued `children`
 as text. Put the catalog's platform action value or event object directly in `action`; do not
 wrap an action event as a component. For `Tabs` and `MultiStepForm`, put a nested component
@@ -261,10 +261,13 @@ resolves to `false`, the component renders nothing.
 
 ## Self-Validation
 
-`render_a2ui_surface` checks component names, props, required props, IDs, child references,
-non-breaking spaces, and that every bound path has an initial value. You still own:
+`render_a2ui_surface` checks component names, props, required props, value forms (text,
+component list, array, boolean, number), enum values, item keys, the row field names of `Table`
+and `Cards`, function names, IDs, child references, non-breaking spaces, and that every bound
+path has an initial value. You still own:
 
-1. Prop value types match the catalog (for example, `MermaidDiagram` `content` is a string).
+1. The content of a plain `string` prop (for example, `Link` `href`): the tool checks that the
+   value is text, not what the text says.
 2. Every string inside the surface is literal plain text. No HTML or Markdown in component
    props or bound display values; use catalog components for headings, emphasis, and layout.
 3. Use `SpaceBetween` for vertical layouts and `ColumnLayout` (inside a `Container`) for grids.

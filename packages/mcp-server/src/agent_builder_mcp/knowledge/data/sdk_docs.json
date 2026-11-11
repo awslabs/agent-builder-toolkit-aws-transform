@@ -4723,7 +4723,7 @@
     "kind": "function",
     "file": "agent_builder_sdk/ui_chat/a2ui.py",
     "module": "agent_builder_sdk.ui_chat.a2ui",
-    "docstring": "Turn one nested component tree into the flat A2UI adjacency list.\n\nChild components nested in any prop, or in ``tabs``/``steps`` items as ``content``,\nbecome ID references. The root gets ID ``root`` and comes first; other components\nkeep their ``id`` or get a generated one.",
+    "docstring": "Turn one nested component tree into the flat A2UI adjacency list.\n\nChild components nested in a prop, or in ``tabs``/``steps`` items as ``content``, become\nID references. Inline rows of a DynamicValue prop such as ``Table.items`` stay data. The\nroot gets ID ``root`` and comes first; other components keep their ``id`` or get a generated\none. A tab or step with no ``id`` gets the ID of its content.",
     "signature": "flatten(component_tree: dict) -> list[dict]",
     "description": "Parameters:\n  component_tree: dict (required)"
   },
@@ -4741,9 +4741,9 @@
     "kind": "function",
     "file": "agent_builder_sdk/ui_chat/a2ui.py",
     "module": "agent_builder_sdk.ui_chat.a2ui",
-    "docstring": "Validate an A2UI surface for AWS Transform chat and return the block to put in your reply.\n\nArgs:\n    surface_id: Stable kebab-case ID, e.g. \"migration-preferences\" or \"display-servers\".\n    component_tree: One nested root component, e.g. {\"component\": \"SpaceBetween\", \"children\": [...]}.\n        Nest child components directly in children, footer, actions or description, and in\n        tabs/steps items as \"content\". IDs are optional.\n    data_model: Initial data model, e.g. {\"form\": {\"region\": \"\"}}. Every bound path needs a value.\n\nReturns:\n    The fenced atx-a2ui block. Copy it unchanged into your reply. On failure, \"Error:\" and every\n    problem to fix before calling again.",
+    "docstring": "Validate an A2UI surface for AWS Transform chat and return the block to put in your reply.\n\nArgs:\n    surface_id: Stable kebab-case ID, e.g. \"migration-preferences\" or \"display-servers\".\n    component_tree: One nested root component, e.g. {\"component\": \"SpaceBetween\", \"children\": [...]}.\n        Nest child components directly in children, footer, actions or a Header description,\n        and in tabs/steps items as \"content\". IDs are optional.\n    data_model: Initial data model, e.g. {\"form\": {\"region\": \"\"}}. Every bound path needs a value.\n\nReturns:\n    The fenced atx-a2ui block. Copy it unchanged into your reply. On failure, \"Error:\" and every\n    problem to fix before calling again.",
     "signature": "render_a2ui_surface(surface_id: str, component_tree: dict, data_model: Optional[dict] = None) -> str",
-    "description": "Parameters:\n  surface_id: str (required) - Stable kebab-case ID, e.g. \"migration-preferences\" or \"display-servers\".\n  component_tree: dict (required) - One nested root component, e.g. {\"component\": \"SpaceBetween\", \"children\": [...]}. Nest child components directly in children, footer, actions or description, and in tabs/steps items as \"content\". IDs are optional.\n  data_model: Optional[dict] (default=None) - Initial data model, e.g. {\"form\": {\"region\": \"\"}}. Every bound path needs a value."
+    "description": "Parameters:\n  surface_id: str (required) - Stable kebab-case ID, e.g. \"migration-preferences\" or \"display-servers\".\n  component_tree: dict (required) - One nested root component, e.g. {\"component\": \"SpaceBetween\", \"children\": [...]}. Nest child components directly in children, footer, actions or a Header description, and in tabs/steps items as \"content\". IDs are optional.\n  data_model: Optional[dict] (default=None) - Initial data model, e.g. {\"form\": {\"region\": \"\"}}. Every bound path needs a value."
   },
   {
     "name": "suggest_replies",
