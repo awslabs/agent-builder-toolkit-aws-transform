@@ -7,6 +7,8 @@ from unittest import mock
 import pytest
 import requests
 from botocore.exceptions import ClientError
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from agent_builder_sdk.agentic_framework import common
 from agent_builder_sdk.errors import InternalBaseAgentError, UserBaseAgentError
@@ -99,7 +101,10 @@ def test_upload_from_presigned_url_success(session, response, upload_response):
 
     expected_headers = {"Content-Type": "application/octet-stream"}
     session.put.assert_called_once_with(
-        "https://test-url.com", data=content, headers=expected_headers
+        "https://test-url.com",
+        data=content,
+        headers=expected_headers,
+        timeout=common._PRESIGNED_UPLOAD_TIMEOUT,
     )
 
 
@@ -121,6 +126,100 @@ def test_upload_from_presigned_url_connection_error(session, upload_response):
 
     with pytest.raises(InternalBaseAgentError):
         common.upload_from_presigned_url(upload_response, content)
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        requests.exceptions.ReadTimeout("read timed out"),
+        requests.exceptions.ConnectTimeout("connect timed out"),
+        requests.exceptions.ConnectionError("connection failed"),
+    ],
+)
+def test_upload_from_presigned_url_wraps_every_transport_error(exc, session, upload_response):
+    """ReadTimeout does not subclass ConnectionError, so it needs catching explicitly.
+
+    Without it the timeout this function now passes would escape as an unhandled
+    ReadTimeout -- the very failure the timeout exists to contain.
+    """
+    session.put.side_effect = exc
+
+    with pytest.raises(InternalBaseAgentError):
+        common.upload_from_presigned_url(upload_response, b"test content")
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        requests.exceptions.ReadTimeout("read timed out"),
+        requests.exceptions.ConnectTimeout("connect timed out"),
+        requests.exceptions.ConnectionError("connection failed"),
+    ],
+)
+def test_download_from_presigned_url_wraps_every_transport_error(
+    exc, session, download_response, tmp_path
+):
+    """Same timeout handling on the download path."""
+    session.get.side_effect = exc
+
+    with pytest.raises(InternalBaseAgentError):
+        common.download_from_presigned_url(download_response, str(tmp_path / "file.zip"))
+
+
+def test_upload_read_timeout_is_looser_than_download():
+    """An upload waits on S3 to acknowledge the PUT, which outlasts any single read
+    while streaming a download, so a shared 60s bound would fail large uploads that
+    succeed today."""
+    assert common._PRESIGNED_UPLOAD_TIMEOUT[1] > common._PRESIGNED_DOWNLOAD_TIMEOUT[1]
+    assert common._PRESIGNED_UPLOAD_TIMEOUT[0] == common._PRESIGNED_DOWNLOAD_TIMEOUT[0]
+
+
+@pytest.mark.parametrize("method", ["PUT", "GET"])
+@pytest.mark.parametrize("status", [429, 500, 502, 503, 504])
+def test_presigned_url_retry_retries_throttles_and_server_errors(method, status):
+    """A 503 SlowDown must be retried; the previous bare max_retries=3 never retried one."""
+    assert common._PRESIGNED_URL_RETRY.is_retry(method, status) is True
+    assert not Retry.from_int(3).is_retry(method, status)
+
+
+def test_presigned_url_retry_returns_exhausted_response_instead_of_raising():
+    """raise_on_status=False keeps S3 error classification working after retries run out.
+
+    With the urllib3 default (True) an exhausted 503 raises RetryError, which is neither
+    caught as a ConnectionError nor passed to raise_for_s3_error_response, so callers
+    would lose the formatted S3 error they get today.
+    """
+    assert common._PRESIGNED_URL_RETRY.raise_on_status is False
+    assert common._PRESIGNED_URL_RETRY.total == 3
+    assert common._PRESIGNED_URL_RETRY.backoff_factor > 0
+
+
+def test_upload_from_presigned_url_mounts_retry_policy(session, response, upload_response):
+    """The retry policy, not a bare int, is what gets mounted for https."""
+    response.status_code = 200
+    session.put.return_value = response
+
+    common.upload_from_presigned_url(upload_response, b"test content")
+
+    prefix, adapter = session.mount.call_args.args
+    assert prefix == "https://"
+    assert isinstance(adapter, HTTPAdapter)
+    assert adapter.max_retries is common._PRESIGNED_URL_RETRY
+
+
+def test_download_from_presigned_url_mounts_retry_policy(
+    session, response, download_response, tmp_path
+):
+    """The download path shares the upload path's retry policy."""
+    response.content = b"downloaded content"
+    response.status_code = 200
+    session.get.return_value = response
+
+    common.download_from_presigned_url(download_response, str(tmp_path / "file.zip"))
+
+    prefix, adapter = session.mount.call_args.args
+    assert prefix == "https://"
+    assert adapter.max_retries is common._PRESIGNED_URL_RETRY
 
 
 def test_handle_boto_error():
@@ -145,7 +244,11 @@ def test_download_from_presigned_url_success(session, response, download_respons
     common.download_from_presigned_url(download_response, str(destination_path))
 
     expected_headers = {"Content-Type": "application/octet-stream"}
-    session.get.assert_called_once_with("https://test-download-url.com", headers=expected_headers)
+    session.get.assert_called_once_with(
+        "https://test-download-url.com",
+        headers=expected_headers,
+        timeout=common._PRESIGNED_DOWNLOAD_TIMEOUT,
+    )
     assert destination_path.read_bytes() == b"downloaded content"
 
 
@@ -188,7 +291,9 @@ def test_download_from_presigned_url_capital_p_key(session, response, tmp_path):
     common.download_from_presigned_url(download_response, str(destination_path))
 
     session.get.assert_called_once_with(
-        "https://skill-download-url.com", headers={"host": "s3.amazonaws.com"}
+        "https://skill-download-url.com",
+        headers={"host": "s3.amazonaws.com"},
+        timeout=common._PRESIGNED_DOWNLOAD_TIMEOUT,
     )
     assert destination_path.read_bytes() == b"skill content"
 

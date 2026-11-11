@@ -36,7 +36,7 @@ class CheckpointService:
         Args:
             storage_dir: Base directory for checkpoint storage
             strategy: Checkpoint strategy enum (optional)
-            interval: Checkpoint interval - turns or minutes (default: 30)
+            interval: Checkpoint interval in turns or minutes
         """
         self.storage_dir = storage_dir
         self.strategy = strategy
@@ -104,6 +104,9 @@ class CheckpointService:
                 await asyncio.sleep(10)  # Check every 10 seconds
                 try:
                     if self.manager:
+                        # Run off the event loop: attempt_checkpoint() does CPU-bound
+                        # zip + blocking S3 I/O and would otherwise starve the loop
+                        # (blocking request pickup and /ping health probes).
                         await asyncio.to_thread(self.manager.attempt_checkpoint)
                 except Exception:
                     logger.warning("Background checkpoint error:", exc_info=True)
@@ -125,7 +128,12 @@ class CheckpointService:
                 except asyncio.CancelledError:
                     logger.info("Background checkpointing stopped")
 
-            # Create final checkpoint (force checkpoint regardless of trigger)
+            # Create final checkpoint (force checkpoint regardless of trigger).
+            # Run off the event loop for the same reason as the background task.
+            # The lock in CheckpointManager._execute_checkpoint serializes this
+            # against any background checkpoint whose worker thread is still
+            # in-flight (cancelling the background task does not stop that thread),
+            # so we can't produce a duplicate/overlapping checkpoint.
             if self.manager:
                 logger.info("Creating final checkpoint before shutdown...")
                 success = await asyncio.to_thread(self.manager.force_checkpoint)
