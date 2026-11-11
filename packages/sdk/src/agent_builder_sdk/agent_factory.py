@@ -445,16 +445,16 @@ def create_default_async_orchestrator_with_subagent(
         enable_code_execution: Enable experimental local Python code execution tool.
             WARNING: Code executes locally without sandboxing. Use with caution.
             For sandboxed execution, AgentCore Code Interpreter integration is planned.
+        enable_blank_reply_continuation: Ask the model once more for its reply when a turn ends
+            empty right after tool results (see BlankReplyHookProvider).
+        enable_prompt_caching: Turn on Bedrock prompt caching for the orchestrator's model (see
+            AsyncBaseOrchestrator). Off by default.
         enable_platform_skills: Load the packaged platform-knowledge skills, add the
             read_platform_skill_file tool for their reference files, and append the
             platform-skills contract to the system prompt. For agents running inside an
             AWS Transform job; off by default.
             USE WITH CAUTION: this also rewrites the system prompt (the contract is appended to
             whatever system_prompt you pass).
-        enable_blank_reply_continuation: Ask the model once more for its reply when a turn ends
-            empty right after tool results (see BlankReplyHookProvider).
-        enable_prompt_caching: Turn on Bedrock prompt caching for the orchestrator's model (see
-            AsyncBaseOrchestrator). Off by default.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
