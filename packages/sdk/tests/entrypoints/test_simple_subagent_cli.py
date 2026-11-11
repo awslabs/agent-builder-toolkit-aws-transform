@@ -95,6 +95,23 @@ class TestSimpleSubagentCLI:
 
                 mock_server_instance.start.assert_called_once()
 
+    def test_streaming_builds_a_streaming_capable_subagent(self):
+        """--concurrent-streaming must build the async subagent; the sync one is rejected at init."""
+        test_args = ["simple_subagent_cli.py", "--concurrent-streaming"]
+
+        with mock.patch.object(sys, "argv", test_args), mock.patch(
+            "agent_builder_sdk.entrypoints.simple_subagent_cli.AgentRuntimeServer"
+        ) as mock_server, mock.patch(
+            "agent_builder_sdk.entrypoints.simple_subagent_cli.create_default_async_subagent"
+        ) as mock_async, mock.patch(
+            "agent_builder_sdk.entrypoints.simple_subagent_cli.create_default_subagent"
+        ) as mock_sync:
+            main()
+            mock_server.call_args.kwargs["agent_factory"](mock.Mock(), "/tmp/storage")
+
+        mock_async.assert_called_once()
+        mock_sync.assert_not_called()
+
     def test_main_with_default_values(self):
         """Test main function with default values for optional arguments."""
         test_args = ["simple_subagent_cli.py", "--host", "localhost"]
