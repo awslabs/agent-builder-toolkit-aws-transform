@@ -87,12 +87,13 @@ class AgentProvider:
     url: str
 
 
-# TODO: actual definition
 @dataclass
 class SecurityScheme:
-    """Security scheme definition."""
+    """Security scheme definition (e.g., OAuth2, API key)."""
 
-    pass
+    type: str = ""
+    description: Optional[str] = None
+    flows: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -132,23 +133,64 @@ class AgentMetadata:
     owner_contact_info: str
 
 
-# TODO: actual definition
+@dataclass
+class MdeConfiguration:
+    """MDE (Managed Development Environment) compute configuration."""
+
+    atx_access_role_arn: str = ""
+    bootstrap_role_arn: str = ""
+    environment_role_arn: str = ""
+    storage_size: int = 32
+    devfile: str = ""
+    instance_type: str = "dev.standard1.large"
+
+
+@dataclass
+class AgentCoreConfiguration:
+    """AgentCore (Bedrock) compute configuration."""
+
+    atx_access_role_arn: str = ""
+    runtime_arn: str = ""
+    qualifier: str = "DEFAULT"
+
+
+@dataclass
+class ProvisionedComputeConfiguration:
+    """Provisioned compute — either MDE or AgentCore backed."""
+
+    mde_configuration: Optional[MdeConfiguration] = None
+    agent_core_configuration: Optional[AgentCoreConfiguration] = None
+
+
 @dataclass
 class ComputeConfiguration:
     """Compute configuration for an agent."""
 
-    pass
+    provisioned_compute_configuration: Optional[ProvisionedComputeConfiguration] = None
 
 
-# TODO: actual definition
+@dataclass
+class AgentRecoveryConfiguration:
+    """Recovery configuration for agent failover."""
+
+    recovery_wait_time_seconds: int = 60
+
+
 @dataclass
 class LegacyAgentResiliencyConfiguration:
-    """Legacy agent resiliency configuration."""
+    """Agent resiliency configuration controlling retry and recovery behaviour."""
 
-    pass
+    partner_controller_retry_window_minutes: int = 6
+    agent_recovery_configuration: Optional[AgentRecoveryConfiguration] = None
 
 
-# TODO: the following are not actually optional - computeConfiguration, inputPayloadSchema, outputPayloadSchema
+@dataclass
+class StopAgentConfiguration:
+    """Configuration for how an agent should be stopped (graceful shutdown, timeout, etc.)."""
+
+    graceful_shutdown_timeout_seconds: Optional[int] = None
+
+
 @dataclass
 class AgentConfiguration:
     """Configuration for an agent."""
@@ -164,6 +206,7 @@ class AgentConfiguration:
     objective_negotiation_prompt: Optional[str] = None
     status_msg: Optional[str] = None
     agent_resiliency_configuration: Optional[LegacyAgentResiliencyConfiguration] = None
+    stop_agent_configuration: Optional[StopAgentConfiguration] = None
 
 
 @dataclass
