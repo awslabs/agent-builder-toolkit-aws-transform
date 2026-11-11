@@ -106,10 +106,10 @@ folder is the /kiro folder of the same name.
 There is no local container runtime, so build with your own CodeBuild project (not
 atx-agent-builder):
 - Zip the agent folder, excluding .venv, __pycache__ and .git, and upload it to
-  s3://atx-compose-on-artifacts-<your account ID, from STS>/codebuild-source/
+  s3://{artifact_bucket}/codebuild-source/
   <the agent name>/source.zip
 - Create CodeBuild project <the agent name>-build with that S3 object as its
-  source, the existing CodeBuildAgentImageRole as service role, environment type ARM_CONTAINER,
+  source, the existing {build_role} as service role, environment type ARM_CONTAINER,
   image aws/codebuild/amazonlinux2-aarch64-standard:3.0, compute BUILD_GENERAL1_SMALL, and
   privileged mode on. Do not create or change any IAM role or policy.
 - The buildspec logs in to ECR, creates the repository
