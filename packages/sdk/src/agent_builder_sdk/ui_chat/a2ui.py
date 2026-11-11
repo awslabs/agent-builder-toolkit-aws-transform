@@ -185,6 +185,10 @@ def validate(components: list[dict], data_model: dict) -> list[str]:
                 refs = [r for r in c[prop] if isinstance(r, str)]
                 issues += [f"{cid}: '{prop}' references unknown component '{r}'" for r in refs if r not in known]
         for prop, prop_spec in props.items():
+            # Array, DynamicValue and DataBinding props take an array or a {"path": ...} binding.
+            # A string such as "{{inventory.apps}}" renders as an empty table.
+            if isinstance(c.get(prop), str) and any(t in str(prop_spec.get("type")) for t in ("array", "DynamicValue", "DataBinding")):
+                issues.append(f"{cid}: {name}.{prop} is a string; give an array or a binding like {{\"path\": \"/data/items\"}}")
             if isinstance(prop_spec.get("items"), dict) and isinstance(c.get(prop), list):
                 issues += _item_issues(f"{cid}: {name}.{prop}", prop_spec["items"], c[prop])
         for prop in sorted(_ITEM_CONTENT_PROPS & c.keys()):

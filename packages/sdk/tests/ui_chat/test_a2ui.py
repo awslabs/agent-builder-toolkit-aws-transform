@@ -113,6 +113,15 @@ def test_table_columns_must_use_the_catalog_keys():
     assert build_a2ui_messages("s", good)
 
 
+def test_table_items_must_be_an_array_or_a_binding():
+    # The simulated-builder run on this PR: items "{{inventory.apps}}" rendered "No data".
+    cols = [{"id": "name", "header": "Name", "field": "name"}]
+    bad = {"component": "Table", "items": "{{inventory.apps}}", "columnDefinitions": cols}
+    assert _issues(bad) == ['root: Table.items is a string; give an array or a binding like {"path": "/data/items"}']
+    good = {"component": "Table", "items": {"path": "/inventory/apps"}, "columnDefinitions": cols}
+    assert build_a2ui_messages("s", good, {"inventory": {"apps": [{"name": "payments-api"}]}})
+
+
 def test_optional_item_keys_may_be_left_out():
     tree = {"component": "SpaceBetween", "children": [
         {"component": "Autosuggest", "value": {"path": "/q"}, "options": [{"value": "a"}]},
