@@ -32,17 +32,27 @@ enter the PR number and the head commit you reviewed. Or:
 gh workflow run simulated-builder.yml --ref main -f pr=<number> -f sha=<head commit>
 ```
 
-The PR needs a scenario that exercises its change, either an existing one in `e2e/scenarios/` or
-a new one added by the PR. A new push is not tested until a maintainer reviews it and starts a
-new run with the new SHA.
+The PR needs a scenario that exercises its change: a file in `e2e/scenarios/` on `main` whose
+`pr` is the PR number. The runner reads scenarios from `main` only (a scenario is trusted text; a
+PR is not), so merge the scenario in a separate PR before the run. A new push is not tested
+until a maintainer reviews it and starts a new run with the new SHA.
 
 ## Write a scenario
 
 Copy `scenarios/a2ui-surfaces.md`. A scenario is plain Markdown that a person can follow too:
 
-- One ```` ```json scenario ```` block: `id`, `title`, `pr`, `agent` (a lowercase prefix ending
-  in `-`; the runner appends the account ID), `chat_label`, `workspace`, `job`, and `surface`,
-  what the feature check looks for in the job chat (`component`, `text`, `suggestions`).
+- One ```` ```json scenario ```` block: `id`, `title`, `pr`, `agent` (a lowercase prefix of at
+  most 11 characters ending in `-`; the runner appends the account ID), `chat_label`, `workspace`,
+  `job`, and the feature
+  check: `surface` or `chat` (or both), and optionally `logs`.
+  - `surface`: an A2UI surface that the job chat must render (`component`, `text`, `suggestions`).
+  - `chat`: `{"<web block name>": {"has": [...], "lacks": [...]}}`. The text that the agent adds
+    to the job chat after that message must hold every `has` string and no `lacks` string.
+  - `logs`: `{"has": [...], "lacks": [...]}`, the same check on the deployed agent's own log
+    (CloudWatch), read after the last `web` block.
+  - Matching is exact and case-sensitive, after commas between digits are removed (write
+    `165000`). No `has` string may be in a `kiro` or `web` block: a value from a prompt can pass
+    without the feature (the job chat shows your own message).
 - ```` ```kiro <name> ```` blocks: prompts typed into Kiro, in order. The first is `install`, the
   last ones `cleanup` (and `cleanup-force`).
 - ```` ```web <name> ```` blocks: messages typed into the AWS Transform job chat.
@@ -51,9 +61,10 @@ Copy `scenarios/a2ui-surfaces.md`. A scenario is plain Markdown that a person ca
 Placeholders the runner fills: `{pr}`, `{commit}`, `{short}`, `{repo}` (the PR's head repository),
 `{archive}`, `{pip}` (pip requirements for all five packages at the commit), `{pip_runtime}` (the
 four the agent image needs), `{mcp_from}` (the MCP server at the commit, for `uvx --from`),
-`{agent}`, `{chat_label}`, `{workspace}`. Write prompts the way a developer would; say what to
-build and what to check, not how the harness works. Never put account IDs in a scenario.
-`tests/test_e2e_scenarios.py` checks the format in CI.
+`{agent}`, `{chat_label}`, `{workspace}`, `{artifact_bucket}` (the test account's bucket for build
+sources), `{build_role}` (the existing CodeBuild service role for agent images). Write prompts the
+way a developer would; say what to build and what to check, not how the harness works. Never put
+account IDs in a scenario. `tests/test_e2e_scenarios.py` checks the format in CI.
 
 ## Known workarounds in the scenarios
 
