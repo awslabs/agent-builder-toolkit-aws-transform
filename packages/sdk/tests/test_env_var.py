@@ -8,16 +8,21 @@ import pytest
 
 from agent_builder_sdk.agentic_framework.api_model import AgenticApiRequestContext
 from agent_builder_sdk.env_var import (
+    AUTH_TOKEN_READ_ATTEMPTS,
+    ENV_KEY_MAX_CHECKPOINTS,
+    MAX_ALLOWED_CHECKPOINTS,
     get_agent_context_from_env,
     get_agentic_api_request_context_with_current_token,
     get_bedrock_shared_capacity_role_arn,
     get_initial_agent_runtime_context_from_env,
+    get_max_checkpoints,
     is_external_agentic_api_enabled,
     retrieve_auth_token,
     set_runtime_env_vars,
     should_use_prod_bedrock_capacity,
     validate_required_env_vars,
 )
+from agent_builder_sdk.errors import AuthTokenUnavailableError, BaseAgentError
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 
 
@@ -217,6 +222,87 @@ class TestRetrieveAuthToken:
                     error_message = str(exc_info.value)
                     assert "Failed to read auth token from file" in error_message
                     assert "Permission denied" in error_message
+        finally:
+            os.unlink(temp_file_path)
+
+    def test_retrieve_auth_token_raises_typed_error_consumers_can_catch(self):
+        """The failure is a BaseAgentError, so consumers can tell it from a code bug.
+
+        It stays a ValueError as well, because that is what it used to be raised as and
+        downstream partner agents catch it.
+        """
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with pytest.raises(AuthTokenUnavailableError) as exc_info:
+                retrieve_auth_token()
+
+        assert isinstance(exc_info.value, BaseAgentError)
+        assert isinstance(exc_info.value, ValueError)
+
+    def test_retrieve_auth_token_ignores_key_that_only_shares_a_prefix(self):
+        """ATX_AUTHZ_TOKEN_EXPIRY must not be parsed as the token."""
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
+            temp_file.write("ATX_AUTHZ_TOKEN_EXPIRY=2026-09-09T00:00:00Z\nATX_AUTHZ_TOKEN=real\n")
+            temp_file_path = temp_file.name
+
+        try:
+            with mock.patch.dict(os.environ, {"AUTH_TOKEN_FILE": temp_file_path}, clear=True):
+                assert retrieve_auth_token() == "real"
+        finally:
+            os.unlink(temp_file_path)
+
+    def test_retrieve_auth_token_rereads_until_the_token_appears(self):
+        """A read that races the refresh process succeeds on a later attempt."""
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
+            temp_file.write("ATX_AUTHZ_TOKEN=rotated-token")
+            temp_file_path = temp_file.name
+
+        try:
+            with mock.patch.dict(os.environ, {"AUTH_TOKEN_FILE": temp_file_path}, clear=True):
+                with mock.patch(
+                    "agent_builder_sdk.env_var._read_auth_token_from_file",
+                    side_effect=[None, "rotated-token"],
+                ) as mock_read:
+                    with mock.patch("agent_builder_sdk.env_var.time.sleep") as mock_sleep:
+                        assert retrieve_auth_token() == "rotated-token"
+
+            assert mock_read.call_count == 2
+            mock_sleep.assert_called_once()
+        finally:
+            os.unlink(temp_file_path)
+
+    def test_retrieve_auth_token_gives_up_after_a_bounded_number_of_rereads(self):
+        """The re-read is bounded, so a permanently missing token still fails fast."""
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
+            temp_file.write("SOME_OTHER_KEY=some-value")
+            temp_file_path = temp_file.name
+
+        try:
+            with mock.patch.dict(os.environ, {"AUTH_TOKEN_FILE": temp_file_path}, clear=True):
+                with mock.patch(
+                    "agent_builder_sdk.env_var._read_auth_token_from_file", return_value=None
+                ) as mock_read:
+                    with mock.patch("agent_builder_sdk.env_var.time.sleep"):
+                        with pytest.raises(AuthTokenUnavailableError):
+                            retrieve_auth_token()
+
+            assert mock_read.call_count == AUTH_TOKEN_READ_ATTEMPTS
+        finally:
+            os.unlink(temp_file_path)
+
+    def test_retrieve_auth_token_rereads_after_a_transient_io_error(self):
+        """A transient IOError is retried rather than failing the caller outright."""
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as temp_file:
+            temp_file.write("ATX_AUTHZ_TOKEN=recovered-token")
+            temp_file_path = temp_file.name
+
+        try:
+            with mock.patch.dict(os.environ, {"AUTH_TOKEN_FILE": temp_file_path}, clear=True):
+                with mock.patch(
+                    "agent_builder_sdk.env_var._read_auth_token_from_file",
+                    side_effect=[IOError("Resource temporarily unavailable"), "recovered-token"],
+                ):
+                    with mock.patch("agent_builder_sdk.env_var.time.sleep"):
+                        assert retrieve_auth_token() == "recovered-token"
         finally:
             os.unlink(temp_file_path)
 
@@ -441,3 +527,38 @@ class TestIsExternalAgenticApiEnabled:
     def test_disabled_when_env_var_missing(self):
         """Test function returns False when environment variable is missing."""
         assert is_external_agentic_api_enabled() is False
+
+
+class TestGetMaxCheckpoints:
+    """Tests for get_max_checkpoints function."""
+
+    def test_returns_none_when_unset(self):
+        with mock.patch.dict(os.environ, {}, clear=True):
+            assert get_max_checkpoints() is None
+
+    def test_returns_value_when_greater_than_one(self):
+        with mock.patch.dict(os.environ, {"ATX_MAX_CHECKPOINTS": "5"}, clear=True):
+            assert get_max_checkpoints() == 5
+
+    def test_returns_none_when_one_or_less(self):
+        for value in ("1", "0", "-3"):
+            with mock.patch.dict(os.environ, {"ATX_MAX_CHECKPOINTS": value}, clear=True):
+                assert get_max_checkpoints() is None
+
+    def test_returns_none_on_non_integer(self):
+        with mock.patch.dict(os.environ, {"ATX_MAX_CHECKPOINTS": "abc"}, clear=True):
+            assert get_max_checkpoints() is None
+
+    def test_value_at_upper_bound_passthrough(self):
+        with mock.patch.dict(
+            os.environ, {ENV_KEY_MAX_CHECKPOINTS: str(MAX_ALLOWED_CHECKPOINTS)}, clear=True
+        ):
+            assert get_max_checkpoints() == MAX_ALLOWED_CHECKPOINTS
+
+    def test_value_above_upper_bound_is_clamped(self):
+        with mock.patch.dict(
+            os.environ,
+            {ENV_KEY_MAX_CHECKPOINTS: str(MAX_ALLOWED_CHECKPOINTS + 500)},
+            clear=True,
+        ):
+            assert get_max_checkpoints() == MAX_ALLOWED_CHECKPOINTS

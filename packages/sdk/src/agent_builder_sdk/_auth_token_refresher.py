@@ -4,6 +4,7 @@ import datetime
 import functools
 import logging
 import os
+import signal
 import time
 from multiprocessing import Process
 from typing import TYPE_CHECKING, Any, Dict, Optional
@@ -11,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 from botocore.client import BaseClient
 
 from agent_builder_sdk.agentic_framework.api_model import AgenticApiRequestContext
-from agent_builder_sdk.agentic_framework.client_factory import get_agentic_api_client
+from agent_builder_sdk.agentic_framework.client_factory import create_agentic_api_client
 from agent_builder_sdk.env_var import (
     ATX_AUTH_TOKEN_KEY,
     ENV_KEY_AUTH_TOKEN_FILE,
@@ -33,6 +34,7 @@ DEFAULT_SESSION_DURATION = 43200  # 12 hours
 
 # Token refresh timing constants (in seconds)
 TOKEN_REFRESH_BUFFER_SECONDS = 40  # Buffer before token expiration to refresh
+SAFETY_FACTOR = 0.5  # Refresh at 50% of token lifetime for hours of retry headroom
 MIN_SLEEP_SECONDS = 60  # Minimum sleep time between refresh attempts
 ERROR_RETRY_SECONDS = 60  # Retry interval when refresh fails
 
@@ -126,19 +128,36 @@ class AuthTokenRefresher:
         Main function for the token refresh process.
         Continuously refreshes the token and sleeps until next refresh.
         """
+        # Forked from the runtime process, this child inherits the parent's SIGTERM
+        # handler (the server's graceful-shutdown handler), which never terminates this
+        # stateless refresher. Restore the default disposition so Process.terminate()
+        # ends it immediately, instead of the parent waiting out the join timeout before
+        # falling back to SIGKILL — that wait added ~5s to every agent stop.
+        signal.signal(signal.SIGTERM, signal.SIG_DFL)
+
+        # Configure logging in the child process so logs are captured by
+        # the container log driver (CloudWatch).
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            force=True,
+        )
+
         logger.info("Starting token refresh process")
 
-        try:
-            while True:
+        while True:
+            try:
                 time_to_sleep = self._refresh_token()
                 logger.info(f"Sleeping for {time_to_sleep} seconds before next token refresh")
                 time.sleep(time_to_sleep)
-        except KeyboardInterrupt:
-            logger.info("Token refresh process interrupted, shutting down gracefully")
-        except Exception:
-            logger.warning("Token refresh process error: ", exc_info=True)
-        finally:
-            logger.info("Token refresh process stopped")
+            except KeyboardInterrupt:
+                logger.info("Token refresh process interrupted, shutting down gracefully")
+                break
+            except Exception:
+                logger.warning("Token refresh process error, retrying: ", exc_info=True)
+                time.sleep(ERROR_RETRY_SECONDS)
+
+        logger.info("Token refresh process stopped")
 
     def _refresh_token(self) -> int:
         """
@@ -165,7 +184,11 @@ class AuthTokenRefresher:
             now = datetime.datetime.now(datetime.timezone.utc)
 
             # Calculate time difference in seconds, with a buffer to refresh before token expires
-            time_diff = (expiration_timestamp - now).total_seconds() - self.token_refresh_buffer
+            remaining = (expiration_timestamp - now).total_seconds()
+            time_diff = min(
+                remaining * SAFETY_FACTOR,
+                remaining - self.token_refresh_buffer,
+            )
 
             # Ensure we don't sleep for a negative amount of time
             # and that we have at least minimum sleep time between refreshes
@@ -204,10 +227,15 @@ class AuthTokenRefresher:
         """
         logger.info("Calling Agentic API to refresh token")
 
-        # Create client if it doesn't exist (lazy initialization to avoid pickling issues)
+        # Build a fresh, uncached client inside the child process. boto3 clients
+        # are not fork-safe (shared urllib3 connection pools / OpenSSL state can
+        # corrupt requests between parent and child), and the parent populates
+        # the module-level lru_cache before the fork — so calling the cached
+        # factory here would hand back the parent's client. See
+        # https://docs.aws.amazon.com/boto3/latest/guide/clients.html#caveats
         if self.agentic_api_client is None:
             logger.info("Creating agentic API client in child process")
-            self.agentic_api_client = get_agentic_api_client()
+            self.agentic_api_client = create_agentic_api_client()
 
         if not all([self.workspace_id, self.job_id, self.agent_instance_id]):
             context = get_agent_context_from_env()

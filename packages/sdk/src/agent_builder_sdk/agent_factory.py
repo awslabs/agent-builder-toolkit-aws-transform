@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 from typing import Any, Optional, Set, TypeVar, Union
 
+from botocore.config import Config as BotocoreConfig
+from strands.hooks import HookProvider
 from strands.models.model import Model
 from strands.tools import tool
 from strands.tools.mcp.mcp_client import MCPClient
@@ -24,6 +26,9 @@ from agent_builder_sdk.orchestrator_strands.base_orchestrator import (
 )
 from agent_builder_sdk.orchestrator_strands.conversation.file_repository import (
     FileMultiSourceConversationRepository,
+)
+from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
+    BlankReplyHookProvider,
 )
 from agent_builder_sdk.orchestrator_strands.hooks.conversation_hook_provider import (
     ConversationHookProvider,
@@ -85,6 +90,7 @@ def _create_default_orchestrator(
     additional_custom_tools: Optional[list[Any]] = None,
     model_id: str = "anthropic.claude-sonnet-4-5-20250929-v1:0",
     model: Union[Model, str, None] = None,
+    boto_client_config: Optional[BotocoreConfig] = None,
     with_base_guardrails: bool = False,
     trace_attributes: Optional[dict[str, Any]] = None,
     excluded_mcp_tool_names: Optional[Set[str]] = None,
@@ -93,16 +99,27 @@ def _create_default_orchestrator(
     skills_dir: Optional[str] = None,
     enable_platform_skills: bool = False,
     enable_code_execution: bool = False,
+    enable_blank_reply_continuation: bool = False,
+    enable_prompt_caching: bool = False,
+    locale: Optional[str] = None,
+    conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
+    memory_manager: Optional[MemoryManager] = None,
 ) -> OrchestratorT:
     logger.info("Creating default orchestrator with full feature set")
 
     custom_tools: list[Any] = []
 
-    # Create memory components
-    memory_storage_path = os.path.join(storage_dir, "memories")
-    repository = FileSystemRepository(storage_path=memory_storage_path)
-    episodic_memory = EpisodicMemory(repository=repository)
-    memory_manager = MemoryManager(memories=[episodic_memory])
+    # Create memory components. A shared MemoryManager may be injected (e.g. for concurrent
+    # streaming, so the shared singleton agent and per-user streaming agents use the SAME memory
+    # store for a job — otherwise each agent derives its own <storage_dir>/memories and the same
+    # job's message/send vs message/stream turns read/write disjoint stores). Memory is
+    # job-scoped (the same behavior as the existing shared singleton agent). When not injected,
+    # build a per-agent one as before (backward compatible).
+    if memory_manager is None:
+        memory_storage_path = os.path.join(storage_dir, "memories")
+        repository = FileSystemRepository(storage_path=memory_storage_path)
+        episodic_memory = EpisodicMemory(repository=repository)
+        memory_manager = MemoryManager(memories=[episodic_memory])
 
     # Create memory tool
     memory_tool = MemoryTool(memory_manager)
@@ -149,14 +166,20 @@ def _create_default_orchestrator(
     if additional_custom_tools:
         custom_tools.extend(additional_custom_tools)
 
-    # Create conversation repository
-    conversation_repository = FileMultiSourceConversationRepository(storage_dir=storage_dir)
+    # Create conversation repository. A shared instance may be injected (e.g. for
+    # concurrent streaming, where per-user agents must all read/write the SAME history
+    # store — separate instances on one storage_dir would overwrite each other's saves).
+    # When not injected, build a per-agent one as before (backward compatible).
+    if conversation_repository is None:
+        conversation_repository = FileMultiSourceConversationRepository(storage_dir=storage_dir)
 
     # Create hooks
-    hooks = [
+    hooks: list[HookProvider] = [
         ConversationHookProvider(repository=conversation_repository),
         MemoryHookProvider(memory_manager=memory_manager),
     ]
+    if enable_blank_reply_continuation:
+        hooks.append(BlankReplyHookProvider())
 
     # Use provided system prompt or default
     if system_prompt is None:
@@ -184,10 +207,13 @@ def _create_default_orchestrator(
         custom_tools=custom_tools,
         model_id=model_id,
         model=model,
+        boto_client_config=boto_client_config,
         trace_attributes=trace_attributes,
         excluded_mcp_tool_names=excluded_mcp_tool_names,
         metrics_config=metrics_config,
         plugins=[skills_plugin] if skills_plugin else None,
+        locale=locale,
+        enable_prompt_caching=enable_prompt_caching,
     )
 
     logger.info("Default orchestrator created successfully with memory and conversation support")
@@ -204,6 +230,10 @@ def create_default_orchestrator(
     with_base_guardrails: bool = False,
     trace_attributes: Optional[dict[str, Any]] = None,
     metrics_config: Optional[MetricsConfig] = None,
+    locale: Optional[str] = None,
+    conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
+    memory_manager: Optional[MemoryManager] = None,
+    boto_client_config: Optional[BotocoreConfig] = None,
 ) -> BaseOrchestrator:
     """
     Create a BaseOrchestrator instance with full memory and conversation support.
@@ -241,9 +271,13 @@ def create_default_orchestrator(
         additional_custom_tools=custom_tools,
         model_id=model_id,
         model=model,
+        boto_client_config=boto_client_config,
         with_base_guardrails=with_base_guardrails,
         trace_attributes=trace_attributes,
         metrics_config=metrics_config,
+        locale=locale,
+        conversation_repository=conversation_repository,
+        memory_manager=memory_manager,
     )
 
 
@@ -256,6 +290,10 @@ def create_default_async_orchestrator(
     model: Union[Model, str, None] = None,
     with_base_guardrails: bool = False,
     metrics_config: Optional[MetricsConfig] = None,
+    locale: Optional[str] = None,
+    conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
+    memory_manager: Optional[MemoryManager] = None,
+    boto_client_config: Optional[BotocoreConfig] = None,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support.
 
@@ -289,8 +327,12 @@ def create_default_async_orchestrator(
         additional_custom_tools=custom_tools,
         model_id=model_id,
         model=model,
+        boto_client_config=boto_client_config,
         with_base_guardrails=with_base_guardrails,
         metrics_config=metrics_config,
+        locale=locale,
+        conversation_repository=conversation_repository,
+        memory_manager=memory_manager,
     )
 
 
@@ -303,6 +345,10 @@ def create_default_orchestrator_with_subagent(
     model: Union[Model, str, None] = None,
     with_base_guardrails: bool = False,
     metrics_config: Optional[MetricsConfig] = None,
+    locale: Optional[str] = None,
+    conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
+    memory_manager: Optional[MemoryManager] = None,
+    boto_client_config: Optional[BotocoreConfig] = None,
 ) -> BaseOrchestrator:
     """Create a BaseOrchestrator instance with full memory and conversation support and subagent tools.
 
@@ -341,8 +387,12 @@ def create_default_orchestrator_with_subagent(
         additional_custom_tools=custom_tools,
         model_id=model_id,
         model=model,
+        boto_client_config=boto_client_config,
         with_base_guardrails=with_base_guardrails,
         metrics_config=metrics_config,
+        locale=locale,
+        conversation_repository=conversation_repository,
+        memory_manager=memory_manager,
     )
 
 
@@ -360,6 +410,12 @@ def create_default_async_orchestrator_with_subagent(
     enable_skills: bool = False,
     skills_dir: Optional[str] = None,
     enable_code_execution: bool = False,
+    locale: Optional[str] = None,
+    conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
+    memory_manager: Optional[MemoryManager] = None,
+    enable_blank_reply_continuation: bool = False,
+    enable_prompt_caching: bool = False,
+    boto_client_config: Optional[BotocoreConfig] = None,
     enable_platform_skills: bool = False,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.
@@ -398,6 +454,10 @@ def create_default_async_orchestrator_with_subagent(
             AWS Transform job; off by default.
             USE WITH CAUTION: this also rewrites the system prompt (the contract is appended to
             whatever system_prompt you pass).
+        enable_blank_reply_continuation: Ask the model once more for its reply when a turn ends
+            empty right after tool results (see BlankReplyHookProvider).
+        enable_prompt_caching: Turn on Bedrock prompt caching for the orchestrator's model (see
+            AsyncBaseOrchestrator). Off by default.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
@@ -424,6 +484,7 @@ def create_default_async_orchestrator_with_subagent(
         additional_custom_tools=custom_tools,
         model_id=model_id,
         model=model,
+        boto_client_config=boto_client_config,
         with_base_guardrails=with_base_guardrails,
         trace_attributes=trace_attributes,
         excluded_mcp_tool_names=excluded_mcp_tool_names,
@@ -432,6 +493,11 @@ def create_default_async_orchestrator_with_subagent(
         skills_dir=skills_dir,
         enable_platform_skills=enable_platform_skills,
         enable_code_execution=enable_code_execution,
+        enable_blank_reply_continuation=enable_blank_reply_continuation,
+        enable_prompt_caching=enable_prompt_caching,
+        locale=locale,
+        conversation_repository=conversation_repository,
+        memory_manager=memory_manager,
     )
 
 
@@ -465,6 +531,7 @@ def create_default_subagent(
     model: Union[Model, str, None] = None,
     custom_tools: Optional[list[Any]] = None,
     metrics_config: Optional[MetricsConfig] = None,
+    **kwargs: Any,
 ) -> BaseSubagent:
     """Create a BaseSubagent instance with minimal configuration.
 
@@ -479,6 +546,12 @@ def create_default_subagent(
         model: Optional Strands Model instance or model ID string
         custom_tools: Optional list of additional custom tools to add to the subagent
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        **kwargs: Compatibility shim — accepted and ignored. A runtime server calls every agent
+            factory with the *same* keyword arguments, and with streaming enabled that set includes
+            ``conversation_repository`` / ``memory_manager`` (the shared stores an orchestrator
+            needs). A sub-agent is stateless and uses neither, but the factory must still accept
+            them or the server's call would raise ``TypeError``; ``**kwargs`` absorbs them so one
+            call signature works for both agent types.
 
     Returns:
         Configured BaseSubagent instance
@@ -500,6 +573,7 @@ def create_default_async_subagent(
     model: Union[Model, str, None] = None,
     custom_tools: Optional[list[Any]] = None,
     metrics_config: Optional[MetricsConfig] = None,
+    **kwargs: Any,
 ) -> AsyncBaseSubagent:
     """Create an AsyncBaseSubagent instance with minimal configuration.
 
@@ -511,6 +585,12 @@ def create_default_async_subagent(
         model: Optional Strands Model instance or model ID string
         custom_tools: Optional list of additional custom tools to add to the subagent
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        **kwargs: Compatibility shim — accepted and ignored. A runtime server calls every agent
+            factory with the *same* keyword arguments, and with streaming enabled that set includes
+            ``conversation_repository`` / ``memory_manager`` (the shared stores an orchestrator
+            needs). A sub-agent is stateless and uses neither, but the factory must still accept
+            them or the server's call would raise ``TypeError``; ``**kwargs`` absorbs them so one
+            call signature works for both agent types.
 
     Returns:
         Configured AsyncBaseSubagent instance

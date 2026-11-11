@@ -38,6 +38,7 @@ class TestJobManager:
 
     def test_update_job_status_success(self, job_manager, mock_client):
         """Test successful job status update."""
+        mock_client.get_job.return_value = {"job": {"statusDetails": {"status": "EXECUTING"}}}
         mock_client.update_job_status.return_value = {"status": "success"}
 
         result = job_manager.update_job_status(JobStatus.EXECUTING)
@@ -49,6 +50,7 @@ class TestJobManager:
 
     def test_update_job_status_with_info(self, job_manager, mock_client):
         """Test job status update with status info."""
+        mock_client.get_job.return_value = {"job": {"statusDetails": {"status": "EXECUTING"}}}
         mock_client.update_job_status.return_value = {"status": "success"}
         status_info = {"message": "Test message"}
 
@@ -61,10 +63,37 @@ class TestJobManager:
 
     def test_update_job_status_error(self, job_manager, mock_client):
         """Test job status update error handling."""
+        mock_client.get_job.return_value = {"job": {"statusDetails": {"status": "EXECUTING"}}}
         mock_client.update_job_status.side_effect = Exception("API error")
 
         with pytest.raises(Exception, match="API error"):
             job_manager.update_job_status(JobStatus.EXECUTING)
+
+    def test_update_job_status_skipped_when_terminal(self, job_manager, mock_client):
+        """Test UpdateJobStatus is skipped when the job is already in a terminal state."""
+        for terminal_status in ("COMPLETED", "FAILED", "STOPPED"):
+            mock_client.reset_mock()
+            mock_client.get_job.return_value = {
+                "job": {"statusDetails": {"status": terminal_status}}
+            }
+
+            result = job_manager.update_job_status(JobStatus.COMPLETED)
+
+            assert result == {}
+            mock_client.get_job.assert_called_once()
+            mock_client.update_job_status.assert_not_called()
+
+    def test_update_job_status_allows_transition_into_terminal(self, job_manager, mock_client):
+        """Test transition from a non-terminal state into a terminal state still calls the API."""
+        mock_client.get_job.return_value = {"job": {"statusDetails": {"status": "EXECUTING"}}}
+        mock_client.update_job_status.return_value = {"status": "success"}
+
+        result = job_manager.update_job_status(JobStatus.COMPLETED)
+
+        assert result == {"status": "success"}
+        mock_client.update_job_status.assert_called_once()
+        call_args = mock_client.update_job_status.call_args[1]
+        assert call_args["status"] == "COMPLETED"
 
     def test_get_job_status_success(self, job_manager, mock_client):
         """Test successful job status retrieval."""
@@ -91,7 +120,9 @@ class TestJobManager:
 
         job_manager.transition_to_executing_if_assessing()
 
-        mock_client.get_job.assert_called_once()
+        # get_job is called twice: once by transition_to_executing_if_assessing itself,
+        # and once by the terminal-state guard inside update_job_status.
+        assert mock_client.get_job.call_count == 2
         mock_client.update_job_status.assert_called_once()
         call_args = mock_client.update_job_status.call_args[1]
         assert call_args["status"] == "EXECUTING"
