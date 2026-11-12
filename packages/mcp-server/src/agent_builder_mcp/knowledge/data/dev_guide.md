@@ -2094,7 +2094,7 @@ Both use the same BaseOrchestrator and agent factory pattern, so you can switch 
 
 Send an A2UI surface. Form submissions come back to your agent as a chat message with the `/form/*` values.
 
-- **LLM orchestrators**: create the orchestrator with `enable_platform_skills=True`. That loads the `a2ui-rendering` and `a2ui-ux-patterns` skills and adds two tools: `render_a2ui_surface`, which validates a nested component tree against the catalog and returns the block to put in the reply, and `suggest_replies`, which attaches one-click reply suggestions.
+- **LLM orchestrators**: create the orchestrator with `enable_platform_skills=True`. That loads the `a2ui-rendering` and `a2ui-ux-patterns` skills and adds two tools: `render_a2ui_surface`, which validates a nested component tree against the catalog and returns the block to put in the reply, and `suggest_replies`, which attaches one-click reply suggestions. If the reply has no block for a surface rendered in that turn, the SDK adds it: before the reply text on `message/send`, after it on `message/stream`.
 - **Code**: build the block yourself.
 
 ```python

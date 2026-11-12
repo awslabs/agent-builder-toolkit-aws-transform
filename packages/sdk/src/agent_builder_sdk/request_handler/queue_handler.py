@@ -22,6 +22,7 @@ from ..custom_types.orchestrator_agent_types import (
 )
 from ..interfaces import AnyBaseAgent
 from ..message_queue import QueueRequest, QueueResponse, RequestQueue, RequestStatus, ResponseStore
+from ..ui_chat.a2ui import add_missing_surfaces
 from ..utils import describe_agent_result, extract_text_from_strands_agent_response
 from .context import RequestContext
 from .interface import RequestHandler
@@ -266,7 +267,7 @@ class QueueRequestHandler(RequestHandler):
                         else:
                             logger.debug("Agent result text: %s", extracted_text)
 
-                        await self.store_response(extracted_text)
+                        await self.store_response(add_missing_surfaces(extracted_text, result))
 
                 except asyncio.CancelledError:
                     logger.info("Queue processing cancelled", extra=log_context)

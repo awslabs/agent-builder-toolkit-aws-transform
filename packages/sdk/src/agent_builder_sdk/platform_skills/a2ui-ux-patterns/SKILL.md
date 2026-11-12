@@ -70,7 +70,7 @@ steps.
 - Do not render suggestion boxes, clickable decision cards, or any inline A2UI
   component that dispatches `atx:send-message`.
 - Attach one through five native message suggestions to the response with
-  `suggest_replies`.
+  `suggest_replies`, before you write the response.
 - The suggestion text becomes the customer's next message, so write it as a clear,
   self-contained instruction the agent can act on.
 - Do not add radio buttons, a separate Continue button, a `/form/*` binding, or
@@ -335,5 +335,6 @@ Before sending:
   bound display value, expressing the intended structure with native catalog
   components instead;
 - remove duplicate artifacts for content already rendered inline; and
-- keep final prose to one short neutral sentence that does not describe,
-  summarize, or repeat the surface.
+- keep the prose around the surface to one short neutral sentence that does not
+  describe, summarize, or repeat the surface, in the same final message as the
+  block.

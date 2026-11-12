@@ -3,17 +3,25 @@
 """Tests for the A2UI surface builder and its agent tools."""
 
 import json
+import logging
+import textwrap
+from types import SimpleNamespace
 
 import pytest
 
+from agent_builder_sdk.constants import GUARDRAIL_STOP_REASONS
 from agent_builder_sdk.ui_chat import a2ui
 from agent_builder_sdk.ui_chat.a2ui import (
+    SURFACES_STATE_KEY,
     A2UIValidationError,
+    add_missing_surfaces,
     build_a2ui_block,
     build_a2ui_messages,
     flatten,
+    forget_surfaces_in,
     render_a2ui_surface,
     suggest_replies,
+    take_surfaces,
 )
 
 FORM = {
@@ -157,7 +165,7 @@ def test_a_path_that_does_not_resolve_has_no_initial_value(path):
 
 
 def test_table_columns_must_use_the_catalog_keys():
-    # The simulated-builder run on this PR: columns with `key` rendered three empty rows.
+    # Columns with `key` in place of `field` render as empty rows.
     rows = [{"name": "payments-api"}]
     bad = {"component": "Table", "items": rows, "columnDefinitions": [{"id": "name", "header": "Name", "key": "name"}]}
     assert _issues(bad) == [
@@ -169,7 +177,7 @@ def test_table_columns_must_use_the_catalog_keys():
 
 
 def test_table_items_must_be_an_array_or_a_binding():
-    # The simulated-builder run on this PR: items "{{inventory.apps}}" rendered "No data".
+    # Items given as the text "{{inventory.apps}}" render "No data".
     cols = [{"id": "name", "header": "Name", "field": "name"}]
     bad = {"component": "Table", "items": "{{inventory.apps}}", "columnDefinitions": cols}
     assert _issues(bad) == ['root: Table.items is a string; give an array or a binding like {"path": "/data/items"}']
@@ -413,3 +421,279 @@ def test_suggest_replies_attaches_suggestions(monkeypatch):
     assert got == [["Run the full assessment"]]
     assert suggest_replies(suggestions=[]).startswith("Error:")
     assert suggest_replies(suggestions=["a"] * 6).startswith("Error:")
+
+
+TABLE = _table({"path": "/data/apps"})
+
+
+def _apps(*names):
+    return {"data": {"apps": [{"name": name} for name in names]}}
+
+
+BLOCK = build_a2ui_block("inventory", TABLE, _apps("payments-api"))
+BODY = BLOCK.split("\n")[1]
+
+
+def _render(state, surface_id="inventory", tree=TABLE, data_model=None):
+    """Call the tool with the request state of a turn, as the agent loop does."""
+    context = SimpleNamespace(invocation_state={"request_state": state})
+    data_model = _apps("payments-api") if data_model is None else data_model
+    return render_a2ui_surface(surface_id=surface_id, component_tree=tree, data_model=data_model, tool_context=context)
+
+
+def _result(surfaces, stop_reason="end_turn"):
+    """The part of an agent result that the reply sites read."""
+    return SimpleNamespace(state={SURFACES_STATE_KEY: dict(surfaces)}, stop_reason=stop_reason)
+
+
+def test_render_tool_records_a_valid_surface_for_the_turn():
+    state = {}
+    assert _render(state) == BLOCK
+    assert state == {SURFACES_STATE_KEY: {"inventory": BLOCK}}
+
+
+def test_render_tool_records_nothing_for_a_validation_error():
+    state = {}
+    assert _render(state, tree={"component": "Blink"}).startswith("Error:")
+    assert state == {}
+    # A failed render of a surface that has a valid one keeps the valid block.
+    _render(state)
+    assert _render(state, tree={"component": "Blink"}).startswith("Error:")
+    assert state == {SURFACES_STATE_KEY: {"inventory": BLOCK}}
+
+
+def test_render_tool_keeps_the_last_valid_render_of_a_surface_and_moves_it_last():
+    state = {}
+    _render(state, "inventory")
+    _render(state, "Summary", BOX, {})
+    latest = _render(state, "inventory", data_model=_apps("payments-api", "ledger-svc"))
+    assert list(state[SURFACES_STATE_KEY]) == ["Summary", "inventory"]
+    assert state[SURFACES_STATE_KEY]["inventory"] == latest != BLOCK
+
+
+def test_render_tool_without_a_turn_returns_the_block():
+    assert render_a2ui_surface(surface_id="inventory", component_tree=TABLE, data_model=_apps("payments-api")) == BLOCK
+
+
+def test_render_tool_does_not_show_the_model_its_context_parameter():
+    shown = set(render_a2ui_surface.tool_spec["inputSchema"]["json"]["properties"])
+    assert shown == {"surface_id", "component_tree", "data_model"}
+
+
+@pytest.mark.parametrize("tool", [render_a2ui_surface, suggest_replies])
+def test_tools_tell_the_model_to_call_tools_before_it_writes_the_reply(tool):
+    description = " ".join(tool.tool_spec["description"].split())
+    assert "a message that also calls a tool is not part of the reply" in description
+
+
+@pytest.mark.parametrize(
+    "skill, rule",
+    [
+        ("a2ui-rendering", "Text in a message that also calls a tool is not part of the reply."),
+        ("a2ui-rendering", "Write the reply last, in a message with no tool call, with the block in it"),
+        ("a2ui-rendering", "A surface that rendered without an error earlier in the turn stays in the reply"),
+        ("a2ui-rendering", "To change a surface in the same turn, render it again with the same ID."),
+        ("a2ui-ux-patterns", "`suggest_replies`, before you write the response."),
+        ("a2ui-ux-patterns", "in the same final message as the block."),
+        ("user-chat", "put everything the customer must see, a rendered surface included, in the last message"),
+    ],
+)
+def test_skills_tell_the_model_to_put_the_surface_in_its_last_message(skill, rule):
+    text = (a2ui.CATALOG_PATH.parents[2] / skill / "SKILL.md").read_text(encoding="utf-8")
+    assert rule in " ".join(text.split())
+
+
+def test_render_tool_tells_the_model_to_reuse_the_surface_id_for_a_change():
+    described = render_a2ui_surface.tool_spec["inputSchema"]["json"]["properties"]["surface_id"]["description"]
+    assert "render it again with the same ID" in " ".join(described.split())
+
+
+def test_missing_block_goes_before_the_text_after_a_blank_line():
+    assert add_missing_surfaces("Closing sentence.", _result({"inventory": BLOCK})) == f"{BLOCK}\n\nClosing sentence."
+
+
+@pytest.mark.parametrize("copy", [BLOCK, textwrap.indent(BLOCK, "    ")], ids=["exact", "indented"])
+def test_reply_that_holds_the_rendered_block_is_left_as_it_is(copy):
+    text = f"Here is the inventory.\n\n{copy}\n\nClosing sentence."
+    assert add_missing_surfaces(text, _result({"inventory": BLOCK})) == text
+
+
+def _copy(change):
+    """A fence with the messages of BLOCK after ``change`` edited them."""
+    messages = json.loads(BODY)
+    change(messages)
+    return f"```atx-a2ui\n{json.dumps(messages)}\n```"
+
+
+@pytest.mark.parametrize(
+    "copy",
+    [
+        f"```atx-a2ui\n{json.dumps(json.loads(BODY), indent=2)}\n```",
+        f"````atx-a2ui  \n{BODY}\n````",
+        BLOCK.replace("\n", "\r\n"),
+        # The model changed a row, dropped the data model message, or named a component the catalog does not have.
+        build_a2ui_block("inventory", TABLE, _apps("changed-by-the-model")),
+        _copy(lambda messages: messages.pop()),
+        _copy(lambda messages: messages[1]["updateComponents"]["components"][0].update(component="DataTable")),
+    ],
+    ids=["pretty-printed", "longer-fence", "crlf", "changed-row", "no-data-model", "unknown-component"],
+)
+def test_fence_that_creates_the_surface_becomes_the_rendered_block_in_its_place(copy):
+    text = f"Here is the inventory.\n\n{copy}\n\nClosing sentence."
+    out = add_missing_surfaces(text, _result({"inventory": BLOCK}))
+    assert out == f"Here is the inventory.\n\n{BLOCK}\n\nClosing sentence."
+
+
+def test_fence_with_no_closing_line_counts_when_the_text_ends_with_its_content():
+    text = f"Here is the inventory.\n\n``` atx-a2ui\n{BODY}"
+    assert add_missing_surfaces(text, _result({"inventory": BLOCK})) == f"Here is the inventory.\n\n{BLOCK}"
+
+
+def test_reply_with_windows_line_ends_keeps_its_text_around_the_block():
+    text = f"Here is the inventory.\n\n{BLOCK}\n\nClosing sentence.".replace("\n", "\r\n")
+    out = add_missing_surfaces(text, _result({"inventory": BLOCK}))
+    assert out == f"Here is the inventory.\r\n\r\n{BLOCK}\n\r\nClosing sentence."
+
+
+def test_changed_copy_in_a_list_item_keeps_its_indent():
+    changed = build_a2ui_block("inventory", TABLE, _apps("changed-by-the-model"))
+    text = "1. The inventory:\n\n" + textwrap.indent(changed, "    ") + "\n2. Next steps."
+    out = add_missing_surfaces(text, _result({"inventory": BLOCK}))
+    assert out == "1. The inventory:\n\n" + textwrap.indent(BLOCK, "    ") + "\n2. Next steps."
+
+
+def test_fence_that_creates_two_surfaces_becomes_both_rendered_blocks():
+    first, second = build_a2ui_block("first", BOX), build_a2ui_block("second", BOX)
+    merged = json.dumps(json.loads(first.split("\n")[1]) + json.loads(second.split("\n")[1]))
+    out = add_missing_surfaces(f"Intro.\n\n```atx-a2ui\n{merged}\n```", _result({"first": first, "second": second}))
+    assert out == f"Intro.\n\n{first}\n\n{second}"
+
+
+def test_reply_that_holds_two_surfaces_gets_neither_again():
+    first, second = build_a2ui_block("first", BOX), build_a2ui_block("second", BOX)
+    text = f"Intro.\n\n{first}\n\n{second}\n\nClosing sentence."
+    assert add_missing_surfaces(text, _result({"first": first, "second": second})) == text
+
+
+def test_unreadable_fence_does_not_hide_a_surface_in_a_later_fence():
+    text = f"```atx-a2ui\n{BODY[:150]}...\n```\n\n{BLOCK}"
+    assert add_missing_surfaces(text, _result({"inventory": BLOCK})) == text
+
+
+@pytest.mark.parametrize(
+    "copy",
+    [
+        f"```atx-a2ui\n{BODY[:150]}...\n```",
+        f"```atx-a2ui\n{BODY}\nClosing sentence.",
+        "```atx-a2ui\n" + json.dumps(json.loads(BODY)[1:]) + "\n```",
+        # json.loads raises RecursionError, not ValueError, for this one.
+        "```atx-a2ui\n" + "[" * 100_000 + "\n```",
+        "```atx-a2ui\nnull\n```",
+        '```atx-a2ui\n[1, "inventory", null]\n```',
+        '```atx-a2ui\n[{"createSurface": {"surfaceId": ["inventory"]}}, {"createSurface": {}}]\n```',
+    ],
+    ids=[
+        "cut",
+        "unclosed-then-text",
+        "no-create-surface",
+        "nested-too-deep",
+        "not-an-array",
+        "items-not-objects",
+        "id-not-text",
+    ],
+)
+def test_copy_that_cannot_be_the_surface_does_not_count(copy):
+    text = f"Here is the inventory.\n\n{copy}"
+    assert add_missing_surfaces(text, _result({"inventory": BLOCK})) == f"{BLOCK}\n\n{text}"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        f"The array is {BODY}",
+        f"```json\n{BODY}\n```",
+        f"Here it is: ```atx-a2ui\n{BODY}\n```",
+        f"```atx-a2ui\n[]\n```\n{BODY}",
+        '```atx-a2ui\n[{"createSurface": {"surfaceId": "inventory-2"}}]\n```',
+        f"```ATX-A2UI\n{BODY}\n```",
+    ],
+    ids=["no-fence", "json-fence", "mid-line-fence", "after-the-fence", "other-surface", "other-case-tag"],
+)
+def test_surface_id_outside_an_atx_a2ui_fence_does_not_count(text):
+    assert add_missing_surfaces(text, _result({"inventory": BLOCK})) == f"{BLOCK}\n\n{text}"
+
+
+def test_only_the_missing_surfaces_are_added_in_render_order():
+    # The IDs are not in alphabetical order, so render order is not ID order.
+    first, held, last = (build_a2ui_block(sid, BOX) for sid in ("zeta", "held", "alpha"))
+    text = f"Intro.\n\n{held}"
+    out = add_missing_surfaces(text, _result({"zeta": first, "held": held, "alpha": last}))
+    assert out == f"{first}\n\n{last}\n\n{text}"
+    assert out.count("```atx-a2ui") == 3
+
+
+def test_empty_text_gives_the_blocks_alone():
+    first, last = build_a2ui_block("first", BOX), build_a2ui_block("last", BOX)
+    assert add_missing_surfaces("", _result({"first": first, "last": last})) == f"{first}\n\n{last}"
+
+
+@pytest.mark.parametrize("stop_reason", GUARDRAIL_STOP_REASONS)
+def test_refusal_gets_no_surface(stop_reason):
+    result = _result({"inventory": BLOCK}, stop_reason)
+    assert add_missing_surfaces("I can't help with that.", result) == "I can't help with that."
+    assert SURFACES_STATE_KEY not in result.state
+
+
+def test_record_is_taken_so_a_second_call_adds_nothing():
+    result = _result({"inventory": BLOCK})
+    add_missing_surfaces("Closing sentence.", result)
+    assert SURFACES_STATE_KEY not in result.state
+    assert add_missing_surfaces("Closing sentence.", result) == "Closing sentence."
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        object(),
+        SimpleNamespace(state=None),
+        SimpleNamespace(state={}),
+        SimpleNamespace(state={"force_stop_response": "x"}),
+    ],
+    ids=["no-state", "state-none", "state-empty", "other-keys"],
+)
+def test_result_with_no_record_leaves_the_text(result):
+    assert add_missing_surfaces("Closing sentence.", result) == "Closing sentence."
+
+
+def test_result_with_a_record_and_no_stop_reason_gets_the_block():
+    result = SimpleNamespace(state={SURFACES_STATE_KEY: {"inventory": BLOCK}})
+    assert add_missing_surfaces("Closing sentence.", result) == f"{BLOCK}\n\nClosing sentence."
+
+
+def test_surface_id_with_quotes_or_non_ascii_text_is_found():
+    for surface_id in ('say "hi"', "caf\u00e9-inventory"):
+        block = build_a2ui_block(surface_id, BOX)
+        escaped = "```atx-a2ui\n" + json.dumps(json.loads(block.split("\n")[1])) + "\n```"  # \uXXXX escapes
+        for copy in (block, escaped):
+            assert add_missing_surfaces(f"Intro.\n\n{copy}", _result({surface_id: block})) == f"Intro.\n\n{block}"
+
+
+def test_added_surface_is_logged_by_id_without_its_content(caplog):
+    with caplog.at_level(logging.INFO, logger="agent_builder_sdk.ui_chat.a2ui"):
+        add_missing_surfaces("Closing sentence.", _result({"inventory": BLOCK}))
+    (record,) = caplog.records
+    assert "inventory" in record.getMessage()
+    assert "payments-api" not in record.getMessage() and "atx-a2ui" not in record.getMessage()
+
+
+def test_surface_in_a_delivered_text_leaves_the_record_and_the_rest_is_taken_once():
+    first, second = build_a2ui_block("first", BOX), build_a2ui_block("second", BOX)
+    state = {SURFACES_STATE_KEY: {"first": first, "second": second}, "other": 1}
+    # A cut copy cannot render, so its surface stays in the record.
+    forget_surfaces_in(f"Working on it.\n\n```atx-a2ui\n{second[12:60]}...\n```\n\n{first}", state)
+    assert state[SURFACES_STATE_KEY] == {"second": second}
+    assert take_surfaces(state) == {"second": second}
+    assert state == {"other": 1}
+    assert take_surfaces(state) == {}
+    forget_surfaces_in(first, state)
+    assert state == {"other": 1}

@@ -4701,6 +4701,15 @@
     "description": "Extends: ValueError\n\nParameters:\n  issues: list[str] (required)"
   },
   {
+    "name": "add_missing_surfaces",
+    "kind": "function",
+    "file": "agent_builder_sdk/ui_chat/a2ui.py",
+    "module": "agent_builder_sdk.ui_chat.a2ui",
+    "docstring": "Make ``text``, the reply of a message/send turn, hold the block of each surface the turn rendered.\n\n``result`` is the turn's agent result. Only the text of the last assistant message is delivered,\nso a block the model wrote before a later tool call would be lost. A surface that no ``atx-a2ui``\nfence of ``text`` creates goes before ``text``, in the order of its last valid render, with a\nblank line between parts. A fence that creates a rendered surface becomes the rendered block, in\nits place: a copy that the model changed, or made from an earlier render, is not delivered.\nA refusal is returned as it is.",
+    "signature": "add_missing_surfaces(text: str, result: Any) -> str",
+    "description": "Parameters:\n  text: str (required)\n  result: Any (required)"
+  },
+  {
     "name": "build_a2ui_block",
     "kind": "function",
     "file": "agent_builder_sdk/ui_chat/a2ui.py",
@@ -4728,6 +4737,15 @@
     "description": "Parameters:\n  component_tree: dict (required)"
   },
   {
+    "name": "forget_surfaces_in",
+    "kind": "function",
+    "file": "agent_builder_sdk/ui_chat/a2ui.py",
+    "module": "agent_builder_sdk.ui_chat.a2ui",
+    "docstring": "Drop from the record in the request ``state`` each surface that ``text`` holds.\n\nFor text that is already delivered and cannot change: a message of a streaming turn.",
+    "signature": "forget_surfaces_in(text: str, state: Any) -> None",
+    "description": "Parameters:\n  text: str (required)\n  state: Any (required)"
+  },
+  {
     "name": "load_catalog",
     "kind": "function",
     "file": "agent_builder_sdk/ui_chat/a2ui.py",
@@ -4741,18 +4759,27 @@
     "kind": "function",
     "file": "agent_builder_sdk/ui_chat/a2ui.py",
     "module": "agent_builder_sdk.ui_chat.a2ui",
-    "docstring": "Validate an A2UI surface for AWS Transform chat and return the block to put in your reply.\n\nArgs:\n    surface_id: Stable kebab-case ID, e.g. \"migration-preferences\" or \"display-servers\".\n    component_tree: One nested root component, e.g. {\"component\": \"SpaceBetween\", \"children\": [...]}.\n        Nest child components directly in children, footer, actions or a Header description,\n        and in tabs/steps items as \"content\". IDs are optional.\n    data_model: Initial data model, e.g. {\"form\": {\"region\": \"\"}}. Every bound path needs a value.\n\nReturns:\n    The fenced atx-a2ui block. Copy it unchanged into your reply. On failure, \"Error:\" and every\n    problem to fix before calling again.",
-    "signature": "render_a2ui_surface(surface_id: str, component_tree: dict, data_model: Optional[dict] = None) -> str",
-    "description": "Parameters:\n  surface_id: str (required) - Stable kebab-case ID, e.g. \"migration-preferences\" or \"display-servers\".\n  component_tree: dict (required) - One nested root component, e.g. {\"component\": \"SpaceBetween\", \"children\": [...]}. Nest child components directly in children, footer, actions or a Header description, and in tabs/steps items as \"content\". IDs are optional.\n  data_model: Optional[dict] (default=None) - Initial data model, e.g. {\"form\": {\"region\": \"\"}}. Every bound path needs a value."
+    "docstring": "Validate an A2UI surface for AWS Transform chat and return the block to put in your reply.\n\nArgs:\n    surface_id: Stable kebab-case ID, e.g. \"migration-preferences\" or \"display-servers\". To change a\n        surface in the same turn, render it again with the same ID.\n    component_tree: One nested root component, e.g. {\"component\": \"SpaceBetween\", \"children\": [...]}.\n        Nest child components directly in children, footer, actions or a Header description,\n        and in tabs/steps items as \"content\". IDs are optional.\n    data_model: Initial data model, e.g. {\"form\": {\"region\": \"\"}}. Every bound path needs a value.\n\nReturns:\n    The fenced atx-a2ui block. Make your other tool calls first, then copy it unchanged into\n    your final reply: text you write in a message that also calls a tool is not part of the\n    reply. On failure, \"Error:\" and every problem to fix before calling again.",
+    "signature": "render_a2ui_surface(surface_id: str, component_tree: dict, data_model: Optional[dict] = None, tool_context: Optional[ToolContext] = None) -> str",
+    "description": "Parameters:\n  surface_id: str (required) - Stable kebab-case ID, e.g. \"migration-preferences\" or \"display-servers\". To change a surface in the same turn, render it again with the same ID.\n  component_tree: dict (required) - One nested root component, e.g. {\"component\": \"SpaceBetween\", \"children\": [...]}. Nest child components directly in children, footer, actions or a Header description, and in tabs/steps items as \"content\". IDs are optional.\n  data_model: Optional[dict] (default=None) - Initial data model, e.g. {\"form\": {\"region\": \"\"}}. Every bound path needs a value.\n  tool_context: Optional[ToolContext] (default=None)"
   },
   {
     "name": "suggest_replies",
     "kind": "function",
     "file": "agent_builder_sdk/ui_chat/a2ui.py",
     "module": "agent_builder_sdk.ui_chat.a2ui",
-    "docstring": "Attach one-click reply suggestions to your next chat message.\n\nArgs:\n    suggestions: One to five short, self-contained instructions, e.g. [\"Run the full assessment\"].\n        Clicking one sends its text as the customer's next message.\n\nReturns:\n    \"OK\", or \"Error:\" and what to fix.",
+    "docstring": "Attach one-click reply suggestions to the reply you write after this call.\n\nCall it before you write the reply, in a message with no reply text: text you write in a\nmessage that also calls a tool is not part of the reply.\n\nArgs:\n    suggestions: One to five short, self-contained instructions, e.g. [\"Run the full assessment\"].\n        Clicking one sends its text as the customer's next message.\n\nReturns:\n    \"OK\", or \"Error:\" and what to fix.",
     "signature": "suggest_replies(suggestions: list[str]) -> str",
     "description": "Parameters:\n  suggestions: list[str] (required) - One to five short, self-contained instructions, e.g. [\"Run the full assessment\"]. Clicking one sends its text as the customer's next message."
+  },
+  {
+    "name": "take_surfaces",
+    "kind": "function",
+    "file": "agent_builder_sdk/ui_chat/a2ui.py",
+    "module": "agent_builder_sdk.ui_chat.a2ui",
+    "docstring": "Take the surfaces that a turn rendered out of its request ``state``: surface ID -> block, in render order.\n\nThe reply of the turn must hold each of them. A refusal gets none. A second call gets none.",
+    "signature": "take_surfaces(state: Any, stop_reason: Optional[str] = None) -> dict[str, str]",
+    "description": "Parameters:\n  state: Any (required)\n  stop_reason: Optional[str] (default=None)"
   },
   {
     "name": "validate",

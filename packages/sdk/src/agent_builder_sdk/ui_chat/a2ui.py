@@ -28,19 +28,28 @@ the task artifact metadata under ``A2UI_EXTENSION_KEY``.
 
 Both raise ``A2UIValidationError`` listing every problem found, so the caller, or an
 agent through the ``render_a2ui_surface`` tool, can fix them all in one pass.
+
+The agent puts the block that the tool returns in its reply. A surface that the tool rendered in
+a turn and the reply does not hold is added: before the reply text on message/send
+(``add_missing_surfaces``), after it on message/stream, where the text is already sent.
 """
 
 import itertools
 import json
+import logging
 import re
+import textwrap
 from collections.abc import Iterator
 from functools import cache
 from pathlib import Path
 from typing import Any, Optional
 
-from strands import tool
+from strands import ToolContext, tool
 
+from agent_builder_sdk.constants import GUARDRAIL_STOP_REASONS
 from agent_builder_sdk.util.suggestions_manager import add_suggestions
+
+logger = logging.getLogger(__name__)
 
 BLOCK_TAG = "atx-a2ui"
 CATALOG_ID = "atx-hitl/v1"
@@ -55,6 +64,11 @@ _ARRAY_TYPES = ("array", "DynamicValue", "DataBinding")
 # The keys of a nested list in a catalog key list, e.g. "[{header?: string, field: string}]".
 _NESTED_KEYS = re.compile(r"(\w+\??): *([^,}]+)")
 _MISSING = object()
+# request_state key: surface ID -> block of its last valid render in this turn, oldest render first.
+# render_a2ui_surface writes it; the code that delivers the turn's reply takes it with take_surfaces().
+SURFACES_STATE_KEY = "a2ui_surfaces"
+# Groups: the indent of the opening line, the content. A fence with no closing line runs to the end of the text.
+_FENCE = re.compile(rf"^([ \t]*)`{{3,}}[ \t]*{BLOCK_TAG}[ \t\r]*\n(.*?)(?:^[ \t]*`{{3,}}[ \t\r]*$|\Z)", re.M | re.S)
 
 
 class A2UIValidationError(ValueError):
@@ -388,30 +402,102 @@ def build_a2ui_block(surface_id: str, component_tree: dict, data_model: Optional
     return f"```{BLOCK_TAG}\n{json.dumps(messages, ensure_ascii=False)}\n```"
 
 
-@tool
-def render_a2ui_surface(surface_id: str, component_tree: dict, data_model: Optional[dict] = None) -> str:
+def _created(content: str) -> list[str]:
+    """The IDs of the surfaces that the content of an ``atx-a2ui`` fence creates. Content that is not JSON, such as a cut copy, creates none."""
+    try:
+        messages = json.loads(content)
+    except (ValueError, RecursionError):
+        return []
+    created = [m.get("createSurface") for m in messages if isinstance(m, dict)] if _is_list(messages) else []
+    return [c["surfaceId"] for c in created if _has(c, "surfaceId")]
+
+
+def take_surfaces(state: Any, stop_reason: Optional[str] = None) -> dict[str, str]:
+    """Take the surfaces that a turn rendered out of its request ``state``: surface ID -> block, in render order.
+
+    The reply of the turn must hold each of them. A refusal gets none. A second call gets none.
+    """
+    surfaces = state.pop(SURFACES_STATE_KEY, None) if isinstance(state, dict) else None
+    return surfaces if surfaces and stop_reason not in GUARDRAIL_STOP_REASONS else {}
+
+
+def forget_surfaces_in(text: str, state: Any) -> None:
+    """Drop from the record in the request ``state`` each surface that ``text`` holds.
+
+    For text that is already delivered and cannot change: a message of a streaming turn.
+    """
+    surfaces = state.get(SURFACES_STATE_KEY) if isinstance(state, dict) else None
+    for fence in _FENCE.finditer(text) if surfaces else ():
+        for surface_id in _created(fence[2]):
+            surfaces.pop(surface_id, None)
+
+
+def add_missing_surfaces(text: str, result: Any) -> str:
+    """Make ``text``, the reply of a message/send turn, hold the block of each surface the turn rendered.
+
+    ``result`` is the turn's agent result. Only the text of the last assistant message is delivered,
+    so a block the model wrote before a later tool call would be lost. A surface that no ``atx-a2ui``
+    fence of ``text`` creates goes before ``text``, in the order of its last valid render, with a
+    blank line between parts. A fence that creates a rendered surface becomes the rendered block, in
+    its place: a copy that the model changed, or made from an earlier render, is not delivered.
+    A refusal is returned as it is.
+    """
+    surfaces = take_surfaces(getattr(result, "state", None), getattr(result, "stop_reason", None))
+    if not surfaces:
+        return text
+    held: set[str] = set()
+
+    def rendered(fence: re.Match[str]) -> str:
+        ids = dict.fromkeys(sid for sid in _created(fence[2]) if sid in surfaces)
+        held.update(ids)
+        return "\n\n".join(textwrap.indent(surfaces[sid], fence[1]) for sid in ids) or fence[0]
+
+    text = _FENCE.sub(rendered, text)
+    missing = {sid: block for sid, block in surfaces.items() if sid not in held}
+    if missing:
+        logger.info("Added %d A2UI surface(s) that the reply did not hold: %s", len(missing), list(missing))
+    return "\n\n".join([*missing.values(), *([text] if text else [])])
+
+
+@tool(context=True)
+def render_a2ui_surface(
+    surface_id: str,
+    component_tree: dict,
+    data_model: Optional[dict] = None,
+    tool_context: Optional[ToolContext] = None,
+) -> str:
     """Validate an A2UI surface for AWS Transform chat and return the block to put in your reply.
 
     Args:
-        surface_id: Stable kebab-case ID, e.g. "migration-preferences" or "display-servers".
+        surface_id: Stable kebab-case ID, e.g. "migration-preferences" or "display-servers". To change a
+            surface in the same turn, render it again with the same ID.
         component_tree: One nested root component, e.g. {"component": "SpaceBetween", "children": [...]}.
             Nest child components directly in children, footer, actions or a Header description,
             and in tabs/steps items as "content". IDs are optional.
         data_model: Initial data model, e.g. {"form": {"region": ""}}. Every bound path needs a value.
 
     Returns:
-        The fenced atx-a2ui block. Copy it unchanged into your reply. On failure, "Error:" and every
-        problem to fix before calling again.
+        The fenced atx-a2ui block. Make your other tool calls first, then copy it unchanged into
+        your final reply: text you write in a message that also calls a tool is not part of the
+        reply. On failure, "Error:" and every problem to fix before calling again.
     """
     try:
-        return build_a2ui_block(surface_id, component_tree, data_model)
+        block = build_a2ui_block(surface_id, component_tree, data_model)
     except A2UIValidationError as e:
         return "Error: fix all of these, then call again:\n" + "\n".join(f"- {i}" for i in e.issues)
+    if tool_context is not None:
+        surfaces = tool_context.invocation_state.setdefault("request_state", {}).setdefault(SURFACES_STATE_KEY, {})
+        surfaces.pop(surface_id, None)  # a render of the same surface again moves it to the end
+        surfaces[surface_id] = block
+    return block
 
 
 @tool
 def suggest_replies(suggestions: list[str]) -> str:
-    """Attach one-click reply suggestions to your next chat message.
+    """Attach one-click reply suggestions to the reply you write after this call.
+
+    Call it before you write the reply, in a message with no reply text: text you write in a
+    message that also calls a tool is not part of the reply.
 
     Args:
         suggestions: One to five short, self-contained instructions, e.g. ["Run the full assessment"].

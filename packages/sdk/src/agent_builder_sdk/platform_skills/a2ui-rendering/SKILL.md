@@ -29,12 +29,16 @@ owns only the component catalog, protocol, bindings, validation, and delivery co
 ### Inline chat surface (preferred)
 
 1. Call `render_a2ui_surface` with a `surface_id`, one nested `component_tree`, and a
-   `data_model`, before writing customer-visible final prose.
-2. It returns a fenced `atx-a2ui` block. Put that block in your reply **unchanged**. The
-   WebApp renders it in place.
-3. If it returns `Error:`, it lists every problem it found. Fix all of them in one pass and
-   call it once more. If that is rejected too, stop using A2UI for this turn and reply in
-   concise plain text.
+   `data_model`. It returns a fenced `atx-a2ui` block.
+2. Finish all other tool calls of the turn before you write the reply; that includes
+   `suggest_replies` when you use it. Text in a message that also calls a tool is not part of
+   the reply.
+3. Write the reply last, in a message with no tool call, with the block in it **unchanged**.
+   The WebApp renders it in place.
+4. If the tool returns `Error:`, it lists every problem it found. Fix all of them in one pass
+   and call it once more. If that is rejected too, stop using A2UI for this turn and reply in
+   concise plain text. A surface that rendered without an error earlier in the turn stays in
+   the reply; do not repeat its content in the text.
 
 Do not hand-author an `atx-a2ui` block; the tool validates it against the catalog.
 
@@ -280,6 +284,7 @@ path has an initial value. You still own:
   Do not use action phrases, append `-form`, or include `surface`, `submitted`, UUIDs, or
   version numbers. See `a2ui-ux-patterns`.
 - For ephemeral displays: `display-{uuid}`.
+- To change a surface in the same turn, render it again with the same ID.
 
 ## Example: Rendering a Server Table
 
