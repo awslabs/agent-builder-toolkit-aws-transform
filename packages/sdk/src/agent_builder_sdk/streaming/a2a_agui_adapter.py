@@ -116,6 +116,9 @@ class StreamState:
     # events here; the stream loop drains them and yields their frames before the terminal. Kept off
     # the model stream because they are known only after the turn's final message is assembled.
     side_events: List[Any] = field(default_factory=list)
+    # Text that the persist hook adds to the turn's reply after the text on the stream: a rendered
+    # surface that no streamed text holds. Sent, and cleared, when the reply's message closes.
+    reply_tail: str = ""
 
     def __post_init__(self) -> None:
         self.run_id = str(uuid.uuid4())
@@ -202,6 +205,9 @@ def _start_run_if_needed(state: StreamState, out: List[BaseEvent]) -> None:
 
 def _close_message_if_open(state: StreamState, out: List[BaseEvent]) -> None:
     if state.open_message_id is not None:
+        if state.reply_tail:
+            out.append(TextMessageContentEvent(message_id=state.open_message_id, delta=state.reply_tail))
+            state.reply_tail = ""
         out.append(TextMessageEndEvent(message_id=state.open_message_id))
         state.open_message_id = None
 
@@ -364,10 +370,10 @@ def adapt(
             # Read-or-mint the dedicated id: the persist hook (AfterInvocationEvent) fires before this
             # terminal is mapped, so it may have already minted force_stop_message_id for the same
             # force_stop text — reuse it so the streamed message and its persisted copy reconcile.
-            msg_id = state.ensure_force_stop_message_id()
+            msg_id = state.open_message_id = state.ensure_force_stop_message_id()
             out.append(TextMessageStartEvent(message_id=msg_id, role="assistant"))
             out.append(TextMessageContentEvent(message_id=msg_id, delta=force_stop_text))
-            out.append(TextMessageEndEvent(message_id=msg_id))
+            _close_message_if_open(state, out)
         # If force_stop_streamed, send_message_to_subagent_and_relay already streamed this answer live under
         # the same id; _end_model_call above closed that block, so we skip re-emitting it here.
         out.append(RunFinishedEvent(thread_id=state.thread_id, run_id=state.run_id))

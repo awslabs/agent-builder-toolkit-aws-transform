@@ -8,7 +8,9 @@ description: Use whenever you talk to the customer — greeting them, reporting 
 Your reply to the user IS the message — there's no send-a-message tool; what you write in your
 turn is what they read. That reply is also the customer's whole view of the job, so it carries
 the relationship: speak in the language of their data and their outcome, and keep the platform
-machinery behind it out of sight.
+machinery behind it out of sight. A line you write before a tool call is progress at most and is
+not always shown: put everything the customer must see, a rendered surface included, in the last
+message of the turn.
 
 ## Say this
 

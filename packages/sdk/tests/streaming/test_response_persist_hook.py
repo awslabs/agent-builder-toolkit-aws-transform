@@ -27,6 +27,7 @@ from agent_builder_sdk.streaming.response_persist_hook import (
     _format_tool_uses,
     persist_stream_error,
 )
+from agent_builder_sdk.ui_chat.a2ui import SURFACES_STATE_KEY
 from agent_builder_sdk.utils import (
     A2A_CHAT_SUGGESTIONS_EXT,
     A2A_MESSAGE_TYPE_EXT,
@@ -629,6 +630,33 @@ async def test_no_stream_state_falls_back_to_generated_id(manager):
     _, message = manager.calls[0]
     assert message.messageId  # non-empty
     uuid.UUID(message.messageId)  # a valid uuid4
+
+
+async def test_no_stream_state_leaves_the_rendered_surfaces_to_the_reply_path(manager):
+    """Without a stream there is no streamed text to add to: the turn's reply is made from the
+    agent result, and that code takes the surfaces."""
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    event = make_event(with_stream_state=False)
+    request_state = event.invocation_state["request_state"] = {SURFACES_STATE_KEY: {"inventory": "<block>"}}
+
+    await hook._on_after_model_call(event)
+
+    assert request_state == {SURFACES_STATE_KEY: {"inventory": "<block>"}}
+    assert manager.calls[0][1].parts[0]["text"] == "The answer is 4."
+
+
+async def test_surface_is_not_added_to_a_reply_whose_message_is_closed_on_the_stream(manager):
+    """The stream takes no more text for a closed message, so the stored copy gets none either."""
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    event = make_event()
+    event.invocation_state["request_state"] = {SURFACES_STATE_KEY: {"inventory": "<block>"}}
+    stream_state = event.invocation_state["stream_state"]
+    assert stream_state.open_message_id is None
+
+    await hook._on_after_model_call(event)
+
+    assert manager.calls[0][1].parts[0]["text"] == "The answer is 4."
+    assert stream_state.reply_tail == "" and stream_state.side_events == []
 
 
 # ---- suggestions consumed once, on the final message -------------------------

@@ -53,6 +53,7 @@
     - [May I use langgraph to build my agent instead of strands agent?](#may-i-use-langgraph-to-build-my-agent-instead-of-strands-agent)
     - [How the orchestrator agent select subagents?](#how-the-orchestrator-agent-select-subagents)
     - [What's the difference between BaseAgent AgentRuntimeServer and the traditional CLI approach?](#whats-the-difference-between-baseagent-agentruntimeserver-and-the-traditional-cli-approach)
+    - [How can my agent show tables, forms, or charts in chat?](#how-can-my-agent-show-tables-forms-or-charts-in-chat)
   - [HITL (Human-in-the-Loop) Task FAQs](#hitl-human-in-the-loop-task-faqs)
     - [What are HITL (Human-in-the-Loop) Tasks?](#what-are-hitl-human-in-the-loop-tasks)
     - [HITL (Human-in-the-Loop) blocking vs non-blocking](#hitl-human-in-the-loop-blocking-vs-non-blocking)
@@ -2088,6 +2089,32 @@ AgentRuntimeServer: Designed for Bedrock AgentCore, uses JSON-RPC, single endpoi
 - Base Agent Package: Supports both approaches through different entry points
 
 Both use the same BaseOrchestrator and agent factory pattern, so you can switch between deployment models with minimal code changes.
+
+### How can my agent show tables, forms, or charts in chat?
+
+Send an A2UI surface. Form submissions come back to your agent as a chat message with the `/form/*` values.
+
+- **LLM orchestrators**: create the orchestrator with `enable_platform_skills=True`. That loads the `a2ui-rendering` and `a2ui-ux-patterns` skills and adds two tools: `render_a2ui_surface`, which validates a nested component tree against the catalog and returns the block to put in the reply, and `suggest_replies`, which attaches one-click reply suggestions. If the reply has no block for a surface rendered in that turn, the SDK adds it: before the reply text on `message/send`, after it on `message/stream`.
+- **Code**: build the block yourself.
+
+```python
+from agent_builder_sdk.ui_chat.a2ui import build_a2ui_block
+
+block = build_a2ui_block(
+    "migration-preferences",
+    {"component": "SpaceBetween", "children": [
+        {"component": "FormField", "label": "Target region", "children": [
+            {"component": "Input", "value": {"path": "/form/region"}}]},
+        {"component": "SubmitButton", "children": "Submit"},
+    ]},
+    {"form": {"region": ""}},
+)
+reply = f"Pick a target region.\n\n{block}"
+```
+
+The AWS Transform web app renders an `atx-a2ui` fenced block in a chat message as an interactive surface built from the `atx-hitl/v1` component catalog (tables, forms with validation, charts, Mermaid diagrams, side panels).
+
+`build_a2ui_block` raises `A2UIValidationError` with every problem it finds (unknown components or props, missing required props, broken child references, bound paths with no initial value). An agent that returns an A2A task can put `build_a2ui_messages(...)` in the task artifact metadata under `A2UI_EXTENSION_KEY` instead. The full protocol and catalog ship with the SDK under `platform_skills/a2ui-rendering/references/`.
 
 ## HITL (Human-in-the-Loop) Task FAQs
 
