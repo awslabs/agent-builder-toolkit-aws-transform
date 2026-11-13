@@ -2111,8 +2111,9 @@ ctx = get_agent_context_from_env()
 connector = Connector(workspace_id=ctx.workspace_id, job_id=ctx.job_id,
                       agent_instance_id=ctx.agent_instance_id, client=create_agentic_api_client())
 info = connector.get_connector(connector_id)
-if info["accountConnection"]["awsAccountConnection"]["status"] != "ACTIVE":
-    ...  # tell the user the connector still waits for approval
+status = info["accountConnection"]["awsAccountConnection"]["status"]
+if status != "ACTIVE":
+    raise RuntimeError(f"Connector {connector_id} is {status}: it needs approval first")
 bucket = info["configuration"]["s3BucketArn"].split(":::")[-1]
 creds = connector.get_temporary_credentials_for_connector(connector_id)
 s3 = boto3.client("s3", aws_access_key_id=creds["accessKey"],
@@ -2121,7 +2122,7 @@ s3 = boto3.client("s3", aws_access_key_id=creds["accessKey"],
 
 - The credentials last about one hour. Call `get_temporary_credentials_for_connector` again after that.
 - The credentials allow reading the bucket and writing under `transform-output/<jobId>/`.
-- Never return key material to the model.
+- Never return key material to the model. Keep the `botocore` logger at INFO or above in an agent that uses these credentials: at DEBUG, botocore logs the session token of each request.
 - The tool needs the step id of an existing job plan step. A subagent cannot create plan steps (`put_job_plan` is not among its tools by default), so it gets the step id from its orchestrator.
 - The error "Partner '<name>' is not authorized to access this type of connector" means that the connector has a workload-owned type. Ask for the platform connector instead.
 - The customer-side setup (who approves the connector, the connector role) is in the [AWS Transform User Guide](https://docs.aws.amazon.com/transform/latest/userguide/transform-user-connectors.html).

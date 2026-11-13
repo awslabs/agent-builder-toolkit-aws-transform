@@ -61,6 +61,7 @@ class TestBuildGeneralConnectorArtifact:
             title="Amazon S3",
             description="Connect the S3 bucket",
             fields=fields,
+            max_instances=3,
         )
 
         assert json.loads(artifact) == {
@@ -69,7 +70,7 @@ class TestBuildGeneralConnectorArtifact:
                     "connectorType": "platform|s3|1",
                     "title": "Amazon S3",
                     "description": "Connect the S3 bucket",
-                    "maxInstances": 1,
+                    "maxInstances": 3,
                     "fields": fields,
                 }
             }
@@ -125,20 +126,29 @@ class TestGetTemporaryCredentialsForConnector:
         assert client_call.call_args[1]["targetRegion"] == "us-west-2"
 
     @pytest.mark.parametrize(
-        "root_level, botocore_level, level_in_call",
+        "root_level, botocore_level, parser_level, level_in_call",
         [
-            (logging.DEBUG, logging.NOTSET, logging.INFO),
-            (logging.WARNING, logging.DEBUG, logging.INFO),
-            (logging.WARNING, logging.NOTSET, logging.WARNING),
+            (logging.DEBUG, logging.NOTSET, logging.NOTSET, logging.INFO),
+            (logging.WARNING, logging.DEBUG, logging.NOTSET, logging.INFO),
+            (logging.WARNING, logging.NOTSET, logging.DEBUG, logging.INFO),
+            (logging.WARNING, logging.NOTSET, logging.NOTSET, logging.WARNING),
         ],
-        ids=["root at DEBUG", "botocore at DEBUG", "root at WARNING"],
+        ids=["root at DEBUG", "botocore at DEBUG", "botocore.parsers at DEBUG", "root at WARNING"],
     )
     def test_botocore_does_not_log_the_response_body(
-        self, connector, credentials_response, caplog, root_level, botocore_level, level_in_call
+        self,
+        connector,
+        credentials_response,
+        caplog,
+        root_level,
+        botocore_level,
+        parser_level,
+        level_in_call,
     ):
-        """botocore is held at INFO or above for the call, then gets its earlier level back."""
+        """The parser logger is held at INFO or above for the call, then gets its level back."""
         caplog.set_level(root_level)
         caplog.set_level(botocore_level, logger="botocore")
+        caplog.set_level(parser_level, logger="botocore.parsers")
         botocore_logger = logging.getLogger("botocore")
         parser_logger = logging.getLogger("botocore.parsers")
         client_call = connector.client.get_temporary_credentials_for_connector
@@ -156,13 +166,13 @@ class TestGetTemporaryCredentialsForConnector:
         assert result["secretKey"] == "test-secret-key"
         assert "test-secret-key" not in caplog.text
         assert levels_in_call == [level_in_call]
-        assert botocore_logger.level == botocore_level
+        assert (botocore_logger.level, parser_logger.level) == (botocore_level, parser_level)
 
         client_call.side_effect = RuntimeError("no response")
         with pytest.raises(RuntimeError):
             connector.get_temporary_credentials_for_connector("test-connector")
 
-        assert botocore_logger.level == botocore_level
+        assert (botocore_logger.level, parser_logger.level) == (botocore_level, parser_level)
 
     def test_overlapping_calls_do_not_log_the_response_body(
         self, connector, credentials_response, caplog
@@ -200,7 +210,7 @@ class TestGetTemporaryCredentialsForConnector:
             thread.join(timeout=5)
 
         assert "test-secret-key" not in caplog.text
-        assert logging.getLogger("botocore").level == logging.NOTSET
+        assert parser_logger.level == logging.NOTSET
 
     @pytest.mark.parametrize(
         "aws_credentials",

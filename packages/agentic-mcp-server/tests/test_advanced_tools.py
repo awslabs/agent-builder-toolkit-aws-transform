@@ -536,12 +536,14 @@ class TestCreatePlatformConnectorHitlTask:
             assert call_args[1]["ux_component_id"] == "GeneralConnector"
             assert call_args[1]["step_id"] == step_id
             assert call_args[1]["blocking_type"] == "NON_BLOCKING"
+            assert call_args[1]["title"] == "Configure Amazon S3 connector"
 
             json_input = call_args[1]["json_input"]
             assert list(json_input) == ["properties"]
             assert list(json_input["properties"]) == ["connector"]
             connector = json_input["properties"]["connector"]
             assert connector["connectorType"] == "platform|s3|1"
+            assert connector["maxInstances"] == 1
             fields = connector["fields"]
             assert [f["fieldName"] for f in fields] == ["s3BucketArn", "s3BucketKmsKeyArn"]
             assert [f["fieldName"] for f in fields if f["fieldRequired"]] == ["s3BucketArn"]

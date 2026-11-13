@@ -37,8 +37,9 @@ class Connector(AgenticApiHelper):
             client=create_agentic_api_client(),
         )
         info = connector.get_connector(connector_id)
-        if info["accountConnection"]["awsAccountConnection"]["status"] != "ACTIVE":
-            ...  # tell the user the connector still waits for approval
+        status = info["accountConnection"]["awsAccountConnection"]["status"]
+        if status != "ACTIVE":
+            raise RuntimeError(f"Connector {connector_id} is {status}: it needs approval first")
         bucket = info["configuration"]["s3BucketArn"].split(":::")[-1]
         creds = connector.get_temporary_credentials_for_connector(connector_id)
         s3 = boto3.client(
@@ -48,7 +49,9 @@ class Connector(AgenticApiHelper):
             aws_session_token=creds["accessToken"],
         )
 
-    The credentials are secrets: never return them to the model.
+    The credentials are secrets: never return them to the model. Keep the `botocore` logger at
+    INFO or above in an agent that uses them: at DEBUG, botocore logs the session token of each
+    request.
     """
 
     client: TransformAgenticServiceClient
@@ -107,16 +110,16 @@ class Connector(AgenticApiHelper):
         if target_region is not None:
             request["targetRegion"] = target_region
 
-        botocore_logger = logging.getLogger("botocore")
-        # At DEBUG, botocore logs the response body, which holds the keys. A logger level is
+        parser_logger = logging.getLogger("botocore.parsers")
+        # At DEBUG, this logger writes the response body, which holds the keys. A logger level is
         # process-wide, so without the lock a concurrent call restores DEBUG during this one.
         with _BOTOCORE_LOG_LEVEL_LOCK:
-            level = botocore_logger.level
-            botocore_logger.setLevel(max(botocore_logger.getEffectiveLevel(), logging.INFO))
+            level = parser_logger.level
+            parser_logger.setLevel(max(parser_logger.getEffectiveLevel(), logging.INFO))
             try:
                 response = self.client.get_temporary_credentials_for_connector(**request)
             finally:
-                botocore_logger.setLevel(level)
+                parser_logger.setLevel(level)
 
         creds = response.get("temporaryCredentials", {}).get("awsTemporaryCredentials", {})
         # A boto3 client built with keys that are None uses the agent's own role, without an error.
