@@ -32,10 +32,12 @@ from agent_builder_agentic_mcp.datamodels import (
     CategoryType,
     FileType,
 )
+from agent_builder_agentic_mcp.server import mcp
 from agent_builder_agentic_mcp.server._advanced_tools import (
     create_autoform_hitl_task,
     create_autotable_hitl_task,
     create_hitl_task_with_json_input,
+    create_platform_connector_hitl_task,
     create_s3_connector_hitl_task,
     download_artifact_to_string,
     retrieve_hitl_output_as_string,
@@ -511,6 +513,59 @@ class TestCreateS3ConnectorHitlTask:
             assert connector["fields"][1]["fieldName"] == "s3BucketKmsKeyArn"
 
             assert result == expected_response
+
+
+class TestCreatePlatformConnectorHitlTask:
+    """Test cases for create_platform_connector_hitl_task function."""
+
+    @pytest.mark.anyio
+    async def test_create_platform_connector_hitl_task_s3(self):
+        """Test successful creation of a platform S3 connector HITL task."""
+        step_id = "test-step-id"
+        expected_response = {"hitl_task_id": "test-hitl-id", "success": True}
+
+        with mock.patch(
+            "agent_builder_agentic_mcp.server._advanced_tools.create_hitl_task_with_json_input"
+        ) as mock_create:
+            mock_create.return_value = expected_response
+
+            result = await create_platform_connector_hitl_task(step_id, "s3")
+
+            mock_create.assert_called_once()
+            call_args = mock_create.call_args
+            assert call_args[1]["ux_component_id"] == "GeneralConnector"
+            assert call_args[1]["step_id"] == step_id
+            assert call_args[1]["blocking_type"] == "NON_BLOCKING"
+
+            json_input = call_args[1]["json_input"]
+            assert list(json_input) == ["properties"]
+            assert list(json_input["properties"]) == ["connector"]
+            connector = json_input["properties"]["connector"]
+            assert connector["connectorType"] == "platform|s3|1"
+            fields = connector["fields"]
+            assert [f["fieldName"] for f in fields] == ["s3BucketArn", "s3BucketKmsKeyArn"]
+            assert [f["fieldName"] for f in fields if f["fieldRequired"]] == ["s3BucketArn"]
+
+            assert result == {**expected_response, "connectorType": "platform|s3|1"}
+
+    @pytest.mark.anyio
+    async def test_create_platform_connector_hitl_task_unknown_connector(self):
+        """Test that an unknown connector key raises KeyError and creates no task."""
+        with mock.patch(
+            "agent_builder_agentic_mcp.server._advanced_tools.create_hitl_task_with_json_input"
+        ) as mock_create:
+            with pytest.raises(KeyError):
+                await create_platform_connector_hitl_task("test-step-id", "github")
+
+            mock_create.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_create_platform_connector_hitl_task_is_registered(self):
+        """Test that the tool is registered and its description does not hold the type id."""
+        tools = {tool.name: tool for tool in await mcp.list_tools()}
+
+        assert "create_platform_connector_hitl_task" in tools
+        assert "platform|s3|1" not in tools["create_platform_connector_hitl_task"].description
 
 
 class TestCreateAutoformHitlTask:

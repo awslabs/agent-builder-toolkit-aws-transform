@@ -687,6 +687,39 @@
     "description": "Parameters:\n  create_upload_url_response: CreateArtifactUploadUrlResponseTypeDef (required)\n  content: bytes (required)\n  is_managed_bucket: bool (default=True)"
   },
   {
+    "name": "Connector",
+    "kind": "class",
+    "file": "agent_builder_sdk/agentic_framework/connector.py",
+    "module": "agent_builder_sdk.agentic_framework.connector",
+    "docstring": "Gives an agent temporary AWS credentials for a customer resource through an AWS Transform\nconnector.\n\nTo read files in a customer's S3 bucket, use the platform S3 connector, type `platform|s3|1`.\nIt works for every agent. The MCP tool `create_platform_connector_hitl_task` asks the user for\nit. Workload-owned connector types work only for allowlisted agents; other agents get\n\"not authorized to access this type of connector\".\n\nExample, in a custom tool that gets the connector id from the model:\n\n    import boto3\n    from agent_builder_sdk.agentic_framework.client_factory import create_agentic_api_client\n    from agent_builder_sdk.agentic_framework.connector import Connector\n    from agent_builder_sdk.env_var import get_agent_context_from_env\n\n    ctx = get_agent_context_from_env()\n    connector = Connector(\n        workspace_id=ctx.workspace_id,\n        job_id=ctx.job_id,\n        agent_instance_id=ctx.agent_instance_id,\n        client=create_agentic_api_client(),\n    )\n    info = connector.get_connector(connector_id)\n    if info[\"accountConnection\"][\"awsAccountConnection\"][\"status\"] != \"ACTIVE\":\n        ...  # tell the user the connector still waits for approval\n    bucket = info[\"configuration\"][\"s3BucketArn\"].split(\":::\")[-1]\n    creds = connector.get_temporary_credentials_for_connector(connector_id)\n    s3 = boto3.client(\n        \"s3\",\n        aws_access_key_id=creds[\"accessKey\"],\n        aws_secret_access_key=creds[\"secretKey\"],\n        aws_session_token=creds[\"accessToken\"],\n    )\n\nThe credentials are secrets: never return them to the model.",
+    "signature": "Connector()",
+    "description": "Extends: AgenticApiHelper\n\nMethods:\n  build_general_connector_artifact(connector_type: str, title: str, description: str, fields: list[dict], max_instances: int = 1) -> bytes\n  get_connector(connector_id: str) -> dict\n  get_temporary_credentials_for_connector(connector_id: str, target_region: str | None = None) -> dict"
+  },
+  {
+    "name": "Connector.build_general_connector_artifact",
+    "kind": "method",
+    "file": "agent_builder_sdk/agentic_framework/connector.py",
+    "module": "agent_builder_sdk.agentic_framework.connector",
+    "docstring": "Return the input artifact of a GeneralConnector HITL task, as JSON bytes.",
+    "signature": "build_general_connector_artifact(connector_type: str, title: str, description: str, fields: list[dict], max_instances: int = 1) -> bytes"
+  },
+  {
+    "name": "Connector.get_connector",
+    "kind": "method",
+    "file": "agent_builder_sdk/agentic_framework/connector.py",
+    "module": "agent_builder_sdk.agentic_framework.connector",
+    "docstring": "Return the details of a connector.\n\nThe approval status (PENDING, ACTIVE or REJECTED) is at\n`accountConnection.awsAccountConnection.status`. The connector's settings, for example\n`s3BucketArn`, are in `configuration`.",
+    "signature": "get_connector(connector_id: str) -> dict"
+  },
+  {
+    "name": "Connector.get_temporary_credentials_for_connector",
+    "kind": "method",
+    "file": "agent_builder_sdk/agentic_framework/connector.py",
+    "module": "agent_builder_sdk.agentic_framework.connector",
+    "docstring": "Return temporary AWS credentials for the connector's resource.\n\nThe result has the keys `accessKey`, `secretKey`, `accessToken` (the session token) and\n`expirationTime`. The credentials are valid for about one hour; call again after that.\n\nRaises:\n    ValueError: The response holds no access key or no secret key.",
+    "signature": "get_temporary_credentials_for_connector(connector_id: str, target_region: str | None = None) -> dict"
+  },
+  {
     "name": "HitlClient",
     "kind": "class",
     "file": "agent_builder_sdk/agentic_framework/hitl.py",

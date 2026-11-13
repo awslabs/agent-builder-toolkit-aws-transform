@@ -46,6 +46,7 @@ __all__ = [
     "retrieve_hitl_output_as_string",
     "upload_artifact_from_string",
     "create_hitl_task_with_json_input",
+    "create_platform_connector_hitl_task",
     "create_s3_connector_hitl_task",
     "create_autoform_hitl_task",
     "create_autotable_hitl_task",
@@ -256,12 +257,70 @@ async def create_hitl_task_with_json_input(
     return dict(resp)
 
 
+_PLATFORM_CONNECTORS: Dict[str, Dict[str, Any]] = {
+    "s3": {
+        "connectorType": "platform|s3|1",
+        "title": "Amazon S3",
+        "description": "Connect the S3 bucket where your source files are stored.",
+        "maxInstances": 1,
+        "fields": [
+            {
+                "fieldName": "s3BucketArn",
+                "fieldTitle": "S3 Bucket ARN",
+                "fieldDescription": "ARN of the S3 bucket containing your source files",
+                "fieldRequired": True,
+                "fieldInputType": "text",
+                "fieldValidation": "",
+            },
+            {
+                "fieldName": "s3BucketKmsKeyArn",
+                "fieldTitle": "S3 Bucket Encryption Key ARN",
+                "fieldDescription": "If your bucket uses KMS encryption, provide the key ARN",
+                "fieldRequired": False,
+                "fieldInputType": "text",
+                "fieldValidation": "",
+            },
+        ],
+    },
+}
+
+
+@mcp.tool()
+async def create_platform_connector_hitl_task(
+    step_id: str, connector: Literal["s3"]
+) -> Dict[str, Any]:
+    """
+    Creates and starts a HITL task that asks the user to create or select a platform connector. A platform connector
+    gives the job scoped, temporary access to a resource in the user's AWS account. Platform connectors work for every
+    agent, with no allowlisting. After the user submits the task, retrieve_hitl_output_as_string returns the
+    connector id.
+
+    :param step_id: The step id for the step associated with the HITL task. This must be a valid step in the current job plan.
+    :param connector: Which platform connector to ask for. "s3": an Amazon S3 bucket
+    :return: The HITL task details plus the connector type that was requested
+    """
+    spec = _PLATFORM_CONNECTORS[connector]
+    resp = await create_hitl_task_with_json_input(
+        ux_component_id="GeneralConnector",
+        description="Gather input from the user and create connector",
+        title=f"Configure {spec['title']} connector",
+        json_input={"properties": {"connector": spec}},
+        blocking_type="NON_BLOCKING",
+        severity="STANDARD",
+        step_id=step_id,
+        tag=None,
+    )
+    return {**resp, "connectorType": spec["connectorType"]}
+
+
 @mcp.tool()
 async def create_s3_connector_hitl_task(
     step_id: str, connector_type: Literal["m2", "dotnet"] = "m2"
 ) -> Dict[str, Any]:
     """
-    Creates a HITL task for a S3 connector and start it. The purpose of this task is to connect to user's s3 bucket
+    Creates and starts a HITL task for a workload-owned S3 connector type (mainframe modernization or .NET
+    modernization): only agents that AWS Transform has allowlisted for that workload can get credentials from these
+    connectors, and every other agent must use create_platform_connector_hitl_task instead.
 
     :param step_id: The step id for the step associated with the HITL task. This must be a valid step in the current job plan.
     :param connector_type: The type of S3 connector to create. Options: "m2" (mainframe_modernization|s3|1) or "dotnet" (dotnet_modernization|s3|1)
