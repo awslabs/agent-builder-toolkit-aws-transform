@@ -92,7 +92,7 @@ The SDK has three layers:
 | Component | `"DynamicHITLRenderEngine"` | Custom UI built with domTreeJson (search: `keyword_search("HITL getting started domTreeJson")`) |
 | | `"TextInput"` | Simple text input |
 | | `"FileUploadComponent"` | File upload |
-| | `"GeneralConnector"` | Connector setup (see `connector-agent-integration.md`) |
+| | `"GeneralConnector"` | Connector setup (see the developer guide FAQ "How can my agent read files from a customer's S3 bucket?") |
 | | (90+ others) | See SDK types for full list |
 
 ## Quick Start: One-Shot HITL (5 Steps)
@@ -692,7 +692,7 @@ connector = GeneralConnector(
         maxInstances=1,
         fields=[
             FieldModel(fieldName="s3BucketArn", fieldTitle="S3 Bucket ARN", fieldRequired=True),
-            FieldModel(fieldName="kmsKeyArn", fieldTitle="KMS Key ARN", fieldRequired=False),
+            FieldModel(fieldName="s3BucketKmsKeyArn", fieldTitle="KMS Key ARN", fieldRequired=False),
         ]
     )
 )
@@ -772,5 +772,5 @@ task = client.wait_for_human_submission(task_id)
 
 - Search `keyword_search("HITL getting started domTreeJson")` for building custom HITL UI JSON with DynamicHITLRenderEngine
 - Search `keyword_search("HITL common patterns templates")` for 10+ ready-to-use UI templates
-- See `connector-agent-integration.md` for connector-specific HITL integration
+- See the developer guide FAQ "How can my agent read files from a customer's S3 bucket?" for connector-specific HITL integration
 - See `orchestrator-patterns.md` for agent setup and runtime architecture
