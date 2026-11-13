@@ -2,11 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 import json
 import logging
+import threading
 
+import agent_builder_types.type_defs as abt
 from agent_builder_sdk.agentic_framework.agentic_api_helper import AgenticApiHelper
 from agent_builder_types import TransformAgenticServiceClient
 
 logger = logging.getLogger(__name__)
+
+_BOTOCORE_LOG_LEVEL_LOCK = threading.Lock()
 
 
 class Connector(AgenticApiHelper):
@@ -73,7 +77,7 @@ class Connector(AgenticApiHelper):
         }
         return json.dumps(payload).encode("utf-8")
 
-    def get_connector(self, connector_id: str) -> dict:
+    def get_connector(self, connector_id: str) -> abt.GetConnectorResponseTypeDef:
         """Return the details of a connector.
 
         The approval status (PENDING, ACTIVE or REJECTED) is at
@@ -86,11 +90,12 @@ class Connector(AgenticApiHelper):
 
     def get_temporary_credentials_for_connector(
         self, connector_id: str, target_region: str | None = None
-    ) -> dict:
+    ) -> abt.AwsTemporaryCredentialsTypeDef:
         """Return temporary AWS credentials for the connector's resource.
 
         The result has the keys `accessKey`, `secretKey`, `accessToken` (the session token) and
-        `expirationTime`. The credentials are valid for about one hour; call again after that.
+        `expirationTime` (a timezone-aware datetime). The credentials are valid for about one
+        hour; call again after that.
 
         Raises:
             ValueError: The response holds no access key or no secret key.
@@ -102,7 +107,17 @@ class Connector(AgenticApiHelper):
         if target_region is not None:
             request["targetRegion"] = target_region
 
-        response = self.client.get_temporary_credentials_for_connector(**request)
+        botocore_logger = logging.getLogger("botocore")
+        # At DEBUG, botocore logs the response body, which holds the keys. A logger level is
+        # process-wide, so without the lock a concurrent call restores DEBUG during this one.
+        with _BOTOCORE_LOG_LEVEL_LOCK:
+            level = botocore_logger.level
+            botocore_logger.setLevel(max(botocore_logger.getEffectiveLevel(), logging.INFO))
+            try:
+                response = self.client.get_temporary_credentials_for_connector(**request)
+            finally:
+                botocore_logger.setLevel(level)
+
         creds = response.get("temporaryCredentials", {}).get("awsTemporaryCredentials", {})
         # A boto3 client built with keys that are None uses the agent's own role, without an error.
         if not creds.get("accessKey") or not creds.get("secretKey"):
@@ -112,4 +127,4 @@ class Connector(AgenticApiHelper):
             f"Retrieved temporary credentials for connector {connector_id} "
             f"(target region: {response.get('targetRegion', target_region)})"
         )
-        return dict(creds)
+        return creds.copy()

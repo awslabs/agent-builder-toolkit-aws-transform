@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import json
 import logging
+import threading
 from datetime import datetime, timezone
 from unittest import mock
 
@@ -122,6 +123,84 @@ class TestGetTemporaryCredentialsForConnector:
         connector.get_temporary_credentials_for_connector("test-connector", "us-west-2")
 
         assert client_call.call_args[1]["targetRegion"] == "us-west-2"
+
+    @pytest.mark.parametrize(
+        "root_level, botocore_level, level_in_call",
+        [
+            (logging.DEBUG, logging.NOTSET, logging.INFO),
+            (logging.WARNING, logging.DEBUG, logging.INFO),
+            (logging.WARNING, logging.NOTSET, logging.WARNING),
+        ],
+        ids=["root at DEBUG", "botocore at DEBUG", "root at WARNING"],
+    )
+    def test_botocore_does_not_log_the_response_body(
+        self, connector, credentials_response, caplog, root_level, botocore_level, level_in_call
+    ):
+        """botocore is held at INFO or above for the call, then gets its earlier level back."""
+        caplog.set_level(root_level)
+        caplog.set_level(botocore_level, logger="botocore")
+        botocore_logger = logging.getLogger("botocore")
+        parser_logger = logging.getLogger("botocore.parsers")
+        client_call = connector.client.get_temporary_credentials_for_connector
+        levels_in_call = []
+
+        def respond(**kwargs):
+            levels_in_call.append(parser_logger.getEffectiveLevel())
+            parser_logger.debug("Response body: %r", credentials_response)
+            return credentials_response
+
+        client_call.side_effect = respond
+
+        result = connector.get_temporary_credentials_for_connector("test-connector")
+
+        assert result["secretKey"] == "test-secret-key"
+        assert "test-secret-key" not in caplog.text
+        assert levels_in_call == [level_in_call]
+        assert botocore_logger.level == botocore_level
+
+        client_call.side_effect = RuntimeError("no response")
+        with pytest.raises(RuntimeError):
+            connector.get_temporary_credentials_for_connector("test-connector")
+
+        assert botocore_logger.level == botocore_level
+
+    def test_overlapping_calls_do_not_log_the_response_body(
+        self, connector, credentials_response, caplog
+    ):
+        """A call that starts during another one must not bring DEBUG back before it ends."""
+        caplog.set_level(logging.DEBUG)
+        caplog.set_level(logging.NOTSET, logger="botocore")
+        parser_logger = logging.getLogger("botocore.parsers")
+        in_call = [threading.Event(), threading.Event()]
+        may_return = [threading.Event(), threading.Event()]
+        call_numbers = iter(range(2))
+
+        def respond(**kwargs):
+            number = next(call_numbers)
+            in_call[number].set()
+            may_return[number].wait(timeout=5)
+            parser_logger.debug("Response body: %r", credentials_response)
+            return credentials_response
+
+        connector.client.get_temporary_credentials_for_connector.side_effect = respond
+        threads = [
+            threading.Thread(
+                target=connector.get_temporary_credentials_for_connector, args=("test-connector",)
+            )
+            for _ in range(2)
+        ]
+
+        threads[0].start()
+        assert in_call[0].wait(timeout=5)
+        threads[1].start()
+        # Without the lock the second call is in flight by now; with it, it waits for the first.
+        in_call[1].wait(timeout=0.2)
+        for thread, event in zip(threads, may_return):
+            event.set()
+            thread.join(timeout=5)
+
+        assert "test-secret-key" not in caplog.text
+        assert logging.getLogger("botocore").level == logging.NOTSET
 
     @pytest.mark.parametrize(
         "aws_credentials",
