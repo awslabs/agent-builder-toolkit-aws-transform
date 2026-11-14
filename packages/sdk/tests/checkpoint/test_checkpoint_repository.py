@@ -415,25 +415,28 @@ class TestCreateCheckpointRepository:
     ) -> None:
         """A failed in-place extract is raised; the files before the failure stay restored."""
         dest = tmp_path / "dest"
-        (dest / "ro").mkdir(parents=True)
+        dest.mkdir()
         (dest / "aaa.json").write_text("old")
+        (dest / "blocker").write_text("a file where the checkpoint has a directory")
         (dest / "state.json").write_text("old")
         zip_path = tmp_path / "cp.zip"
         with zipfile.ZipFile(zip_path, "w") as zf:
             zf.writestr("aaa.json", "restored")
-            zf.writestr("ro/new.txt", "restored")
+            zf.writestr("blocker/new.txt", "restored")
             zf.writestr("state.json", "restored")
 
-        (dest / "ro").chmod(0o555)
-        try:
-            with pytest.raises(PermissionError):
+        # File permissions do not stop uid 0, so the rename is refused by a patch and the
+        # extract fails on a name collision.
+        with patch(
+            "agent_builder_sdk.checkpoint.checkpoint_repository.os.replace",
+            side_effect=OSError(errno.EACCES, os.strerror(errno.EACCES)),
+        ):
+            with pytest.raises(NotADirectoryError):
                 checkpoint_repository._extract_zip_to_path(str(zip_path), str(dest))
-        finally:
-            (dest / "ro").chmod(0o755)
 
         assert (dest / "aaa.json").read_text() == "restored"
         assert (dest / "state.json").read_text() == "old"
-        assert sorted(os.listdir(dest)) == ["aaa.json", "ro", "state.json"]
+        assert sorted(os.listdir(dest)) == ["aaa.json", "blocker", "state.json"]
 
     def test_undo_puts_back_entry_recreated_during_swap(
         self, checkpoint_repository: CheckpointRepository, tmp_path: Path
