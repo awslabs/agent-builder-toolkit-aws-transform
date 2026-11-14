@@ -987,6 +987,14 @@ def test_factory_keeps_its_positional_parameter_order(name):
     assert params[: len(_V1_POSITIONAL[name])] == _V1_POSITIONAL[name]
 
 
+_CONTRACT_TOOL_NAMES = [
+    "close_hitl_task", "complete_artifact_upload", "create_artifact_upload_url",
+    "create_hitl_task", "create_worklog", "get_artifact_metadata", "get_hitl_task", "get_job",
+    "list_job_plan_steps", "list_worklogs", "put_job_plan", "retrieve_hitl_output_as_string",
+    "start_hitl_task", "update_job_plan_step", "update_job_status", "upload_artifact",
+]
+
+
 def _agentic_service_shapes() -> dict[str, Any]:
     import agent_builder_sdk
 
@@ -1083,7 +1091,7 @@ class TestPlatformKnowledge:
     @pytest.mark.parametrize(
         ("mcp_client", "excluded", "reason"),
         [
-            (None, None, "no mcp_client was given"),
+            (None, None, f"no {_CONTRACT_TOOL_NAMES}: no mcp_client was given"),
             (
                 mock.Mock(),
                 {"list_artifacts", "start_hitl_task"},
@@ -1235,6 +1243,7 @@ class TestPlatformKnowledge:
     def test_read_platform_skill_file_stays_inside_platform_skills(self) -> None:
         for skill_name, path in [
             ("hitl-loop", "../../agent_factory.py"),
+            ("hitl-loop", "../job-plan/SKILL.md"),
             ("..", "agent_factory.py"),
             ("hitl-loop", "/etc/passwd"),
             ("/etc", "passwd"),
