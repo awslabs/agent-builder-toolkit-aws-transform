@@ -11,7 +11,8 @@ from typing import Optional
 from unittest import mock
 
 import pytest
-from strands.vended_plugins.skills import Skill
+from strands import Agent
+from strands.vended_plugins.skills import AgentSkills, Skill
 
 from agent_builder_sdk.agent_factory import (
     _PLATFORM_CONTRACT_TOOL_NAMES,
@@ -1000,6 +1001,36 @@ class TestPlatformKnowledge:
         assert call_kwargs["system_prompt"] == "task prompt"
         assert call_kwargs["plugins"] is None
         assert read_platform_skill_file not in call_kwargs["custom_tools"]
+
+    def test_team_skill_replaces_the_platform_skill_of_the_same_name(self, tmp_path: Path) -> None:
+        team_skill = tmp_path / "team" / "hitl-loop"
+        team_skill.mkdir(parents=True)
+        (team_skill / "SKILL.md").write_text(
+            "---\nname: hitl-loop\ndescription: Team override.\n---\n\nTEAM HITL BODY\n"
+        )
+
+        with mock.patch(
+            "agent_builder_sdk.agent_factory.AsyncBaseOrchestrator"
+        ) as mock_orchestrator, mock.patch(
+            "strands.vended_plugins.skills.AgentSkills", wraps=AgentSkills
+        ) as mock_skills:
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt",
+                mcp_client=mock.Mock(),
+                storage_dir=str(tmp_path / "storage"),
+                enable_skills=True,
+                skills_dir=str(tmp_path / "team"),
+                enable_platform_skills=True,
+            )
+
+        assert mock_skills.call_args.kwargs["skills"] == [
+            str(_PLATFORM_SKILLS_DIR),
+            str(tmp_path / "team"),
+        ]
+        (plugin,) = mock_orchestrator.call_args.kwargs["plugins"]
+        agent = Agent(model=mock.Mock(), plugins=[plugin], callback_handler=None)
+        assert "TEAM HITL BODY" in agent.tool.skills(skill_name="hitl-loop")["content"][0]["text"]
+        assert "# Job Plan" in agent.tool.skills(skill_name="job-plan")["content"][0]["text"]
 
     @pytest.mark.parametrize(
         ("mcp_client", "excluded", "reason"),

@@ -27,6 +27,8 @@ dependencies = [
     # Pin to the mcp 1.x major the toolkit is tested against; mcp 2.0.0 is a
     # breaking release (see issue #77). Widen once verified against 2.x.
     "mcp>=1.0,<2.0",
+    # 1.30.0 is the first release that ships strands.vended_plugins.skills, which
+    # enable_skills and enable_platform_skills load.
     "strands-agents>=1.30.0",
     "strands-agents-tools>=0.2",
     "uvicorn>=0.20",

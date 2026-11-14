@@ -160,7 +160,8 @@ def _create_default_orchestrator(
     # Build the skills plugin from whichever sources are turned on. The packaged platform skills
     # (HITL protocol, job plan, artifact I/O, ...) teach an agent the platform; a team's
     # own skills_dir layers on top. Both are opt-in, so with neither flag set no plugin is built
-    # and behavior is unchanged.
+    # and behavior is unchanged. The order is load-bearing: AgentSkills keeps the later source
+    # when two skills share a name, so the team's skill replaces the packaged one.
     skills_sources: list[Any] = []
     if enable_platform_skills:
         skills_sources.append(str(_PLATFORM_SKILLS_DIR))
@@ -494,6 +495,8 @@ def create_default_async_orchestrator_with_subagent(
             job status, worklog and HITL tools are available, so pass an mcp_client that serves
             them. With no mcp_client, or with one of those tools in excluded_mcp_tool_names, the
             contract is still appended and a warning is logged.
+            With enable_skills also set, a skill in skills_dir replaces the packaged skill of
+            the same name.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
