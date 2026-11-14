@@ -34,8 +34,7 @@ class TestSkillsTool:
             # Create a valid skill
             hello_skill = skills_path / "hello-world"
             hello_skill.mkdir()
-            (hello_skill / "SKILL.md").write_text(
-                """---
+            (hello_skill / "SKILL.md").write_text("""---
 name: hello-world
 description: A test skill for greeting users
 ---
@@ -43,14 +42,12 @@ description: A test skill for greeting users
 # Hello World Skill
 
 When activated, greet the user warmly and professionally.
-"""
-            )
+""")
 
             # Create another skill with resources
             web_skill = skills_path / "web-research"
             web_skill.mkdir()
-            (web_skill / "SKILL.md").write_text(
-                """---
+            (web_skill / "SKILL.md").write_text("""---
 name: web-research
 description: Searches web and synthesizes findings
 ---
@@ -58,8 +55,7 @@ description: Searches web and synthesizes findings
 # Web Research Skill
 
 Use this skill to search the web and create reports.
-"""
-            )
+""")
             (web_skill / "template.txt").write_text("Report template content")
             (web_skill / "config.json").write_text('{"timeout": 30}')
 
@@ -240,15 +236,13 @@ Use this skill to search the web and create reports.
         # Create a new skill in the empty dir
         extra_skill = Path(empty_skills_dir) / "extra-skill"
         extra_skill.mkdir()
-        (extra_skill / "SKILL.md").write_text(
-            """---
+        (extra_skill / "SKILL.md").write_text("""---
 name: extra-skill
 description: An extra skill from imported directory
 ---
 
 # Extra Skill Instructions
-"""
-        )
+""")
 
         with mock.patch.dict(os.environ, {"STRANDS_SKILLS_DIR": skills_dir}):
             # Import the additional directory
@@ -320,15 +314,13 @@ class TestSkillsPrompt:
             ]:
                 skill_dir = skills_path / name
                 skill_dir.mkdir()
-                (skill_dir / "SKILL.md").write_text(
-                    f"""---
+                (skill_dir / "SKILL.md").write_text(f"""---
 name: {name}
 description: {desc}
 ---
 
 Instructions for {name}.
-"""
-                )
+""")
 
             yield str(skills_path)
 
@@ -384,15 +376,13 @@ Instructions for {name}.
             skills_path = Path(tmpdir)
             skill_dir = skills_path / "special-skill"
             skill_dir.mkdir()
-            (skill_dir / "SKILL.md").write_text(
-                """---
+            (skill_dir / "SKILL.md").write_text("""---
 name: special-skill
 description: Uses <tags> & "quotes"
 ---
 
 Instructions here.
-"""
-            )
+""")
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", FutureWarning)
