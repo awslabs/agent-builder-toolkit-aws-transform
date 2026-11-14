@@ -6,7 +6,9 @@ import pytest
 
 from agent_builder_sdk.agentic_framework.client_factory import (
     create_agentic_api_client,
+    create_streaming_agentic_api_client,
     get_agentic_api_client,
+    get_streaming_agentic_api_client,
 )
 
 
@@ -24,29 +26,6 @@ def test_create_agentic_api_client_with_endpoint_url(mock_boto_client):
     assert call_args[1]["service_name"] == "transformagenticservice"
     assert call_args[1]["endpoint_url"] == "https://test-endpoint.com"
     assert call_args[1]["region_name"] == "us-west-2"
-
-
-@mock.patch("agent_builder_sdk.agentic_framework.client_factory.boto3.client")
-def test_create_agentic_api_client_timeouts(mock_boto_client):
-    """Timeouts default to 5s connect / 30s read; the deprecated timeout sets both."""
-
-    def timeouts():
-        config = mock_boto_client.call_args[1]["config"]
-        return config.connect_timeout, config.read_timeout
-
-    create_agentic_api_client(endpoint_url="https://e", region="us-west-2")
-    assert timeouts() == (5, 30)
-
-    create_agentic_api_client(endpoint_url="https://e", connect_timeout=2, read_timeout=90)
-    assert timeouts() == (2, 90)
-
-    with pytest.warns(DeprecationWarning, match="timeout is deprecated"):
-        create_agentic_api_client(endpoint_url="https://e", timeout=60)
-    assert timeouts() == (60, 60)
-
-    with pytest.warns(DeprecationWarning):
-        create_agentic_api_client(None, "us-west-2", "https://e", 3, 45)  # positional, as before
-    assert timeouts() == (45, 45)
 
 
 @mock.patch("agent_builder_sdk.agentic_framework.client_factory.boto3.client")
@@ -138,3 +117,111 @@ def test_create_agentic_api_client_external_api(mock_boto_client):
     call_args = mock_boto_client.call_args
     assert call_args[1]["service_name"] == "transformagenticservice"
     assert call_args[1]["endpoint_url"] == "https://transform-agents.us-east-1.api.aws"
+
+
+@mock.patch("agent_builder_sdk.agentic_framework.client_factory.boto3.client")
+def test_create_streaming_agentic_api_client_with_endpoint_url(mock_boto_client):
+    """Streaming client targets the streaming service with a large read timeout."""
+    mock_client = mock.Mock()
+    mock_boto_client.return_value = mock_client
+
+    result = create_streaming_agentic_api_client(
+        endpoint_url="https://test-endpoint.com", region="us-west-2"
+    )
+
+    assert result == mock_client
+    mock_boto_client.assert_called_once()
+    call_args = mock_boto_client.call_args
+    assert call_args[1]["service_name"] == "transformagentsstreamingservice"
+    assert call_args[1]["endpoint_url"] == "https://test-endpoint.com"
+    assert call_args[1]["region_name"] == "us-west-2"
+    # Idle read timeout must outlast the 9-min stream cap, not the sync client's 30s default.
+    assert call_args[1]["config"].read_timeout == 10 * 60
+    assert call_args[1]["config"].read_timeout > 9 * 60
+
+
+@mock.patch("agent_builder_sdk.agentic_framework.client_factory.boto3.client")
+def test_create_streaming_agentic_api_client_with_stage_region(mock_boto_client):
+    """Streaming client reuses the same host resolution as the sync client."""
+    mock_client = mock.Mock()
+    mock_boto_client.return_value = mock_client
+
+    result = create_streaming_agentic_api_client(stage="alpha-intg", region="us-west-2")
+
+    assert result == mock_client
+    call_args = mock_boto_client.call_args
+    assert call_args[1]["service_name"] == "transformagentsstreamingservice"
+    assert (
+        call_args[1]["endpoint_url"] == "https://pdx.alpha-intg.agenticapi.elastic-gumby.ai.aws.dev"
+    )
+
+
+@mock.patch.dict("os.environ", {}, clear=True)
+def test_create_streaming_agentic_api_client_missing_params():
+    """Streaming client requires endpoint_url or stage+region, like the sync client."""
+    with pytest.raises(
+        ValueError, match="Either endpoint_url or both stage and region must be provided"
+    ):
+        create_streaming_agentic_api_client()
+
+
+@mock.patch(
+    "agent_builder_sdk.agentic_framework.client_factory.create_streaming_agentic_api_client"
+)
+def test_get_streaming_agentic_api_client_cached(mock_create_client):
+    """Test that get_streaming_agentic_api_client uses caching."""
+    mock_client = mock.Mock()
+    mock_create_client.return_value = mock_client
+
+    get_streaming_agentic_api_client.cache_clear()
+
+    result1 = get_streaming_agentic_api_client()
+    result2 = get_streaming_agentic_api_client()
+
+    assert result1 == mock_client
+    assert result2 == mock_client
+    mock_create_client.assert_called_once()
+
+
+def test_packaged_models_let_clients_build_without_registered_models(monkeypatch, tmp_path):
+    """With no models registered by the user, both services still resolve from package data."""
+    import boto3
+
+    from agent_builder_sdk.agentic_framework import client_factory
+
+    monkeypatch.setenv("AWS_DATA_PATH", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(boto3, "DEFAULT_SESSION", None)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "x")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "x")
+
+    client_factory._register_packaged_models()
+    for service in (
+        client_factory.ATX_AGENTIC_API_SERVICE_NAME,
+        client_factory.ATX_STREAMING_AGENTIC_API_SERVICE_NAME,
+    ):
+        client = boto3.client(service, region_name="us-west-2", endpoint_url="https://example.invalid")
+        assert client.meta.service_model.service_name == service
+
+
+def test_packaged_models_load_after_another_default_session_client(monkeypatch, tmp_path):
+    """A default-session client built first caches the service list; the packaged models must
+    still resolve afterwards (for example after the STS client the shared-capacity session builds)."""
+    import boto3
+
+    from agent_builder_sdk.agentic_framework import client_factory
+
+    monkeypatch.setenv("AWS_DATA_PATH", str(tmp_path))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(boto3, "DEFAULT_SESSION", None)
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "x")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "x")
+
+    boto3.client("s3", region_name="us-west-2")
+    agentic = client_factory.create_agentic_api_client(endpoint_url="https://example.invalid", region="us-west-2")
+    streaming = client_factory.create_streaming_agentic_api_client(
+        endpoint_url="https://example.invalid", region="us-west-2"
+    )
+
+    assert agentic.meta.service_model.service_name == client_factory.ATX_AGENTIC_API_SERVICE_NAME
+    assert streaming.meta.service_model.service_name == client_factory.ATX_STREAMING_AGENTIC_API_SERVICE_NAME

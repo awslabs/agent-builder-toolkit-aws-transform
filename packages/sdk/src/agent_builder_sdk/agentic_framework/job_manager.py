@@ -60,22 +60,18 @@ class JobManager(AgenticApiHelper):
         Raises:
             Exception: If there's an error updating the job status
         """
-        # Guard against updating a job that has already reached a terminal
-        # state. The service rejects such calls with a 400 ValidationException.
-        # Skip the call instead. If the check itself fails, update anyway.
         try:
-            current_job_status: Optional[str] = self.get_job_status()
-        except Exception as e:
-            logger.warning(f"Terminal-state check failed, updating job status anyway: {e}")
-            current_job_status = None
-        if current_job_status in TERMINAL_STATES:
-            logger.warning(
-                f"Skipping UpdateJobStatus to {status.value}: job is already in "
-                f"terminal state {current_job_status}"
-            )
-            return {}
+            # Guard against updating a job that has already reached a terminal
+            # state. The service rejects such calls with a 400 ValidationException,
+            # so skip the call instead.
+            current_job_status = self.get_job_status()
+            if current_job_status in TERMINAL_STATES:
+                logger.warning(
+                    f"Skipping UpdateJobStatus to {status.value}: job is already in "
+                    f"terminal state {current_job_status}"
+                )
+                return {}
 
-        try:
             input_data: Dict[str, Any] = {"status": status.value}
 
             if status_info:
