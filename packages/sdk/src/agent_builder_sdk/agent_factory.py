@@ -72,23 +72,35 @@ _PLATFORM_CONTRACT_TOOL_NAMES = frozenset(
 def read_platform_skill_file(skill_name: str, path: str) -> str:
     """Read a file that ships with a platform skill, such as one listed under its References.
 
+    Reads only the skills packaged with the SDK, never a skill loaded from skills_dir: when a
+    skills_dir skill replaces a platform skill of the same name, this tool still returns the
+    packaged skill's files. Files larger than 64 KiB are refused.
+
     Args:
         skill_name: Name of the platform skill, e.g. "hitl-loop".
         path: File path inside that skill, e.g. "references/recovery.md".
 
     Returns:
-        The file's text, or an error message.
+        The file's text, or a message that starts with "Error:" when the path is absolute,
+        contains "..", does not name a readable file inside the packaged skills, or the file is
+        too large.
     """
     relative = Path(skill_name, path)
     if relative.is_absolute() or ".." in relative.parts:
         return f"Error: '{relative}' must be a relative path without '..'"
     root = _PLATFORM_SKILLS_DIR.resolve()
-    target = (root / relative).resolve()
-    if not target.is_relative_to(root) or not target.is_file():
-        return f"Error: no platform skill file '{relative}'"
-    if target.stat().st_size > _MAX_PLATFORM_SKILL_FILE_BYTES:
-        return f"Error: '{relative}' is larger than {_MAX_PLATFORM_SKILL_FILE_BYTES} bytes"
-    return target.read_text(encoding="utf-8")
+    try:
+        target = (root / relative).resolve()
+        if not target.is_relative_to(root) or not target.is_file():
+            return f"Error: no platform skill file '{relative}'"
+        if target.stat().st_size > _MAX_PLATFORM_SKILL_FILE_BYTES:
+            return f"Error: '{relative}' is larger than {_MAX_PLATFORM_SKILL_FILE_BYTES} bytes"
+        return target.read_text(encoding="utf-8")
+    except (OSError, ValueError, RuntimeError) as e:
+        # pathlib raises ValueError for a NUL byte, OSError for an over-long name and, before
+        # Python 3.13, RuntimeError for a symlink loop.
+        logger.warning(f"read_platform_skill_file cannot read {str(relative)!r}: {e}")
+        return f"Error: no platform skill file {str(relative)!r}"
 
 
 def _create_default_orchestrator(

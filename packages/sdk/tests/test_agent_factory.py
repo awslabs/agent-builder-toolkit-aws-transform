@@ -1091,3 +1091,17 @@ class TestPlatformKnowledge:
 
         assert read_platform_skill_file(skill_name="demo", path="link.md").startswith("Error:")
         assert read_platform_skill_file(skill_name="demo", path="big.md").startswith("Error:")
+
+    def test_read_platform_skill_file_returns_an_error_for_an_unresolvable_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        skill_dir = tmp_path / "skills" / "demo"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "loop.md").symlink_to(skill_dir / "loop.md")
+        monkeypatch.setattr(
+            "agent_builder_sdk.agent_factory._PLATFORM_SKILLS_DIR", tmp_path / "skills"
+        )
+
+        for path in ["a\x00b", "x" * 300, "loop.md"]:
+            result = read_platform_skill_file(skill_name="demo", path=path)
+            assert result.startswith("Error: no platform skill file")
