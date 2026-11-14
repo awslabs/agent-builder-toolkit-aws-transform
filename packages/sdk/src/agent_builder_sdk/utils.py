@@ -268,6 +268,11 @@ def extract_text_from_strands_agent_response(response: AgentResult) -> str:
     return "\n".join(text_blocks).strip()
 
 
+# Strands' placeholder for empty assistant content. The model reads it in history, and
+# BlankReplyHookProvider counts a reply that copies it back as empty.
+_BLANK_TEXT_SENTINEL = "[blank text]"
+
+
 class _StripReplayedThinking(HookProvider):
     """Drop reasoning blocks from the history an invocation starts with.
 
@@ -296,7 +301,7 @@ class _StripReplayedThinking(HookProvider):
                 # message objects (shared with the conversation repository) stay as they are.
                 # A thinking-only turn, such as a content-filtered reply, gets Strands' own
                 # placeholder for empty assistant content; Bedrock rejects empty messages.
-                messages[i] = {**message, "content": content or [{"text": "[blank text]"}]}
+                messages[i] = {**message, "content": content or [{"text": _BLANK_TEXT_SENTINEL}]}
 
     @classmethod
     def _strip_before_overflow_retry(cls, event: AfterModelCallEvent) -> None:

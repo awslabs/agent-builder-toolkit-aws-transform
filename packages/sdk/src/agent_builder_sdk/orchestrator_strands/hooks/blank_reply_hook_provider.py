@@ -16,6 +16,7 @@ from agent_builder_sdk.orchestrator_strands.conversation.constants import Messag
 from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     conversation_source_type,
 )
+from agent_builder_sdk.utils import _BLANK_TEXT_SENTINEL
 
 # HookOrder is strands >= 1.43.
 try:
@@ -30,10 +31,6 @@ logger = logging.getLogger(__name__)
 BLANK_REPLY_CONTINUATION_MARKER = "blank_reply_continuation"
 """Key set in ``metadata.custom`` of the continuation message (metadata never reaches the model).
 ``MessageAddedEvent`` hooks that treat user text as input should skip messages carrying it."""
-
-# Strands shows the model this text in place of an empty assistant message from history; a model
-# that copies it back has still written nothing.
-_BLANK_TEXT_SENTINEL = "[blank text]"
 
 _CONTINUATION_TEXT = (
     "Your last response was empty, so nothing has reached the user. Write your reply to the user "

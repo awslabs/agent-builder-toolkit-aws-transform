@@ -23,8 +23,11 @@ from agent_builder_sdk.custom_types.orchestrator_agent_types import (
     ProcessMessageRequest,
 )
 from agent_builder_sdk.orchestrator_strands.base_orchestrator import AsyncBaseOrchestrator
-from agent_builder_sdk.orchestrator_strands.hooks import ConversationHookProvider
-from agent_builder_sdk.utils import _StripReplayedThinking
+from agent_builder_sdk.orchestrator_strands.hooks import (
+    ConversationHookProvider,
+    blank_reply_hook_provider,
+)
+from agent_builder_sdk.utils import _BLANK_TEXT_SENTINEL, _StripReplayedThinking
 
 
 def _prefix_signature(messages):
@@ -158,3 +161,14 @@ def test_strip_rewrites_only_messages_with_thinking_in_place():
         [{"text": "u2"}],
         [{"text": "a2"}],
     ]
+
+
+def test_blank_reply_hook_reads_a_stripped_thinking_only_turn_as_blank() -> None:
+    thinking = {"reasoningContent": {"reasoningText": {"text": "", "signature": "sig"}}}
+    agent = SimpleNamespace(messages=[{"role": "assistant", "content": [thinking]}])
+
+    _StripReplayedThinking._strip(SimpleNamespace(agent=agent))
+
+    assert blank_reply_hook_provider._is_blank(agent.messages[0])
+    # One object, not two equal literals that can drift apart.
+    assert blank_reply_hook_provider._BLANK_TEXT_SENTINEL is _BLANK_TEXT_SENTINEL
