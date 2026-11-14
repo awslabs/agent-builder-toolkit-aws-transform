@@ -200,16 +200,18 @@ class BaseServer(ABC):
                 locale=locale,
             )
 
-            # An initialization that an earlier request started may still read self.context,
-            # and only invoke and restore carry the agent, tenant and locale fields. A request
-            # for the same agent instance therefore adds to the context, it never erases a
-            # field (a health check without a token must not drop the token).
+            # An initialization that an earlier request started may still read self.context.
+            # Invoke and restore carry every field, so they replace the context. Any other
+            # request carries identifiers and a token only: for the same agent instance it
+            # adds to the context and never erases a field (a health check without a token
+            # must not drop the token).
             previous = self.context
-            if previous is not None and (
-                previous.workspace_id,
-                previous.job_id,
-                previous.agent_instance_id,
-            ) == (context.workspace_id, context.job_id, context.agent_instance_id):
+            if (
+                method not in (JsonRpcMethods.INVOKE, JsonRpcMethods.RESTORE)
+                and previous is not None
+                and (previous.workspace_id, previous.job_id, previous.agent_instance_id)
+                == (context.workspace_id, context.job_id, context.agent_instance_id)
+            ):
                 context = replace(
                     previous, **{name: value for name, value in asdict(context).items() if value}
                 )

@@ -305,6 +305,22 @@ class TestContextAcrossRequests:
         # The earlier token is kept in the context but is not handed out a second time.
         assert initialize_agent.await_args_list == [mock.call("token-1"), mock.call(later_token)]
 
+    @pytest.mark.parametrize("method", [JsonRpcMethods.INVOKE, JsonRpcMethods.RESTORE])
+    async def test_later_invoke_or_restore_replaces_context(
+        self, base_server: ConcreteBaseServer, method: str
+    ) -> None:
+        """Invoke and restore carry every field, so a field they leave out is cleared."""
+        later = _request(JsonRpcMethods.INVOKE, "ai-1", None)
+        later["method"] = method
+        later["params"]["invocationContext"].update(agentMetadata={}, userMetadata={})
+
+        await base_server.ensure_initialized(_request(JsonRpcMethods.INVOKE, "ai-1", "token-1"))
+        await base_server.ensure_initialized(later)
+
+        assert base_server.context == AgentRuntimeContext(
+            workspace_id="ws-1", job_id="job-1", agent_instance_id="ai-1"
+        )
+
     async def test_request_for_another_agent_instance_replaces_context(
         self, base_server: ConcreteBaseServer
     ) -> None:
