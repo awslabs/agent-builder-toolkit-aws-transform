@@ -4373,7 +4373,7 @@ AWS Transform integration with Genesis
 | atx_agent/restore | State restoration | invocationContext |
 | atx_agent/stop | Graceful shutdown | jobMetadata |
 | message/send | A2A messaging | metadata.ATX_A2A.AgentInitializationContext |
-| tasks/get | Task retrieval | metadata.agentInitializationContext |
+| tasks/get | Task retrieval | metadata.ATX_A2A.AgentInitializationContext (metadata.agentInitializationContext is still accepted) |
 
 | Endpoint | Method | Purpose | Usage |
 | --- | --- | --- | --- |
