@@ -7,11 +7,13 @@ Tests the StatelessAgentRuntimeServer class which provides compatibility with mu
 agent execution environments through JSON-RPC endpoints.
 """
 
+import asyncio
 from unittest import mock
 
 import pytest
 
 from agent_builder_sdk.custom_types.common_types import A2AMessage
+from agent_builder_sdk.custom_types.server_types import JsonRpcMethods
 from agent_builder_sdk.server.stateless_agent_runtime_server import StatelessAgentRuntimeServer
 
 
@@ -753,3 +755,56 @@ class TestStatelessAgentRuntimeServer:
                             # Verify set_agent_running was NOT called for RUNNING status
                             mock_set_running.assert_not_called()
                             assert stateless_agent_runtime_server.initialized is True
+
+    async def test_handshake_while_waiting_for_invoked_does_not_break_initialization(
+        self, stateless_agent_runtime_server: StatelessAgentRuntimeServer
+    ) -> None:
+        """A request that arrives before initialization finishes must not damage its context."""
+        server = stateless_agent_runtime_server
+        wait_started = asyncio.Event()
+        release_wait = asyncio.Event()
+
+        async def slow_wait_for_agent_non_invoking(*_args: str) -> str:
+            wait_started.set()
+            await release_wait.wait()
+            return "INVOKED"
+
+        invoke = {
+            "jsonrpc": "2.0",
+            "id": "1",
+            "method": JsonRpcMethods.INVOKE,
+            "params": {
+                "agentInstanceId": "ai-1",
+                "invocationContext": {
+                    "jobMetadata": {"workspaceId": "ws-1", "jobId": "job-1"},
+                    "authorizationToken": "token-1",
+                },
+            },
+        }
+        handshake = {"jsonrpc": "2.0", "id": "2", "method": JsonRpcMethods.HANDSHAKE}
+        module = "agent_builder_sdk.server.stateless_agent_runtime_server"
+
+        with (
+            mock.patch(f"{module}.set_runtime_env_vars"),
+            mock.patch(f"{module}.setup_initial_auth_token"),
+            mock.patch(f"{module}.get_agent_status", return_value="INVOKING"),
+            mock.patch(
+                f"{module}.wait_for_agent_non_invoking",
+                side_effect=slow_wait_for_agent_non_invoking,
+            ),
+            mock.patch(f"{module}.build_agentic_api_endpoint_from_env"),
+            mock.patch(f"{module}.MCPClientFactory.setup_ab_mcp_client"),
+            mock.patch(f"{module}.get_agentic_api_client"),
+            mock.patch(f"{module}.JobManager"),
+            mock.patch(f"{module}.set_agent_running") as mock_set_running,
+        ):
+            tasks_before = asyncio.all_tasks()
+            await server.ensure_initialized(invoke)
+            (background_init,) = asyncio.all_tasks() - tasks_before
+            await asyncio.wait_for(wait_started.wait(), timeout=5)
+            await server.ensure_initialized(handshake)
+            release_wait.set()
+            await asyncio.wait_for(background_init, timeout=5)
+
+        assert server.initialized is True
+        mock_set_running.assert_called_once_with("ws-1", "job-1", "ai-1")

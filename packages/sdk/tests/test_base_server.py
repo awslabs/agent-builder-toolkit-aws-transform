@@ -6,11 +6,14 @@ Unit tests for Base Server implementation.
 Tests the BaseServer abstract class functionality including setup_tracing.
 """
 
+from typing import Any, Dict, Optional
 from unittest import mock
 
 import pytest
 
+from agent_builder_sdk.custom_types.server_types import JsonRpcMethods
 from agent_builder_sdk.server.base_server import BaseServer
+from agent_builder_sdk.server.server_models import AgentRuntimeContext
 
 
 class ConcreteBaseServer(BaseServer):
@@ -250,6 +253,77 @@ class TestBaseServer:
         await base_server.handle_jsonrpc(request)
 
         assert "Handshake request received" in caplog.text
+
+
+def _request(method: str, agent_instance_id: str, token: Optional[str]) -> Dict[str, Any]:
+    """Build an invoke request (full context) or a health check (identifiers and token only)."""
+    job_metadata = {"workspaceId": "ws-1", "jobId": "job-1"}
+    if method == JsonRpcMethods.INVOKE:
+        params: Dict[str, Any] = {
+            "agentInstanceId": agent_instance_id,
+            "invocationContext": {
+                "jobMetadata": job_metadata,
+                "agentMetadata": {"agentId": "agent-1", "agentVersion": "1.0"},
+                "userMetadata": {"accountId": "acct-1", "invocationUserCurrentLocale": "ja-JP"},
+                "authorizationToken": token,
+            },
+        }
+    else:
+        params = {
+            "agentInstanceId": agent_instance_id,
+            "jobMetadata": job_metadata,
+            "authorizationToken": token,
+        }
+    return {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+
+
+class TestContextAcrossRequests:
+    """Requests that arrive before initialization finishes share one context."""
+
+    @pytest.mark.parametrize(
+        "later_token, expected_token", [(None, "token-1"), ("", "token-1"), ("token-2", "token-2")]
+    )
+    async def test_later_request_for_same_agent_instance_only_renews_token(
+        self, base_server: ConcreteBaseServer, later_token: Optional[str], expected_token: str
+    ) -> None:
+        with mock.patch.object(base_server, "initialize_agent") as initialize_agent:
+            await base_server.ensure_initialized(_request(JsonRpcMethods.INVOKE, "ai-1", "token-1"))
+            await base_server.ensure_initialized(
+                _request(JsonRpcMethods.HEALTHCHECK, "ai-1", later_token)
+            )
+
+        assert base_server.context == AgentRuntimeContext(
+            workspace_id="ws-1",
+            job_id="job-1",
+            agent_instance_id="ai-1",
+            agent_id="agent-1",
+            agent_version="1.0",
+            initial_auth_token=expected_token,
+            tenant_account_id="acct-1",
+            locale="ja-JP",
+        )
+        # The earlier token is kept in the context but is not handed out a second time.
+        assert initialize_agent.await_args_list == [mock.call("token-1"), mock.call(later_token)]
+
+    async def test_request_for_another_agent_instance_replaces_context(
+        self, base_server: ConcreteBaseServer
+    ) -> None:
+        await base_server.ensure_initialized(_request(JsonRpcMethods.INVOKE, "ai-1", "token-1"))
+        await base_server.ensure_initialized(_request(JsonRpcMethods.HEALTHCHECK, "ai-2", None))
+
+        assert base_server.context == AgentRuntimeContext(
+            workspace_id="ws-1", job_id="job-1", agent_instance_id="ai-2"
+        )
+
+    async def test_handshake_keeps_context(self, base_server: ConcreteBaseServer) -> None:
+        await base_server.ensure_initialized(_request(JsonRpcMethods.INVOKE, "ai-1", "token-1"))
+        context = base_server.context
+
+        await base_server.ensure_initialized(
+            {"jsonrpc": "2.0", "id": 2, "method": JsonRpcMethods.HANDSHAKE}
+        )
+
+        assert base_server.context is context
 
 
 class TestHandleStreamingPartsParity:

@@ -10,6 +10,7 @@ import os
 import uuid
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
+from dataclasses import asdict, replace
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -103,11 +104,6 @@ class BaseServer(ABC):
             logger.info("Agent already initialized. Skipping initialization.")
             return
 
-        # Clear any inconsistent state from previous failed initialization
-        if self.context and not self.initialized:
-            logger.warning("Clearing inconsistent state from previous failed initialization")
-            self.context = None
-
         # Only AgentCore initialization from request - MDE is already initialized in _startup()
         if request and self.is_jsonrpc_request(request):
             await self.extract_and_initialize(request)
@@ -193,8 +189,7 @@ class BaseServer(ABC):
             if locale:
                 logger.info("Locale configured: %s", locale)
 
-            # Set context in class
-            self.context = AgentRuntimeContext(
+            context = AgentRuntimeContext(
                 workspace_id=init_request["workspaceId"],
                 job_id=init_request["jobId"],
                 agent_instance_id=init_request["agentInstanceId"],
@@ -205,8 +200,24 @@ class BaseServer(ABC):
                 locale=locale,
             )
 
-            # Initialize with token
-            await self.initialize_agent(self.context.initial_auth_token)
+            # An initialization that an earlier request started may still read self.context,
+            # and only invoke and restore carry the agent, tenant and locale fields. A request
+            # for the same agent instance therefore adds to the context, it never erases a
+            # field (a health check without a token must not drop the token).
+            previous = self.context
+            if previous is not None and (
+                previous.workspace_id,
+                previous.job_id,
+                previous.agent_instance_id,
+            ) == (context.workspace_id, context.job_id, context.agent_instance_id):
+                context = replace(
+                    previous, **{name: value for name, value in asdict(context).items() if value}
+                )
+            self.context = context
+
+            # Pass this request's own token, not the kept one: an earlier token must not
+            # overwrite the token file after the refresher has renewed it.
+            await self.initialize_agent(init_request.get("authorizationToken"))
         else:
             logger.error("Could not extract initialization context from JSON-RPC request")
             raise ValueError("Missing required initialization context in JSON-RPC request")
