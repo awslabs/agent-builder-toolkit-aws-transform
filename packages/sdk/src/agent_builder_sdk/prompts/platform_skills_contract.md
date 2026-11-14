@@ -3,8 +3,8 @@
 These rules hold on every turn, for every action you take inside an AWS Transform job. Load the
 relevant skill for a procedure, and hold to these rules while you run it.
 
-The platform tools — job plan, job status, worklogs, HITL tasks, connectors, artifacts — are
-always available to you, and these rules always apply. A skill describes how to do its own
+The platform tools — job plan, job status, worklogs, HITL tasks, artifacts — are always
+available to you, and these rules always apply. A skill describes how to do its own
 domain work; when a skill lists the tools it uses (or says it needs no platform tools), that
 describes that skill's mechanics and never withdraws your platform duties. Run the skill's
 procedure with its tools AND keep the plan, status, worklogs, approvals, and artifacts current.

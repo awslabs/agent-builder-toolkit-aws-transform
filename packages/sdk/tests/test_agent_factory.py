@@ -1046,6 +1046,11 @@ class TestPlatformKnowledge:
                 {"get_job", "close_hitl_task", "get_artifact_metadata"},
                 "no ['close_hitl_task', 'get_artifact_metadata', 'get_job']: excluded_mcp_tool_names",
             ),
+            (
+                mock.Mock(),
+                {"retrieve_hitl_output_as_string"},
+                "no ['retrieve_hitl_output_as_string']: excluded_mcp_tool_names removes them",
+            ),
         ],
     )
     def test_platform_skills_without_the_contract_tools_logs_a_warning(

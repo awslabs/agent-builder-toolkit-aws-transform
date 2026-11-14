@@ -69,6 +69,7 @@ _PLATFORM_CONTRACT_TOOL_NAMES = frozenset(
         "create_hitl_task",
         "start_hitl_task",
         "get_hitl_task",
+        "retrieve_hitl_output_as_string",
         "close_hitl_task",
         "create_artifact_upload_url",
         "upload_artifact",
@@ -513,7 +514,9 @@ def create_default_async_orchestrator_with_subagent(
             is given, unless a tool of the same name is in custom_tools. The tools that the
             mcp_client itself serves are not checked.
             With enable_skills also set, a skill in skills_dir replaces the packaged skill of
-            the same name.
+            the same name. read_platform_skill_file never reads skills_dir: for a replaced
+            skill it still returns the packaged skill's reference files, so put the reference
+            text of a replacing skill in its SKILL.md.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools

@@ -34,4 +34,4 @@ likely scope first and re-query the other only if the result is thin.
 - If a lookup returns nothing useful, say what you couldn't confirm rather than inventing an
   answer — an unconfirmed fact is a question for the user, not a guess.
 - This is read-only background knowledge; it is not a source of customer data (that comes
-  through a connector).
+  through a connector when the platform provides one, or by the path your own instructions give).
