@@ -2,30 +2,54 @@
 # SPDX-License-Identifier: Apache-2.0
 """Skill operations tools."""
 
+import functools
 import io
 import json
+import logging
 import uuid
 import zipfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import requests  # type: ignore[import-untyped]
 from mcp.server.fastmcp import FastMCP
 
 from ..registry._client import registry_client
 
+logger = logging.getLogger(__name__)
+
+DEPRECATION_NOTICE = (
+    "This tool is deprecated and will be removed in a future release of agent-builder-mcp-aws-transform. "
+    "Do not build new workflows on it."
+)
+
+
+def deprecated(fn: Callable[..., str]) -> Callable[..., str]:
+    """Mark a skill tool deprecated: the JSON result gains a `deprecation` field and each call is logged."""
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> str:
+        logger.warning("Deprecated tool %s called. %s", fn.__name__, DEPRECATION_NOTICE)
+        result = json.loads(fn(*args, **kwargs))
+        result["deprecation"] = DEPRECATION_NOTICE
+        return json.dumps(result, indent=2, default=str)
+
+    return wrapper
+
 
 def register_skill_operations_tools(mcp: FastMCP) -> None:
     """Register skill operations tools with MCP server."""
-    mcp.tool(description="List all skills registered by the caller")(list_skills)
-    mcp.tool(description="Retrieve metadata for a specific skill")(get_skill_metadata)
-    mcp.tool(description="Update metadata for a specific skill")(update_skill_metadata)
-    mcp.tool(description="Upload a skill artifact from a local file or directory")(upload_skill)
-    mcp.tool(description="Download a skill artifact from the registry")(download_skill)
-    mcp.tool(description="List AWS account IDs with access to a skill")(list_skill_access_control)
-    mcp.tool(description="Enable or disable access for an AWS account to a skill")(
-        update_skill_access_control
-    )
+    tools = [
+        (list_skills, "List all skills registered by the caller"),
+        (get_skill_metadata, "Retrieve metadata for a specific skill"),
+        (update_skill_metadata, "Update metadata for a specific skill"),
+        (upload_skill, "Upload a skill artifact from a local file or directory"),
+        (download_skill, "Download a skill artifact from the registry"),
+        (list_skill_access_control, "List AWS account IDs with access to a skill"),
+        (update_skill_access_control, "Enable or disable access for an AWS account to a skill"),
+    ]
+    for fn, description in tools:
+        mcp.tool(description=f"[DEPRECATED] {description}. {DEPRECATION_NOTICE}")(deprecated(fn))
 
 
 def list_skills(filter: Optional[dict[str, str]] = None) -> str:

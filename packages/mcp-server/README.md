@@ -41,7 +41,7 @@ Tools are grouped into six categories:
 
 - **Search** — retrieve documentation and examples from the bundled AWS Transform knowledge base (BM25 keyword search, no network calls, no embeddings).
 - **Agent registry** — look up, register, update, deregister, and version agents.
-- **Skill operations** — manage the skills an agent exposes.
+- **Skill operations** — manage the skills an agent exposes. **Deprecated:** these tools will be removed in a future release; their descriptions and results carry the deprecation notice.
 - **Deployment** — package and deploy agents to AWS.
 - **Validation** — check agent manifests and configurations before deployment.
 - **CloudWatch** — query agent logs and metrics.

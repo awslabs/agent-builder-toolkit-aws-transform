@@ -57,14 +57,6 @@ class EvaluateAgent:
         else:
             logger.info("Verified that the agent task completed")
 
-        # check if the output format matches
-        # try:
-        #     agent_output = self.agent.structured_output(self.eval_card.output_model, "Extract in the output format")
-        #     self._update_eval_details(EvaluationCategory.OUTPUT_FORMAT, EvaluationStatus.SUCCESS, "")
-        # except ValidationError as e:
-        #     msg = f"Output format does not match the expected format: {e}"
-        #     self._update_eval_details(EvaluationCategory.OUTPUT_FORMAT, EvaluationStatus.FAILED, msg)
-
         strands_metrics_summary = agent_result.metrics.get_summary()
 
         # tool usage check
