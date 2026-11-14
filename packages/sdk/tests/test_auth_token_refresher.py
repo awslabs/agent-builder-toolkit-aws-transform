@@ -25,48 +25,46 @@ from agent_builder_sdk.env_var import ATX_AUTH_TOKEN_KEY, ENV_KEY_AUTH_TOKEN_FIL
 from agent_builder_sdk.utils import get_default_auth_token_file_path
 
 
+@pytest.mark.usefixtures("mock_auth_dependencies")
 def test_auth_token_refresher_shutdown():
     """Test AuthTokenRefresher shutdown method."""
-    with mock.patch("agent_builder_sdk._auth_token_refresher.Process") as mock_process_class:
-        mock_process = mock.Mock()
-        mock_process.is_alive.return_value = True
-        mock_process_class.return_value = mock_process
+    mock_process = mock.Mock()
+    mock_process.is_alive.return_value = True
 
-        refresher = AuthTokenRefresher(
-            workspace_id="test-workspace",
-            job_id="test-job",
-            agent_instance_id="test-agent",
-            first_token="test-token",
-        )
-        refresher._child_process = mock_process
+    refresher = AuthTokenRefresher(
+        workspace_id="test-workspace",
+        job_id="test-job",
+        agent_instance_id="test-agent",
+        first_token="test-token",
+    )
+    refresher._child_process = mock_process
 
-        refresher.shutdown()
+    refresher.shutdown()
 
-        # Verify process was terminated
-        mock_process.terminate.assert_called_once()
-        mock_process.join.assert_called()
+    # Verify process was terminated
+    mock_process.terminate.assert_called_once()
+    mock_process.join.assert_called()
 
 
+@pytest.mark.usefixtures("mock_auth_dependencies")
 def test_auth_token_refresher_shutdown_force_kill():
     """Test AuthTokenRefresher shutdown with force kill."""
-    with mock.patch("agent_builder_sdk._auth_token_refresher.Process") as mock_process_class:
-        mock_process = mock.Mock()
-        mock_process.is_alive.side_effect = [True, True, False]  # Still alive after terminate
-        mock_process_class.return_value = mock_process
+    mock_process = mock.Mock()
+    mock_process.is_alive.side_effect = [True, True, False]  # Still alive after terminate
 
-        refresher = AuthTokenRefresher(
-            workspace_id="test-workspace",
-            job_id="test-job",
-            agent_instance_id="test-agent",
-            first_token="test-token",
-        )
-        refresher._child_process = mock_process
+    refresher = AuthTokenRefresher(
+        workspace_id="test-workspace",
+        job_id="test-job",
+        agent_instance_id="test-agent",
+        first_token="test-token",
+    )
+    refresher._child_process = mock_process
 
-        refresher.shutdown()
+    refresher.shutdown()
 
-        # Verify process was terminated and killed
-        mock_process.terminate.assert_called_once()
-        mock_process.kill.assert_called_once()
+    # Verify process was terminated and killed
+    mock_process.terminate.assert_called_once()
+    mock_process.kill.assert_called_once()
 
 
 @pytest.mark.usefixtures("mock_auth_dependencies")
