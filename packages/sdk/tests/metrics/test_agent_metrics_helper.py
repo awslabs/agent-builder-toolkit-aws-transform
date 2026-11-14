@@ -9,6 +9,7 @@ from unittest import mock
 
 import pytest
 from aws_embedded_metrics.config import get_config
+from aws_embedded_metrics.logger.metrics_logger_factory import create_metrics_logger
 
 from agent_builder_sdk.metrics import metrics_helper
 from agent_builder_sdk.metrics.metrics_helper import MetricsHelper, _get_current_trace_id
@@ -99,7 +100,7 @@ class TestMetricsHelper:
 
     @mock.patch("agent_builder_sdk.metrics.metrics_helper._get_current_trace_id")
     def test_emit_metrics_with_custom_dimensions(self, mock_trace_id, env_vars):
-        """Test metrics emission with custom dimensions."""
+        """The EMF logger takes the custom dimensions as its only dimension set."""
         mock_trace_id.return_value = None
         custom_dims = {"env": "test", "version": "1.0"}
 
@@ -107,11 +108,10 @@ class TestMetricsHelper:
             helper = MetricsHelper(custom_dimensions=custom_dims)
             metrics_summary = {"accumulated_metrics": {}}
 
-            mock_metrics = mock.Mock()
-            helper._emit_metrics_impl(mock_metrics, helper._totals(metrics_summary))
+            metrics = create_metrics_logger()
+            helper._emit_metrics_impl(metrics, helper._totals(metrics_summary))
 
-            # Verify custom dimensions are set
-            mock_metrics.set_dimensions.assert_called_once_with(**custom_dims)
+            assert metrics.context.get_dimensions() == [custom_dims]
 
     def test_emit_metrics_reports_the_turn_since_the_baseline(self, env_vars):
         first_turn = {
