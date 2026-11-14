@@ -416,7 +416,7 @@ class TestGetInitialAgentRuntimeContextFromEnv:
             assert context.initial_auth_token == "test-auth-token"
             assert context.locale is None
 
-    def test_get_initial_agent_runtime_context_from_env_reads_locale(self):
+    def test_get_initial_agent_runtime_context_from_env_reads_locale(self) -> None:
         """INVOCATION_USER_CURRENT_LOCALE populates context.locale."""
         env_vars = {
             "JOB_ID": "test-job-id",
