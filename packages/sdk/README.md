@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
 ### Locale support
 
-`AgentRuntimeServer` and `StatelessAgentRuntimeServer` read the user's locale (for example `ja` or `pt-BR`) from the invoke/restore request, or from the `INVOCATION_USER_CURRENT_LOCALE` environment variable, and pass it to agent factories that take a `locale` argument (or `**kwargs`). Forward it to the orchestrator factory, which appends a "respond in <language>" instruction to the system prompt:
+When the `invoke` or `restore` request carries the user's locale (for example `ja` or `pt-BR`), `AgentRuntimeServer` and `StatelessAgentRuntimeServer` pass it as `locale=...` to an agent factory that names a `locale` parameter. Give the parameter a default, because it is not passed when no locale is set. Forward it to the orchestrator factory, which appends a "respond in <language>" instruction to the system prompt:
 
 ```python
 def agent_factory(mcp_client, storage_dir, locale=None):
@@ -113,7 +113,15 @@ def agent_factory(mcp_client, storage_dir, locale=None):
     )
 ```
 
-English, unset, and unsupported locales leave the system prompt unchanged, and factories without a `locale` parameter keep working as before. To build a prompt by hand, use `get_locale_instruction(locale)` from `agent_builder_sdk.locale_utils`; supported locales are listed in `LOCALE_TO_LANGUAGE`.
+Limits:
+
+- The locale is read once, when the agent is built. Only `invoke` and `restore` carry it, so an agent built from the context of another request (for example a health check) gets no locale. A later change of the user's language does not reach a running agent.
+- With streaming on, every per-user agent gets the locale that the server had when it was set up, not the locale of its own user.
+- Codes match exactly against `LOCALE_TO_LANGUAGE` in `agent_builder_sdk.locale_utils`: `ja` matches, `ja-JP` and `JA` do not. Any other value leaves the system prompt unchanged, and a non-English code that is not listed is logged as a warning.
+- A factory that takes only `**kwargs` does not receive `locale`. Name the parameter.
+- The `INVOCATION_USER_CURRENT_LOCALE` environment variable is read only when the server starts with `WORKSPACE_ID`, `JOB_ID`, `AGENT_INSTANCE_ID` and `AUTHORIZATION_TOKEN` set and so initializes from the environment. On a Bedrock AgentCore runtime it has no effect.
+
+To build a prompt by hand, call `get_locale_instruction(locale)` from `agent_builder_sdk.locale_utils`.
 
 ## Building a subagent
 

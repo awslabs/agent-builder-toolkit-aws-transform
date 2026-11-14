@@ -5,6 +5,8 @@ Unit tests for agent factory functions.
 """
 
 import os
+from pathlib import Path
+from typing import Any, Callable
 from unittest import mock
 
 import pytest
@@ -17,6 +19,7 @@ from agent_builder_sdk.agent_factory import (
     create_default_orchestrator_with_subagent,
     create_default_subagent,
 )
+from agent_builder_sdk.locale_utils import get_locale_instruction
 from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
     BlankReplyHookProvider,
 )
@@ -934,3 +937,22 @@ def test_factory_keeps_its_positional_parameter_order(name):
     }
     params = list(inspect.signature(factories[name]).parameters)
     assert params[: len(_V1_POSITIONAL[name])] == _V1_POSITIONAL[name]
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        create_default_orchestrator,
+        create_default_async_orchestrator,
+        create_default_orchestrator_with_subagent,
+        create_default_async_orchestrator_with_subagent,
+    ],
+)
+def test_orchestrator_factories_append_the_locale_instruction(
+    factory: Callable[..., Any], mock_model: Any, tmp_path: Path
+) -> None:
+    agent = factory(
+        system_prompt="Base prompt", storage_dir=str(tmp_path), model=mock_model, locale="ja"
+    )
+
+    assert agent.system_prompt == "Base prompt\n" + get_locale_instruction("ja")
