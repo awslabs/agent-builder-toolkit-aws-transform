@@ -4,6 +4,8 @@
 
 import json
 import logging
+import os
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -55,8 +57,7 @@ class FileTaskStore(TaskStore):
             raise ValueError(f"Task with ID {task.id} already exists")
 
         try:
-            with open(task_path, "w") as f:
-                json.dump(task.to_dict(), f, indent=2)
+            self._write_task(task_path, task)
             logger.debug(f"Stored task {task.id} to {task_path}")
         except Exception as e:
             logger.error(f"Failed to store task {task.id}: {e}")
@@ -90,12 +91,25 @@ class FileTaskStore(TaskStore):
             raise ValueError(f"Task with ID {task.id} does not exist")
 
         try:
-            with open(task_path, "w") as f:
-                json.dump(task.to_dict(), f, indent=2)
+            self._write_task(task_path, task)
             logger.debug(f"Updated task {task.id} at {task_path}")
         except Exception as e:
             logger.error(f"Failed to update task {task.id}: {e}")
             raise
+
+    def _write_task(self, task_path: Path, task: A2ATask) -> None:
+        """Write the task file through a temporary file and an atomic rename.
+
+        A reader in another thread or process sees the previous file or the new one,
+        never a partial write, and a failed write leaves the previous file in place.
+        """
+        tmp_path = task_path.with_name(f"{task_path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            with open(tmp_path, "w") as f:
+                json.dump(task.to_dict(), f, indent=2)
+            os.replace(tmp_path, task_path)
+        finally:
+            tmp_path.unlink(missing_ok=True)
 
     def _dict_to_task(self, data: dict) -> A2ATask:
         """Convert dictionary to A2ATask object."""

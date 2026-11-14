@@ -2,9 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """Unit tests for TaskStore implementations."""
 
+import json
 import os
 import tempfile
 from pathlib import Path
+from typing import IO, Any
 
 import pytest
 
@@ -359,3 +361,25 @@ class TestFileTaskStore:
 
         assert retrieved is not None
         assert retrieved.artifacts == ["s3://bucket/result1.json", "s3://bucket/result2.json"]
+
+    @pytest.mark.asyncio
+    async def test_failed_update_keeps_previous_task_file(
+        self, sample_task: A2ATask, temp_storage_dir: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A write that fails part-way leaves the stored task readable and no stray file."""
+        store = FileTaskStore(storage_dir=temp_storage_dir)
+        await store.store_task(sample_task)
+
+        def write_half_then_fail(obj: Any, fp: IO[str], **kwargs: Any) -> None:
+            fp.write('{"id": ')
+            raise OSError("disk full")
+
+        monkeypatch.setattr(json, "dump", write_half_then_fail)
+        sample_task.status.state = TaskState.COMPLETED
+        with pytest.raises(OSError, match="disk full"):
+            await store.update_task(sample_task)
+
+        retrieved = await store.get_task(sample_task.id)
+        assert retrieved is not None
+        assert retrieved.status.state == TaskState.SUBMITTED
+        assert os.listdir(store.storage_dir) == [f"{sample_task.id}.json"]
