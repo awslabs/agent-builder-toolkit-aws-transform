@@ -18,9 +18,10 @@ without ``InvokeWebSearch``, a URL that is not https) logs one warning and retur
 network call happens before the first search.
 
 Search results are untrusted text. The tool returns them between two markers with a notice that
-they are data, and cuts every field to a fixed length. In every field it drops invisible format
-characters (Unicode category Cf) and puts a space between the brackets of each run of three or
-more ``<`` or ``>`` (ASCII, fullwidth or small form), so neither marker can appear in a result.
+they are data, and cuts every field to a fixed length. In every field it drops format characters
+(Unicode category Cf) and combining marks (Mn, Me) that follow a bracket, and puts a space between
+the brackets of each run of three or more ``<`` or ``>`` (ASCII, fullwidth or small form), so
+neither marker can appear in a result.
 """
 
 import http.client
@@ -70,8 +71,6 @@ API_CONNECT_TIMEOUT_SECONDS = 10
 API_READ_TIMEOUT_SECONDS = 15
 # attempts x (connect + read) leaves TOTAL_TIMEOUT_SECONDS room for botocore's sleep between tries
 API_MAX_ATTEMPTS = 2
-API_MAX_IN_FLIGHT = 8
-API_SLOT_WAIT_SECONDS = 10
 
 SIGNING_SERVICE = "bedrock-agentcore"
 WEB_SEARCH_TOOL_SUFFIX = "___WebSearch"
@@ -84,10 +83,10 @@ MAX_TOOL_LIST_PAGES = 20
 # causes can share the code, so the error text keeps the Gateway's message.
 _GATEWAY_ROLE_DENIED = -32002
 
-# One search, both paths. On the Gateway it is checked before each request and between body reads,
-# so it can be overrun by credential resolution plus one blocked socket operation
-# (GATEWAY_SOCKET_TIMEOUT_SECONDS).
+# One search on a wall clock, both paths: credential lookup, the wait for a slot and every request.
 TOTAL_TIMEOUT_SECONDS = 60
+MAX_IN_FLIGHT = 8
+SLOT_WAIT_SECONDS = 10
 
 QUERY_MAX_CHARS = 200
 MAX_RESULTS_CEILING = 10
@@ -128,7 +127,7 @@ _OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def _too_slow() -> _WebSearchError:
-    return _WebSearchError(f"web_search failed: Gateway reply took over {TOTAL_TIMEOUT_SECONDS}s")
+    return _WebSearchError(f"web_search failed: no reply within {TOTAL_TIMEOUT_SECONDS:g}s")
 
 
 def _read_reply(response: Any, deadline: float) -> bytes:
@@ -192,7 +191,9 @@ class _GatewayWebSearch:
                 request
             )
         except BotoCoreError as exc:
-            raise _WebSearchError(f"web_search failed: {exc}") from exc
+            raise _WebSearchError(
+                f"web_search failed: {str(exc)[:_ERROR_DETAIL_MAX_CHARS]}"
+            ) from exc
         http_request = urllib.request.Request(
             self._url, data=body.encode("utf-8"), headers=dict(request.headers), method="POST"
         )
@@ -225,7 +226,10 @@ class _GatewayWebSearch:
             ValueError,
             RecursionError,
         ) as exc:
-            raise _WebSearchError(f"web_search failed: {exc}") from exc
+            # A broken status line carries up to 64 KiB of the peer's text.
+            raise _WebSearchError(
+                f"web_search failed: {str(exc)[:_ERROR_DETAIL_MAX_CHARS]}"
+            ) from exc
         if not isinstance(reply, dict):
             raise _WebSearchError("web_search failed: unexpected Gateway response")
         error = reply.get("error")
@@ -280,7 +284,9 @@ class _GatewayWebSearch:
             self._tool_name = None
 
     def search(self, query: str, max_results: int) -> list[dict[str, Any]]:
-        """Run one search; return the hits as ``{title, url, text, publishedDate}`` dicts."""
+        """Run one search; return the hits as ``{title, url, text, publishedDate}`` dicts.
+        Its own deadline stops body reads and further requests, so a call that ``_within`` gave
+        up on does not go on to the next request."""
         deadline = time.monotonic() + TOTAL_TIMEOUT_SECONDS
         try:
             result = self._call(
@@ -307,22 +313,23 @@ class _GatewayWebSearch:
             raise _WebSearchError("web_search failed: unexpected Gateway response") from exc
 
 
-_IN_FLIGHT = threading.BoundedSemaphore(API_MAX_IN_FLIGHT)
+_IN_FLIGHT = threading.BoundedSemaphore(MAX_IN_FLIGHT)
 
 
-def _within(seconds: float, call: Callable[[], Any]) -> Any:
-    """``call()`` on a daemon thread, or ``_WebSearchError`` once ``seconds`` pass: a reply that
-    trickles in resets botocore's read timeout on every byte, so only a wall-clock bound ends it.
-    The abandoned call cannot be stopped; as a daemon it never holds up interpreter exit, and it
-    keeps its ``_IN_FLIGHT`` slot until it ends, so abandoned calls never exceed the cap. A caller
-    waits for a slot for at most ``API_SLOT_WAIT_SECONDS`` of ``seconds`` and fails with the
-    in-flight text when none frees up."""
-    deadline = time.monotonic() + seconds
+def _within(call: Callable[[], Any]) -> Any:
+    """``call()`` on a daemon thread, or ``_WebSearchError`` once ``TOTAL_TIMEOUT_SECONDS`` pass.
+    Only a wall clock bounds a search: a socket timeout starts again on every byte received, in
+    reply headers as in a body, and credential lookup can wait on a metadata endpoint or a
+    credential process. The abandoned call cannot be stopped; as a daemon it never holds up
+    interpreter exit, and it keeps its ``_IN_FLIGHT`` slot until it ends, so abandoned calls never
+    exceed the cap. A caller waits for a slot for at most ``SLOT_WAIT_SECONDS`` of the limit and
+    fails with the in-flight text when none frees up."""
+    deadline = time.monotonic() + TOTAL_TIMEOUT_SECONDS
     slots = _IN_FLIGHT
-    if not slots.acquire(timeout=min(API_SLOT_WAIT_SECONDS, seconds)):
+    if not slots.acquire(timeout=min(SLOT_WAIT_SECONDS, TOTAL_TIMEOUT_SECONDS)):
         raise _WebSearchError(
-            "web_search failed: too many searches in flight "
-            f"(limit {API_MAX_IN_FLIGHT}); try again later"
+            f"web_search failed: too many searches in flight (limit {MAX_IN_FLIGHT}); "
+            "try again later"
         )
     outcome: dict[str, Any] = {}
 
@@ -342,7 +349,7 @@ def _within(seconds: float, call: Callable[[], Any]) -> Any:
         raise
     worker.join(deadline - time.monotonic())
     if worker.is_alive():
-        raise _WebSearchError(f"web_search failed: API reply took over {seconds:g}s")
+        raise _too_slow()
     if "error" in outcome:
         raise outcome["error"]
     return outcome["value"]
@@ -390,15 +397,10 @@ class _ApiWebSearch:
         return f"web_search failed: {code or 'API error'}{detail}"
 
     def search(self, query: str, max_results: int) -> list[dict[str, Any]]:
-        """Run one search; return the hits as ``{title, url, text, publishedDate}`` dicts.
-        The client build runs inside the deadline too: botocore resolves credentials while it
-        builds the client, and that can wait on a metadata endpoint or a credential process."""
+        """Run one search; return the hits as ``{title, url, text, publishedDate}`` dicts."""
         try:
-            response = _within(
-                TOTAL_TIMEOUT_SECONDS,
-                lambda: self._get_client().invoke_web_search(
-                    webSearchId=WEB_SEARCH_ID, searchQuery=query, maxResults=max_results
-                ),
+            response = self._get_client().invoke_web_search(
+                webSearchId=WEB_SEARCH_ID, searchQuery=query, maxResults=max_results
             )
         except ClientError as exc:
             raise _WebSearchError(self._client_error_text(exc)) from exc
@@ -407,7 +409,9 @@ class _ApiWebSearch:
                 "web_search unavailable: no AWS credentials to sign the request"
             ) from exc
         except BotoCoreError as exc:
-            raise _WebSearchError(f"web_search failed: {exc}") from exc
+            raise _WebSearchError(
+                f"web_search failed: {str(exc)[:_ERROR_DETAIL_MAX_CHARS]}"
+            ) from exc
         except (ResponseParserError, ValueError) as exc:
             logger.warning("web_search: unparseable reply or client build", exc_info=True)
             raise _WebSearchError("web_search failed: unexpected API response") from exc
@@ -431,13 +435,16 @@ _WebSearcher = Union[_ApiWebSearch, _GatewayWebSearch]
 
 def _field(value: Any, limit: int) -> str:
     """A hit field of at most ``limit`` characters plus the truncation mark. It holds no format
-    character (Unicode category Cf) and no run of three ``<`` or ``>`` in ASCII, fullwidth or
-    small form, so neither marker can appear in it, also not split by invisible characters."""
-    text = "".join(
-        ch
-        for ch in str(value or "").translate(_BRACKET_FORMS)
-        if unicodedata.category(ch) != "Cf"
-    )
+    character (Unicode category Cf), no combining mark (Mn, Me) directly after a bracket, and no
+    run of three ``<`` or ``>`` in ASCII, fullwidth or small form, so neither marker can appear
+    in it, also not split by such characters. Any other character between two brackets stays."""
+    kept: list[str] = []
+    for ch in str(value or "").translate(_BRACKET_FORMS):
+        category = unicodedata.category(ch)
+        if category == "Cf" or (category in ("Mn", "Me") and kept and kept[-1] in "<>"):
+            continue
+        kept.append(ch)
+    text = "".join(kept)
     text = _BRACKET_RUN.sub(lambda run: " ".join(run.group()), text)
     return text if len(text) <= limit else text[:limit] + _TRUNCATED
 
@@ -566,7 +573,7 @@ def create_web_search_tool() -> Optional[AgentTool]:
             return f"Error: query is {len(query)} characters; the limit is {QUERY_MAX_CHARS}."
         try:
             count = max(1, min(int(max_results or DEFAULT_MAX_RESULTS), MAX_RESULTS_CEILING))
-            hits = searcher.search(query, count)[:count]
+            hits = _within(lambda: searcher.search(query, count))[:count]
         except _WebSearchError as exc:
             logger.warning("%s", exc)
             return f"Error: {exc}"
