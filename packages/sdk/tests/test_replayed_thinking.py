@@ -18,7 +18,7 @@ from unittest.mock import create_autospec
 import pytest
 from strands import tool
 from strands.agent.conversation_manager import SlidingWindowConversationManager
-from strands.hooks import BeforeToolCallEvent
+from strands.hooks import BeforeModelCallEvent, BeforeToolCallEvent
 from strands.models import Model
 from strands.types.content import Message, Messages
 from strands.types.exceptions import ContextWindowOverflowException, ModelThrottledException
@@ -240,6 +240,23 @@ async def test_subagent_replays_no_stale_thinking_after_a_trim_inside_a_tool_loo
     assert subagent.model.stream.call_count == 6
 
 
+async def test_subagent_replays_no_stale_thinking_after_a_late_hook_trims_a_tool_loop() -> None:
+    subagent = AsyncBaseSubagent("", custom_tools=[lookup])
+    subagent.callback_handler = lambda *args, **kwargs: None
+    subagent.model = _prefix_checking_model(tool_calls=3)
+
+    def drop_oldest_tool_round(event: BeforeModelCallEvent) -> None:
+        if len(event.agent.messages) > 4:
+            del event.agent.messages[1:3]
+
+    # Added after construction on purpose: the strip must still run after this trim.
+    subagent.hooks.add_callback(BeforeModelCallEvent, drop_oldest_tool_round)
+
+    await subagent.process_message_async("go")
+
+    assert subagent.model.stream.call_count == 4
+
+
 async def test_tool_loop_keeps_its_thinking_while_history_only_grows() -> None:
     subagent = AsyncBaseSubagent("", custom_tools=[lookup])
     subagent.callback_handler = lambda *args, **kwargs: None
@@ -319,17 +336,17 @@ def test_overflow_strip_spares_only_manual_thinking(config: Any, kept: bool) -> 
 
 def test_strip_rewrites_only_messages_with_thinking_in_place() -> None:
     user = {"role": "user", "content": [{"text": "u1"}]}
-    messages = [
-        user,
-        {"role": "assistant", "content": [_THINKING]},
-        {"role": "user", "content": [{"text": "u2"}]},
-        {"role": "assistant", "content": [_THINKING, {"text": "a2"}]},
-    ]
+    thinking_only = {"role": "assistant", "content": [_THINKING]}
+    reply = {"role": "assistant", "content": [_THINKING, {"text": "a2"}]}
+    messages = [user, thinking_only, {"role": "user", "content": [{"text": "u2"}]}, reply]
     agent = _agent(messages)
 
     _StripReplayedThinking._strip(SimpleNamespace(agent=agent))
 
     assert agent.messages is messages and messages[0] is user
+    # The conversation repository can hold these same objects, so they keep their thinking.
+    assert thinking_only["content"] == [_THINKING]
+    assert reply["content"] == [_THINKING, {"text": "a2"}]
     assert [m["content"] for m in messages] == [
         [{"text": "u1"}],
         [{"text": "[blank text]"}],
