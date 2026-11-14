@@ -18,10 +18,12 @@ without ``InvokeWebSearch``, a URL that is not https) logs one warning and retur
 network call happens before the first search.
 
 Search results are untrusted text. The tool returns them between two markers with a notice that
-they are data, and cuts every field to a fixed length. In every field it drops format characters
-(Unicode category Cf) and combining marks (Mn, Me) that follow a bracket, and puts a space between
-the brackets of each run of three or more ``<`` or ``>`` (ASCII, fullwidth or small form), so
-neither marker can appear in a result.
+they are data, and cuts every field to a fixed length. Every field is one line: each run of
+whitespace, line breaks included, becomes one space, so text in a result cannot start a line that
+reads as a further result or its URL. In every field it also drops control and format characters
+(Unicode categories Cc, Cf) and combining marks (Mn, Me) that follow a bracket, and puts a space
+between the brackets of each run of three or more ``<`` or ``>`` (ASCII, fullwidth or small form),
+so neither marker can appear in a result.
 """
 
 import http.client
@@ -149,6 +151,26 @@ def _read_reply(response: Any, deadline: float) -> bytes:
         chunks.append(chunk)
 
 
+def _http_error_detail(exc: urllib.error.HTTPError, deadline: float) -> str:
+    """``": <message>"`` from the JSON-RPC error in the body of an HTTP error reply, the message
+    cut to ``_ERROR_DETAIL_MAX_CHARS``; ``""`` when the body cannot be read within the limits of
+    ``_read_reply`` or holds no such message."""
+    try:
+        message = json.loads(_read_reply(exc, deadline))["error"]["message"]
+    except (
+        _WebSearchError,
+        http.client.HTTPException,
+        OSError,
+        ValueError,
+        LookupError,
+        TypeError,
+        RecursionError,
+    ):
+        logger.debug("web_search: HTTP %s reply has no JSON-RPC error", exc.code, exc_info=True)
+        return ""
+    return f": {str(message)[:_ERROR_DETAIL_MAX_CHARS]}" if message else ""
+
+
 class _GatewayWebSearch:
     """A SigV4-signed JSON-RPC client for the web-search tool of an AgentCore Gateway."""
 
@@ -211,14 +233,17 @@ class _GatewayWebSearch:
                     )
                 reply = json.loads(_read_reply(response, deadline).decode("utf-8"))
         except urllib.error.HTTPError as exc:
-            exc.close()  # an HTTPError holds the open response
-            if exc.code == 403:
-                raise _WebSearchError(
-                    "web_search unavailable: the Gateway refused the request (HTTP 403). It was "
-                    f"signed for {self._region}: check {GATEWAY_REGION_ENV}, and that the runtime "
-                    "role allows bedrock-agentcore:InvokeGateway on the Gateway"
-                ) from exc
-            raise _WebSearchError(f"web_search failed: Gateway HTTP {exc.code}") from exc
+            try:
+                if exc.code == 403:
+                    raise _WebSearchError(
+                        "web_search unavailable: the Gateway refused the request (HTTP 403). It "
+                        f"was signed for {self._region}: check {GATEWAY_REGION_ENV}, and that the "
+                        "runtime role allows bedrock-agentcore:InvokeGateway on the Gateway"
+                    ) from exc
+                detail = _http_error_detail(exc, deadline)
+            finally:
+                exc.close()  # an HTTPError holds the open response
+            raise _WebSearchError(f"web_search failed: Gateway HTTP {exc.code}{detail}") from exc
         except (
             urllib.error.URLError,
             http.client.HTTPException,
@@ -434,14 +459,16 @@ _WebSearcher = Union[_ApiWebSearch, _GatewayWebSearch]
 
 
 def _field(value: Any, limit: int) -> str:
-    """A hit field of at most ``limit`` characters plus the truncation mark. It holds no format
-    character (Unicode category Cf), no combining mark (Mn, Me) directly after a bracket, and no
-    run of three ``<`` or ``>`` in ASCII, fullwidth or small form, so neither marker can appear
-    in it, also not split by such characters. Any other character between two brackets stays."""
+    """A hit field as one line of at most ``limit`` characters plus the truncation mark. Each
+    run of whitespace (line and paragraph separators included) is one space, so no part of a field
+    starts a line of the tool output. The field holds no control or format character (Unicode
+    categories Cc, Cf), no combining mark (Mn, Me) directly after a bracket, and no run of three
+    ``<`` or ``>`` in ASCII, fullwidth or small form, so neither marker can appear in it, also not
+    split by such characters. Any other character between two brackets stays."""
     kept: list[str] = []
-    for ch in str(value or "").translate(_BRACKET_FORMS):
+    for ch in " ".join(str(value or "").translate(_BRACKET_FORMS).split()):
         category = unicodedata.category(ch)
-        if category == "Cf" or (category in ("Mn", "Me") and kept and kept[-1] in "<>"):
+        if category in ("Cc", "Cf") or (category in ("Mn", "Me") and kept and kept[-1] in "<>"):
             continue
         kept.append(ch)
     text = "".join(kept)
