@@ -5,7 +5,9 @@ Unit tests for CheckpointService.
 """
 
 import asyncio
+import logging
 import threading
+from typing import List
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -442,3 +444,57 @@ class TestCheckpointServiceEventLoopOffload:
 
             mock_to_thread.assert_any_call(mock_manager.force_checkpoint)
             mock_manager.force_checkpoint.assert_not_called()
+
+
+class TestRequestCheckpoint:
+    """CheckpointService.request_checkpoint: a checkpoint ahead of the strategy's trigger."""
+
+    @pytest.mark.parametrize("requested", [True, False])
+    async def test_the_background_task_takes_a_requested_checkpoint_off_the_event_loop(
+        self,
+        checkpoint_service: CheckpointService,
+        mock_context: AgentRuntimeContext,
+        requested: bool,
+    ) -> None:
+        loop_thread_id = threading.get_ident()
+        upload_thread_ids: List[int] = []
+
+        def create_checkpoint() -> str:
+            upload_thread_ids.append(threading.get_ident())
+            return "artifact-1"
+
+        repository = Mock(multi_checkpoint_enabled=False, is_restore_verified=True)
+        repository.list_checkpoint.return_value = []
+        repository.create_checkpoint.side_effect = create_checkpoint
+
+        with patch(
+            "agent_builder_sdk.checkpoint.checkpoint_service.create_checkpoint_repository",
+            return_value=repository,
+        ), patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            # One pass of the loop; the second sleep ends it.
+            mock_sleep.side_effect = [None, asyncio.CancelledError()]
+            checkpoint_service.initialize(mock_context)  # turn trigger at 0 of 5: not due
+            if requested:
+                checkpoint_service.request_checkpoint()
+
+            await checkpoint_service.start_background_checkpointing()
+            with pytest.raises(asyncio.CancelledError):
+                await checkpoint_service._background_task
+
+        assert len(upload_thread_ids) == (1 if requested else 0)
+        assert loop_thread_id not in upload_thread_ids
+
+    def test_does_nothing_while_checkpointing_is_off(
+        self,
+        checkpoint_service_no_strategy: CheckpointService,
+        mock_context: AgentRuntimeContext,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        with patch("agent_builder_sdk.checkpoint.checkpoint_service.create_checkpoint_repository"):
+            checkpoint_service_no_strategy.initialize(mock_context)
+        assert checkpoint_service_no_strategy.manager is None
+
+        with caplog.at_level(logging.INFO):
+            checkpoint_service_no_strategy.request_checkpoint()
+
+        assert "checkpointing is off" in caplog.text

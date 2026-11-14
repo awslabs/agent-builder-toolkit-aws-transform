@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from agent_builder_sdk.checkpoint.checkpoint_manager import (
+    REQUEST_ATTEMPTS,
     BackgroundCheckpointer,
     CheckpointManager,
 )
@@ -626,3 +627,101 @@ class TestBackgroundCheckpointerEventLoopOffload:
 
                 mock_to_thread.assert_any_call(manager.attempt_checkpoint)
                 direct_call.assert_not_called()
+
+
+class TestRequestedCheckpoint:
+    """request_checkpoint makes attempt_checkpoint run although the trigger has not fired."""
+
+    @pytest.fixture
+    def idle_manager(
+        self, manager: CheckpointManager, mock_checkpoint_repository: Mock, mock_trigger: Mock
+    ) -> CheckpointManager:
+        """A manager whose trigger never fires and whose repository has no checkpoint yet."""
+        mock_trigger.should_checkpoint.return_value = False
+        mock_checkpoint_repository.list_checkpoint.return_value = []
+        mock_checkpoint_repository.create_checkpoint.return_value = "artifact-1"
+        return manager
+
+    def test_runs_once_whatever_the_trigger_says(
+        self, idle_manager: CheckpointManager, mock_checkpoint_repository: Mock, mock_trigger: Mock
+    ) -> None:
+        assert idle_manager.attempt_checkpoint() is False
+        mock_checkpoint_repository.create_checkpoint.assert_not_called()
+
+        idle_manager.request_checkpoint()
+
+        assert idle_manager.attempt_checkpoint() is True
+        assert idle_manager.attempt_checkpoint() is False
+        mock_checkpoint_repository.create_checkpoint.assert_called_once()
+        mock_trigger.reset.assert_called_once()
+
+    def test_is_retried_until_an_attempt_succeeds(
+        self, idle_manager: CheckpointManager, mock_checkpoint_repository: Mock
+    ) -> None:
+        mock_checkpoint_repository.create_checkpoint.side_effect = [
+            None,
+            RuntimeError("upload failed"),
+            "artifact-1",
+        ]
+        idle_manager.request_checkpoint()
+
+        assert [idle_manager.attempt_checkpoint() for _ in range(4)] == [False, False, True, False]
+        assert mock_checkpoint_repository.create_checkpoint.call_count == 3
+
+    def test_gives_up_after_request_attempts_failures(
+        self, idle_manager: CheckpointManager, mock_checkpoint_repository: Mock
+    ) -> None:
+        mock_checkpoint_repository.create_checkpoint.return_value = None
+        idle_manager.request_checkpoint()
+
+        results = [idle_manager.attempt_checkpoint() for _ in range(REQUEST_ATTEMPTS + 2)]
+
+        assert results == [False] * (REQUEST_ATTEMPTS + 2)
+        assert mock_checkpoint_repository.create_checkpoint.call_count == REQUEST_ATTEMPTS
+
+    def test_a_failed_attempt_does_not_shorten_a_request_made_while_it_ran(
+        self, idle_manager: CheckpointManager, mock_checkpoint_repository: Mock
+    ) -> None:
+        def fail_and_request_again() -> None:
+            if mock_checkpoint_repository.create_checkpoint.call_count == 1:
+                # From another thread, as in the runtime: this one holds the checkpoint lock.
+                request = threading.Thread(target=idle_manager.request_checkpoint)
+                request.start()
+                request.join(timeout=2)
+
+        mock_checkpoint_repository.create_checkpoint.side_effect = fail_and_request_again
+        idle_manager.request_checkpoint()
+
+        for _ in range(REQUEST_ATTEMPTS + 3):
+            idle_manager.attempt_checkpoint()
+
+        assert mock_checkpoint_repository.create_checkpoint.call_count == 1 + REQUEST_ATTEMPTS
+
+    def test_a_request_neither_waits_for_a_running_checkpoint_nor_is_covered_by_it(
+        self, idle_manager: CheckpointManager, mock_checkpoint_repository: Mock
+    ) -> None:
+        uploading, finish_upload = threading.Event(), threading.Event()
+
+        def slow_create() -> str:
+            uploading.set()
+            finish_upload.wait(timeout=5)
+            return "artifact-1"
+
+        mock_checkpoint_repository.create_checkpoint.side_effect = slow_create
+        idle_manager.request_checkpoint()
+        running = threading.Thread(target=idle_manager.attempt_checkpoint)
+        running.start()
+        assert uploading.wait(timeout=5)
+
+        request = threading.Thread(target=idle_manager.request_checkpoint)
+        request.start()
+        request.join(timeout=2)
+        returned_while_uploading = not request.is_alive()
+        finish_upload.set()
+        running.join(timeout=5)
+        request.join(timeout=5)
+
+        assert returned_while_uploading
+        # The running checkpoint may have read state from before the request: one more is due.
+        assert idle_manager.attempt_checkpoint() is True
+        assert mock_checkpoint_repository.create_checkpoint.call_count == 2
