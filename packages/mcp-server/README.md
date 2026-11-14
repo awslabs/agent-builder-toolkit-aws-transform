@@ -56,14 +56,14 @@ Tools are grouped into six categories:
 
 ### Retrieval benchmark
 
-The bundled BM25 search is gated by a quality benchmark (48 golden queries across 6 categories):
+The bundled BM25 search is gated by a quality benchmark (47 golden queries across 6 categories):
 
 ```bash
 pip install -e .
 python bench/eval_retrieval.py
 ```
 
-CI enforces **Recall@5 >= 0.70** and **MRR >= 0.60**. Current: Recall@5 = 0.80, MRR = 0.85.
+CI enforces **Recall@5 >= 0.70** and **MRR >= 0.60**. The script prints the current values.
 
 ## License
 
