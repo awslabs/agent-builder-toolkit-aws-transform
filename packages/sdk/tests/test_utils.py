@@ -846,6 +846,12 @@ class TestCombineTools:
         assert combine_tools(custom_tools=[module], excluded_tool_names={"spec_differs"}) == []
         assert combine_tools(custom_tools=[module], excluded_tool_names={"other"}) == [module]
 
+    def test_combine_tools_rejects_a_module_without_a_tool_spec(self) -> None:
+        module = types.ModuleType("package.function_tools")
+        module.function_tool = _function_tool
+        with pytest.raises(AttributeError, match="tool_name"):
+            combine_tools(custom_tools=[module])
+
     def test_combine_tools_detects_a_duplicate_across_tool_styles(self) -> None:
         same_name = Mock()
         same_name.tool_name = "image_reader"

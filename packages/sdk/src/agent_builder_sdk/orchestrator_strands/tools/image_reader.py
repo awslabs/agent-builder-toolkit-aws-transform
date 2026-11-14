@@ -4,8 +4,8 @@
 
 Derived from ``strands_tools/image_reader.py`` of strands-agents-tools 0.8 (Apache-2.0), which
 0.9 removed. The tool name and input schema are the same. Modified: only a regular file of at
-most MAX_IMAGE_FILE_BYTES is read, and the image is returned within the Converse limits
-(downscaled and re-encoded when needed) instead of as the raw file bytes.
+most MAX_IMAGE_FILE_BYTES is read, and the image is returned within 3.75 MB and 1568 px per
+side (downscaled and re-encoded when needed) instead of as the raw file bytes.
 
 Strands registers a module-style tool under its module name, so this file must stay
 ``image_reader.py``.
@@ -49,9 +49,10 @@ def image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult:
     The path may be any file the agent process can read: ``~`` is expanded, a relative path
     is resolved against the working directory, and symbolic links are followed. The file must
     be a regular file of at most MAX_IMAGE_FILE_BYTES that holds a PNG, JPEG, GIF, WebP, BMP,
-    TIFF, ICO or PPM image. An image over the Converse limits is downscaled and re-encoded.
+    TIFF or PPM image. An image over 3.75 MB (the Converse limit) or 1568 px per side is
+    downscaled and re-encoded; one that needs more than 20 million pixels decoded is an error.
     File content is returned only as an image; every failure is an ``error`` result with a
-    message for the model, never an exception.
+    message for the model that quotes no file content, never an exception.
     """
     tool_input = tool.get("input")
     image_path = tool_input.get("image_path") if isinstance(tool_input, dict) else None

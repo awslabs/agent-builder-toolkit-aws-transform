@@ -69,11 +69,20 @@ def test_a_missing_file_is_an_error(tmp_path: Path) -> None:
     assert _error_text(_read(image_path=str(missing))) == f"File not found at path: {missing}"
 
 
-def test_a_file_that_is_not_an_image_is_an_error_without_its_content(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "content,reason",
+    [
+        ("secret-content", "not a PNG/JPEG/GIF/WEBP/BMP/TIFF/PPM image"),
+        ("P2 2 2 255 private-text-of-the-file", "damaged or unsupported image data (ValueError)"),
+        ("P2 private-text-of-the-file", "damaged or unsupported image data (ValueError)"),
+    ],
+)
+def test_a_file_that_is_not_an_image_is_an_error_without_its_content(
+    tmp_path: Path, content: str, reason: str
+) -> None:
     secret = tmp_path / "a.png"
-    secret.write_text("secret-content")
-    text = _error_text(_read(image_path=str(secret)))
-    assert text.startswith("Error reading file: not a PNG/JPEG") and "secret" not in text
+    secret.write_text(content)
+    assert _error_text(_read(image_path=str(secret))) == f"Error reading file: {reason}"
 
 
 def test_a_directory_is_an_error(tmp_path: Path) -> None:

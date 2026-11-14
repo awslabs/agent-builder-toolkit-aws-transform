@@ -3,6 +3,7 @@
 """Image bytes in the form the Bedrock Converse API accepts."""
 
 import io
+import re
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Literal, cast, get_args
 
@@ -14,40 +15,49 @@ _CONVERSE_FORMATS: frozenset[str] = frozenset(get_args(ImageFormat))
 # Converse rejects an image over 3.75 MB, and a rejected image that stays in history fails every
 # later model call of the conversation.
 MAX_IMAGE_BYTES = 3_750_000
-# Longest edge in px. Anthropic's vision guidance gives 1568 px as the edge above which a Claude
-# model resizes an image before it reads it, so more pixels only add latency.
+# Longest edge in px. Not a Converse limit (that is 8000 px): Anthropic's vision guidance gives
+# 1568 px as the edge above which a Claude model resizes an image before it reads it. A model
+# that reads larger images gets less detail than the source holds.
 MAX_EDGE = 1568
 # Shortest long edge, in px, tried before an image that is still over MAX_IMAGE_BYTES is given up.
 MIN_EDGE = 64
-# Pixels decoded for one image, summed over its frames. Checked against the header before any
-# pixel is decoded, so the memory and time one image can take do not depend on its content.
-MAX_DECODE_PIXELS = 50_000_000
+# Pixels of the one frame that is decoded to be encoded again, checked against the header before
+# any pixel is decoded. Pillow and the codecs hold up to about 17 bytes a pixel (measured for
+# WebP), so one image takes at most about 350 MB whatever its content.
+MAX_DECODE_PIXELS = 20_000_000
+# Pixels decoded to check an image that is passed on as it is, summed over its frames. Each
+# frame is within MAX_EDGE, so this bounds the time of the check, not its memory.
+MAX_FRAME_PIXELS = 50_000_000
 
-# Untrusted bytes reach only these Pillow decoders (the JPEG decoder also opens MPO).
-_OPEN_FORMATS = ("PNG", "JPEG", "GIF", "WEBP", "BMP", "TIFF", "ICO", "PPM")
+# Untrusted bytes reach only these Pillow decoders (the JPEG decoder also opens MPO). ICO is
+# left out: Pillow decodes it on open, at the size its payload states.
+_OPEN_FORMATS = ("PNG", "JPEG", "GIF", "WEBP", "BMP", "TIFF", "PPM")
 # Finite float32 bound: a pixel beyond it, or NaN, is zeroed before the value range is measured.
 _FLOAT_LIMIT = 3.0e38
-# Two workers bound the memory of concurrent decodes, and keep the queue of waiting images off
-# the event loop and off the default executor that the rest of the agent shares.
+# A marker in JPEG scan data: not a stuffed 0xFF, a restart marker or a fill byte.
+_JPEG_MARKER = re.compile(rb"\xff[^\x00\xd0-\xd7\xff]")
+# Two workers cap the memory of concurrent decodes at twice that of one image, and keep the
+# queue of waiting images off the event loop and off the default executor that the rest of the
+# agent shares.
 _POOL = ThreadPoolExecutor(max_workers=2, thread_name_prefix="converse-image")
 
 
 class ImageConversionError(ValueError):
-    """The bytes are not an image that can be brought within the Converse limits."""
+    """The bytes are not an image that can be brought within MAX_IMAGE_BYTES and MAX_EDGE."""
 
 
 def submit_conversion(raw: bytes) -> Future[tuple[bytes, ImageFormat]]:
     """Start the conversion of ``raw`` to image bytes and a format that Converse accepts.
 
     The result is ``raw`` itself, with its real format, when it is a complete png, jpeg, gif or
-    webp of at most MAX_IMAGE_BYTES and MAX_EDGE px per side. Any other image is decoded (first
-    frame only), downscaled until it fits and encoded again: png when it has transparency, jpeg
-    otherwise.
+    webp of at most MAX_IMAGE_BYTES and MAX_EDGE px per side (every frame) whose frames hold
+    at most MAX_FRAME_PIXELS. Any other image is decoded (first frame only), downscaled until
+    it fits and encoded again: png when it has transparency, jpeg otherwise.
 
     At most two conversions run at a time; the others wait in a queue. The future raises
-    ImageConversionError when the bytes are not a readable image of a supported format, when a
-    decode would exceed MAX_DECODE_PIXELS, or when the image is still over MAX_IMAGE_BYTES at
-    MIN_EDGE px.
+    ImageConversionError when the bytes are not a readable image of a supported format, when
+    the frame to encode again is over MAX_DECODE_PIXELS, or when the image is still over
+    MAX_IMAGE_BYTES at MIN_EDGE px. The message never quotes the bytes.
     """
     return _POOL.submit(_convert_or_raise, raw)
 
@@ -55,12 +65,17 @@ def submit_conversion(raw: bytes) -> Future[tuple[bytes, ImageFormat]]:
 def _convert_or_raise(raw: bytes) -> tuple[bytes, ImageFormat]:
     try:
         return _convert(raw)
+    except ImageConversionError:
+        raise
     except UnidentifiedImageError as error:
         raise ImageConversionError("not a " + "/".join(_OPEN_FORMATS) + " image") from error
     except Exception as error:
         # Pillow decoders raise OSError, ValueError, SyntaxError, struct.error and more on
-        # damaged input; callers get one type, with the cause chained.
-        raise ImageConversionError(str(error) or type(error).__name__) from error
+        # damaged input, and some of their messages quote bytes of the input. Callers get one
+        # type and the name of the cause only, with the cause chained.
+        raise ImageConversionError(
+            f"damaged or unsupported image data ({type(error).__name__})"
+        ) from error
 
 
 def _convert(raw: bytes) -> tuple[bytes, ImageFormat]:
@@ -70,25 +85,31 @@ def _convert(raw: bytes) -> tuple[bytes, ImageFormat]:
         fmt = "jpeg" if pil_format == "mpo" else pil_format
         fits = len(raw) <= MAX_IMAGE_BYTES and max(image.size) <= MAX_EDGE
         if fits and fmt in _CONVERSE_FORMATS:
-            _decode_frames(image, first_only=pil_format == "mpo")
-            return raw, cast(ImageFormat, fmt)
-        return _reencode(image)
+            if _decode_frames(image, first_only=pil_format == "mpo"):
+                return raw, cast(ImageFormat, fmt)
+            image.seek(0)
+        return _reencode(image, raw)
 
 
-def _decode_frames(image: Image.Image, first_only: bool) -> None:
-    """Decode the frames within the pixel budget, so that a damaged or truncated frame raises."""
+def _decode_frames(image: Image.Image, first_only: bool) -> bool:
+    """Decode the frames, so that a damaged or truncated frame raises.
+
+    False, with the later frames not decoded, when the frames hold more than MAX_FRAME_PIXELS
+    or when one of them is over MAX_EDGE (a GIF frame can be larger than the first one).
+    """
     if first_only:
         image.load()
-        return
+        return True
     decoded = 0
-    for index, frame in enumerate(ImageSequence.Iterator(image)):
+    for frame in ImageSequence.Iterator(image):
         decoded += frame.width * frame.height
-        if decoded > MAX_DECODE_PIXELS:
-            raise ValueError(f"frames exceed the decode budget at frame {index}")
+        if decoded > MAX_FRAME_PIXELS or max(frame.size) > MAX_EDGE:
+            return False
         frame.load()
+    return True
 
 
-def _reencode(image: Image.Image) -> tuple[bytes, ImageFormat]:
+def _reencode(image: Image.Image, raw: bytes) -> tuple[bytes, ImageFormat]:
     """The first frame within MAX_EDGE and MAX_IMAGE_BYTES: png with transparency, else jpeg."""
     width, height = image.size
     if image.format in ("JPEG", "MPO"):
@@ -98,9 +119,12 @@ def _reencode(image: Image.Image) -> tuple[bytes, ImageFormat]:
             "RGB",
             (max(1, MAX_EDGE * width // long_side), max(1, MAX_EDGE * height // long_side)),
         )
-        width, height = image.size
+        # The decoder holds the coefficients of a progressive or multi-scan JPEG at full size
+        # at any scale.
+        if not image.info.get("progressive") and _has_one_scan(raw):
+            width, height = image.size
     if width * height > MAX_DECODE_PIXELS:
-        raise ValueError(f"{width}x{height} px exceeds the decode limit")
+        raise ImageConversionError(f"{width}x{height} px exceeds the decode limit")
     image.load()
     ImageOps.exif_transpose(image, in_place=True)
     # A profile describes the colour space it was written for, so it is kept only when the
@@ -109,10 +133,7 @@ def _reencode(image: Image.Image) -> tuple[bytes, ImageFormat]:
     icc_profile = image.info.get("icc_profile") if keeps_colour_space else None
     colour_key = image.info.get("transparency")
     if image.mode.startswith("I;16") or image.mode in ("I", "F"):
-        gray = _to_grayscale(image)
-        if isinstance(colour_key, int):
-            gray = _with_colour_key_alpha(gray, image, colour_key)
-        image = gray
+        image = _to_grayscale(image, colour_key)
     elif colour_key is not None or image.mode in ("PA", "La", "RGBa"):
         image = image.convert("RGBA")
     has_alpha = image.mode in ("RGBA", "LA")
@@ -133,20 +154,50 @@ def _reencode(image: Image.Image) -> tuple[bytes, ImageFormat]:
             return data, "png" if has_alpha else "jpeg"
         edge //= 2
         if edge < MIN_EDGE:
-            raise ValueError(f"still over {MAX_IMAGE_BYTES:,} bytes at {MIN_EDGE} px")
+            raise ImageConversionError(f"still over {MAX_IMAGE_BYTES:,} bytes at {MIN_EDGE} px")
 
 
-def _to_grayscale(image: Image.Image) -> Image.Image:
-    """Map a 16-bit, 32-bit or float image onto 0-255 over its own value range."""
-    floats = image.convert("F")
-    if image.mode == "F":
+def _has_one_scan(raw: bytes) -> bool:
+    """Whether the first image of a JPEG file is coded as one scan; False when unsure."""
+    position = 2
+    while position + 4 <= len(raw) and raw[position] == 0xFF:
+        marker = raw[position + 1]
+        position += 2 + int.from_bytes(raw[position + 2 : position + 4], "big")
+        if marker == 0xDA:
+            following = _JPEG_MARKER.search(raw, position)
+            return following is None or following.group()[1] == 0xD9
+    return False
+
+
+def _to_grayscale(image: Image.Image, colour_key: object) -> Image.Image:
+    """Map a 16-bit, 32-bit or float image onto 0-255 over its own value range, as L or LA.
+
+    The image is brought within MAX_EDGE first, so that the mapping works on a small image
+    whatever the size of the source. An integer colour key becomes the alpha channel.
+    """
+    mode = image.mode
+    values = image if mode in ("I", "F") else image.convert("I")
+    box = (MAX_EDGE, MAX_EDGE)
+    alpha = None
+    if isinstance(colour_key, int):
+        opaque_but_key = [255] * 0x10000
+        opaque_but_key[colour_key] = 0
+        alpha = values.point(opaque_but_key, "L")
+        alpha.thumbnail(box, Image.Resampling.BOX)
+    # A box filter has no negative weight, so a NaN or infinite pixel reaches only the output
+    # pixels that cover it.
+    values.thumbnail(box, Image.Resampling.BOX)
+    floats = values.convert("F")
+    if mode == "F":
         floats = _finite(floats)
     low, high = cast(tuple[float, float], floats.getextrema())
     if high <= low:
-        full = _full_scale(image.mode, high)
-        return Image.new("L", image.size, round(min(max(high, 0.0), full) / full * 255))
-    scale = 255 / (high - low)
-    return floats.point(lambda value: (value - low) * scale).convert("L")
+        full = _full_scale(mode, high)
+        gray = Image.new("L", floats.size, round(min(max(high, 0.0), full) / full * 255))
+    else:
+        scale = 255 / (high - low)
+        gray = floats.point(lambda value: (value - low) * scale).convert("L")
+    return gray if alpha is None else Image.merge("LA", (gray, alpha))
 
 
 def _full_scale(mode: str, value: float) -> float:
@@ -179,9 +230,3 @@ def _finite(floats: Image.Image) -> Image.Image:
             b=lower_first,
         ),
     )
-
-
-def _with_colour_key_alpha(gray: Image.Image, source: Image.Image, key: int) -> Image.Image:
-    """Carry the transparent colour key of a high-bit-depth image over as an alpha channel."""
-    alpha = ImageMath.lambda_eval(lambda e: (e["x"] != key) * 255, x=source.convert("I"))
-    return Image.merge("LA", (gray, alpha.convert("L")))

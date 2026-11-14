@@ -91,6 +91,12 @@ def test_a_block_without_a_bytes_source_is_untouched() -> None:
     assert _run(_event([block]))["content"][0] is block
 
 
+def test_a_bytearray_source_is_guarded_like_bytes() -> None:
+    block: Block = {"image": {"format": "png", "source": {"bytes": bytearray(_png(9000, 100))}}}
+    guarded = _run(_event([block]))["content"][0]
+    assert guarded["image"]["format"] == "jpeg" and _decoded(guarded).size[0] == MAX_EDGE
+
+
 def test_wide_image_over_the_edge_limit_is_downscaled_to_the_limit() -> None:
     block = _guarded(_png(9000, 100))
     assert block["image"]["format"] == "jpeg"
@@ -118,18 +124,40 @@ def test_transparent_image_stays_png_when_downscaled() -> None:
     assert max(_decoded(block).size) <= MAX_EDGE
 
 
-def test_image_that_still_does_not_fit_becomes_a_note(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_image_that_still_does_not_fit_at_the_smallest_edge_becomes_a_note(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(converse_image, "MAX_IMAGE_BYTES", 10)
-    block = _guarded(_png(64, 64), tool_name="some_tool")
+    raw = _encode(Image.new("RGB", (256, 256), (20, 20, 220)), "BMP")
+    encoded: list[tuple[int, int]] = []
+    real_save = Image.Image.save
+
+    def recording_save(self: Image.Image, *args: Any, **kwargs: Any) -> None:
+        encoded.append(self.size)
+        real_save(self, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "save", recording_save)
+    block = _guarded(raw, tool_name="some_tool")
     assert "image" not in block
     assert block["text"].startswith("[image from some_tool: png,")
-    assert "not shown: still over 10 bytes" in block["text"]
+    assert "not shown: still over 10 bytes at 64 px" in block["text"]
+    assert encoded == [(256, 256), (128, 128), (64, 64)]
 
 
 def test_undecodable_image_bytes_become_a_note() -> None:
     block = _guarded(b"\x89PNG\r\n\x1a\ngarbage")
     assert "image" not in block
     assert "not shown" in block["text"]
+
+
+@pytest.mark.parametrize("header", ["P2 2 2 255 ", "P2 "])
+def test_a_decoder_failure_note_and_log_line_hold_no_bytes_of_the_input(
+    header: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    block = _guarded((header + "private-text-of-the-file").encode())
+    assert "not shown: damaged or unsupported image data (ValueError)]" in block["text"]
+    assert "private" not in block["text"] and "private" not in caplog.text
+    assert "damaged or unsupported image data" in caplog.text
 
 
 def test_an_unrecognised_format_note_names_the_declared_format_and_the_reason() -> None:
@@ -270,6 +298,33 @@ def test_float_image_with_a_non_finite_pixel_keeps_its_contrast(
     assert out.getpixel((10, 20)) > out.getpixel((out.size[0] - 10, 20))
 
 
+@pytest.mark.parametrize("mode,fmt", [("F", "TIFF"), ("I", "TIFF"), ("I;16", "PNG")])
+def test_high_depth_image_is_downscaled_before_its_value_range_is_mapped(
+    monkeypatch: pytest.MonkeyPatch, mode: str, fmt: str
+) -> None:
+    mapped: list[tuple[int, int]] = []
+    real_convert = Image.Image.convert
+
+    def recording_convert(self: Image.Image, mode: Any = None, *args: Any, **kwargs: Any) -> Any:
+        if mode == "F":
+            mapped.append(self.size)
+        return real_convert(self, mode, *args, **kwargs)
+
+    monkeypatch.setattr(Image.Image, "convert", recording_convert)
+    block = _guarded(_encode(Image.new(mode, (3200, 2000), 7), fmt))
+    assert mapped == [(MAX_EDGE, 980)]
+    assert _decoded(block).size == (MAX_EDGE, 980)
+
+
+def test_a_non_finite_pixel_blanks_only_the_output_pixels_that_cover_it() -> None:
+    image = Image.new("F", (3000, 100), 1.0)
+    image.paste(0.5, (1500, 0, 3000, 100))
+    image.putpixel((100, 50), float("nan"))
+    out = converse_image._to_grayscale(image, None)
+    assert [out.getpixel((x, 26)) for x in (51, 52, 53)] == [255, 0, 255]
+    assert out.getpixel((out.size[0] - 1, 26)) == 127
+
+
 @pytest.mark.parametrize("mode", ["P", "1"])
 def test_palette_and_bilevel_diagrams_keep_their_thin_lines_when_downscaled(mode: str) -> None:
     image = Image.new("RGB", (4000, 3000), (255, 255, 255))
@@ -297,8 +352,33 @@ def test_jpeg_over_the_decode_pixel_limit_is_decoded_at_reduced_scale_not_droppe
 ) -> None:
     monkeypatch.setattr(converse_image, "MAX_DECODE_PIXELS", 1_000_000)
     monkeypatch.setattr(converse_image, "MAX_EDGE", 300)
-    block = _guarded(_encode(Image.new("RGB", size, (9, 9, 9)), "JPEG"), "jpeg")
+    raw = _encode(Image.new("RGB", size, (9, 9, 9)), "JPEG", comment=b"\xff\xda in a segment")
+    block = _guarded(raw, "jpeg")
     assert max(_decoded(block).size) <= 300
+
+
+def _with_a_second_scan(baseline_jpeg: bytes) -> bytes:
+    assert baseline_jpeg.endswith(b"\xff\xd9")
+    return baseline_jpeg[:-2] + b"\xff\xda\x00\x08\x01\x01\x00\x00\x3f\x00\xff\xd9"
+
+
+@pytest.mark.parametrize("kind", ["progressive", "sequential", "progressive header, one scan"])
+def test_jpeg_that_is_not_one_sequential_scan_is_charged_at_full_size_without_decoding(
+    monkeypatch: pytest.MonkeyPatch, kind: str
+) -> None:
+    image = Image.new("RGB", (2400, 2400), (9, 9, 9))
+    raw = _encode(image, "JPEG", progressive=kind == "progressive")
+    if kind == "sequential":
+        raw = _with_a_second_scan(raw)
+    elif kind == "progressive header, one scan":
+        assert raw.count(b"\xff\xc0") == 1
+        raw = raw.replace(b"\xff\xc0", b"\xff\xc2")
+    monkeypatch.setattr(converse_image, "MAX_DECODE_PIXELS", 1_000_000)
+    monkeypatch.setattr(converse_image, "MAX_EDGE", 300)
+    monkeypatch.setattr(ImageFile.ImageFile, "load", Mock(side_effect=AssertionError("decoded")))
+    block = _guarded(raw, "jpeg")
+    assert "image" not in block
+    assert "2400x2400 px exceeds the decode limit" in block["text"]
 
 
 @pytest.mark.parametrize("fmt", ["PNG", "JPEG"])
@@ -322,11 +402,14 @@ def test_an_animation_truncated_after_its_first_frame_becomes_a_note(
     assert "not shown" in block["text"]
 
 
-def test_a_many_frame_animation_over_the_decode_budget_becomes_a_note(
+def test_a_many_frame_animation_over_the_frame_budget_keeps_its_first_frame(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    raw = _animation("GIF", frames=40, size=(64, 64))
-    monkeypatch.setattr(converse_image, "MAX_DECODE_PIXELS", 10 * 64 * 64)
+    frames = [Image.new("RGB", (64, 64), (200, 30, 30))]
+    frames += [Image.new("RGB", (64, 64), (0, 5 * index, 200)) for index in range(39)]
+    raw = _encode(frames[0], "GIF", save_all=True, append_images=frames[1:])
+    assert Image.open(io.BytesIO(raw)).n_frames == 40
+    monkeypatch.setattr(converse_image, "MAX_FRAME_PIXELS", 10 * 64 * 64)
     visited: list[int] = []
     real_next = ImageSequence.Iterator.__next__
 
@@ -336,9 +419,40 @@ def test_a_many_frame_animation_over_the_decode_budget_becomes_a_note(
 
     monkeypatch.setattr(ImageSequence.Iterator, "__next__", counting_next)
     block = _guarded(raw, "gif")
-    assert "image" not in block
-    assert "decode budget" in block["text"]
     assert len(visited) == 11
+    assert block["image"]["format"] == "jpeg"
+    still = _decoded(block)
+    assert still.size == (64, 64) and getattr(still, "n_frames", 1) == 1
+    red, green, blue = still.convert("RGB").getpixel((32, 32))
+    assert red > 150 and green < 80 and blue < 80
+
+
+def test_a_gif_frame_over_the_edge_limit_after_the_first_one_is_not_decoded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first = _encode(Image.new("P", (100, 100), 1), "GIF")
+    large = _encode(Image.new("P", (2000, 100), 3), "GIF")
+    table_bytes = 3 * (2 << (large[10] & 7)) if large[10] & 0x80 else 0
+    raw = first[:-1] + large[13 + table_bytes :]
+    opened = Image.open(io.BytesIO(raw))
+    assert opened.size == (100, 100) and opened.n_frames == 2
+    loaded: list[int] = []
+    real_load = ImageFile.ImageFile.load
+
+    def recording_load(self: ImageFile.ImageFile) -> Any:
+        loaded.append(self.tell())
+        return real_load(self)
+
+    monkeypatch.setattr(ImageFile.ImageFile, "load", recording_load)
+    block = _guarded(raw, "gif")
+    assert loaded and set(loaded) == {0}
+    assert getattr(_decoded(block), "n_frames", 1) == 1
+
+
+def test_an_ico_file_is_not_decoded(monkeypatch: pytest.MonkeyPatch) -> None:
+    raw = _encode(Image.new("RGBA", (64, 64), (1, 2, 3, 4)), "ICO")
+    monkeypatch.setattr(ImageFile.ImageFile, "load", Mock(side_effect=AssertionError("decoded")))
+    assert "not shown: not a PNG/JPEG/GIF/WEBP/BMP/TIFF/PPM image" in _guarded(raw)["text"]
 
 
 def test_an_mpo_with_a_damaged_trailing_image_keeps_its_primary_photo() -> None:

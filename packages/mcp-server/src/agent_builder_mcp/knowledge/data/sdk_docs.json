@@ -3513,7 +3513,7 @@
     "kind": "class",
     "file": "agent_builder_sdk/orchestrator_strands/hooks/image_block_guard.py",
     "module": "agent_builder_sdk.orchestrator_strands.hooks.image_block_guard",
-    "docstring": "Keep the image blocks of tool results within the Bedrock Converse limits.\n\nConverse rejects a request that holds an image over 3.75 MB or an image whose bytes do not\nmatch its declared format. The tool result stays in history, so one such image fails every\nlater model call of the conversation. After each tool call this hook:\n\n- leaves a valid png, jpeg, gif or webp block of at most 3.75 MB and 1568 px per side as is;\n- corrects a wrong declared format;\n- downscales and re-encodes any other image (first frame only; png when it has\n  transparency, jpeg otherwise);\n- replaces an image that cannot be read or made to fit with a text block that names the\n  reason, so the model knows an image was there.\n\nOnly blocks with a ``bytes`` source are checked. Other blocks keep their place and content.",
+    "docstring": "Keep the image blocks of tool results within 3.75 MB and 1568 px per side.\n\n3.75 MB is the Bedrock Converse limit: Converse rejects a request that holds a larger image,\nor an image whose bytes do not match its declared format. The tool result stays in history,\nso one such image fails every later model call of the conversation. 1568 px is not a\nConverse limit (that is 8000 px). It is the edge above which, by Anthropic's vision\nguidance, a Claude model resizes an image before it reads it. The edge is fixed, so a model\nthat reads larger images still gets them downscaled. After each tool call this hook:\n\n- leaves a valid png, jpeg, gif or webp block of at most 3.75 MB and 1568 px per side as\n  is, unless it is an animation of more than 50 million pixels over all its frames;\n- corrects a wrong declared format;\n- downscales and re-encodes any other image (first frame only; png when it has\n  transparency, jpeg at quality 85 otherwise);\n- replaces an image that cannot be read or made to fit, or that needs more than 20 million\n  pixels decoded, with a text block that names the reason, so the model knows an image\n  was there. The text never quotes the image bytes.\n\nA conversion can take about 350 MB of memory for a 20-million-pixel image, and two run at\na time. Only blocks with a ``bytes`` source are checked. Other blocks keep their place and\ncontent.",
     "signature": "ImageBlockGuardHook()",
     "description": "Extends: HookProvider\n\nMethods:\n  register_hooks(registry: HookRegistry, **kwargs: Any) -> None"
   },
@@ -3582,7 +3582,7 @@
     "kind": "function",
     "file": "agent_builder_sdk/orchestrator_strands/tools/image_reader.py",
     "module": "agent_builder_sdk.orchestrator_strands.tools.image_reader",
-    "docstring": "Return the image at ``tool[\"input\"][\"image_path\"]`` as one Converse image block.\n\nThe path may be any file the agent process can read: ``~`` is expanded, a relative path\nis resolved against the working directory, and symbolic links are followed. The file must\nbe a regular file of at most MAX_IMAGE_FILE_BYTES that holds a PNG, JPEG, GIF, WebP, BMP,\nTIFF, ICO or PPM image. An image over the Converse limits is downscaled and re-encoded.\nFile content is returned only as an image; every failure is an ``error`` result with a\nmessage for the model, never an exception.",
+    "docstring": "Return the image at ``tool[\"input\"][\"image_path\"]`` as one Converse image block.\n\nThe path may be any file the agent process can read: ``~`` is expanded, a relative path\nis resolved against the working directory, and symbolic links are followed. The file must\nbe a regular file of at most MAX_IMAGE_FILE_BYTES that holds a PNG, JPEG, GIF, WebP, BMP,\nTIFF or PPM image. An image over 3.75 MB (the Converse limit) or 1568 px per side is\ndownscaled and re-encoded; one that needs more than 20 million pixels decoded is an error.\nFile content is returned only as an image; every failure is an ``error`` result with a\nmessage for the model that quotes no file content, never an exception.",
     "signature": "image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult",
     "description": "Parameters:\n  tool: ToolUse (required)"
   },
@@ -4845,7 +4845,7 @@
     "kind": "class",
     "file": "agent_builder_sdk/util/converse_image.py",
     "module": "agent_builder_sdk.util.converse_image",
-    "docstring": "The bytes are not an image that can be brought within the Converse limits.",
+    "docstring": "The bytes are not an image that can be brought within MAX_IMAGE_BYTES and MAX_EDGE.",
     "signature": "ImageConversionError()",
     "description": "Extends: ValueError"
   },
@@ -4854,7 +4854,7 @@
     "kind": "function",
     "file": "agent_builder_sdk/util/converse_image.py",
     "module": "agent_builder_sdk.util.converse_image",
-    "docstring": "Start the conversion of ``raw`` to image bytes and a format that Converse accepts.\n\nThe result is ``raw`` itself, with its real format, when it is a complete png, jpeg, gif or\nwebp of at most MAX_IMAGE_BYTES and MAX_EDGE px per side. Any other image is decoded (first\nframe only), downscaled until it fits and encoded again: png when it has transparency, jpeg\notherwise.\n\nAt most two conversions run at a time; the others wait in a queue. The future raises\nImageConversionError when the bytes are not a readable image of a supported format, when a\ndecode would exceed MAX_DECODE_PIXELS, or when the image is still over MAX_IMAGE_BYTES at\nMIN_EDGE px.",
+    "docstring": "Start the conversion of ``raw`` to image bytes and a format that Converse accepts.\n\nThe result is ``raw`` itself, with its real format, when it is a complete png, jpeg, gif or\nwebp of at most MAX_IMAGE_BYTES and MAX_EDGE px per side (every frame) whose frames hold\nat most MAX_FRAME_PIXELS. Any other image is decoded (first frame only), downscaled until\nit fits and encoded again: png when it has transparency, jpeg otherwise.\n\nAt most two conversions run at a time; the others wait in a queue. The future raises\nImageConversionError when the bytes are not a readable image of a supported format, when\nthe frame to encode again is over MAX_DECODE_PIXELS, or when the image is still over\nMAX_IMAGE_BYTES at MIN_EDGE px. The message never quotes the bytes.",
     "signature": "submit_conversion(raw: bytes) -> Future[tuple[bytes, ImageFormat]]",
     "description": "Parameters:\n  raw: bytes (required)"
   },
