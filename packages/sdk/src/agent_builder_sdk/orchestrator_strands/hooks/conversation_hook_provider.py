@@ -14,6 +14,7 @@ from agent_builder_sdk.orchestrator_strands.conversation.file_repository import 
 )
 from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     ConversationRepository,
+    conversation_persist,
 )
 from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
     drop_unanswered_continuations,
@@ -83,6 +84,8 @@ class ConversationHookProvider(HookProvider):
         Args:
             event: The MessageAddedEvent containing the message and agent
         """
+        if not conversation_persist.get():
+            return
         # Let the repository handle the message storage based on agent state
         self.repository.add_message_for_agent(event.message, event.agent)
 
@@ -93,6 +96,8 @@ class ConversationHookProvider(HookProvider):
         Args:
             event: The AfterInvocationEvent containing the agent
         """
+        if not conversation_persist.get():
+            return
         # A terminating tool (stop_event_loop) ends the turn on its toolResult, so Strands stores no
         # reply; the answer the user got is only in force_stop_response. Store it as the reply, so
         # the saved turn is complete (not mistaken for an unanswered one on the next load) and the
