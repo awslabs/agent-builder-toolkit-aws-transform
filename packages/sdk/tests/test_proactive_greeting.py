@@ -196,29 +196,52 @@ async def test_first_boot_posts_one_greeting_and_stores_no_turn(
 
 
 @pytest.mark.parametrize(
-    ("status", "restored", "greeting_prompt"),
+    ("status", "restored", "greeting_prompt", "log"),
     [
-        pytest.param("RUNNING", False, PROMPT, id="container-rotation-running"),
-        pytest.param("IDLE", False, PROMPT, id="container-rotation-idle"),
-        pytest.param("INVOKED", True, PROMPT, id="checkpoint-restored"),
-        pytest.param("INVOKED", False, None, id="no-prompt"),
-        pytest.param("INVOKED", False, "  ", id="blank-prompt"),
+        pytest.param(
+            "RUNNING",
+            False,
+            PROMPT,
+            "skipped: not the first boot (status=RUNNING, checkpoint restored=False)",
+            id="container-rotation-running",
+        ),
+        pytest.param(
+            "IDLE",
+            False,
+            PROMPT,
+            "skipped: not the first boot (status=IDLE, checkpoint restored=False)",
+            id="container-rotation-idle",
+        ),
+        pytest.param(
+            "INVOKED",
+            True,
+            PROMPT,
+            "skipped: not the first boot (status=INVOKED, checkpoint restored=True)",
+            id="checkpoint-restored",
+        ),
+        pytest.param("INVOKED", False, None, None, id="no-prompt"),
+        pytest.param("INVOKED", False, "  ", None, id="blank-prompt"),
     ],
 )
 async def test_no_greeting_without_a_prompt_or_after_the_first_boot(
     tmp_path: Path,
     send: mock.AsyncMock,
+    caplog: pytest.LogCaptureFixture,
     status: str,
     restored: bool,
     greeting_prompt: Optional[str],
+    log: Optional[str],
 ) -> None:
     agent = _AsyncAgent()
     async with _running_server(agent, tmp_path, greeting_prompt) as server:
-        await _initialize(server, status=status, restored=restored)
+        with caplog.at_level(logging.INFO, logger=SERVER):
+            await _initialize(server, status=status, restored=restored)
 
         assert server._greeting_task is None
     assert agent.messages == []
     send.assert_not_awaited()
+    greeting_logs = [r.getMessage() for r in caplog.records if "greeting" in r.getMessage()]
+    assert greeting_logs == ([f"Proactive greeting {log}"] if log else [])
 
 
 async def test_sync_orchestrator_gets_a_warning_and_no_greeting(

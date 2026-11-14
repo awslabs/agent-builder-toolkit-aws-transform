@@ -599,6 +599,11 @@ class AgentRuntimeServer(BaseServer):
         if not prompt or not prompt.strip():
             return
         if agent_status != "INVOKED" or self.checkpoint_service.was_restored:
+            logger.info(
+                "Proactive greeting skipped: not the first boot (status=%s, checkpoint restored=%s)",
+                agent_status,
+                self.checkpoint_service.was_restored,
+            )
             return
         if not hasattr(self.agent, "process_message_async"):
             logger.warning(
