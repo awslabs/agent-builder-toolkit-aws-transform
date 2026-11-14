@@ -101,7 +101,7 @@ if __name__ == "__main__":
 
 ### Locale support
 
-When the `invoke` or `restore` request carries the user's locale (for example `ja` or `pt-BR`), `AgentRuntimeServer` and `StatelessAgentRuntimeServer` pass it as `locale=...` to an agent factory that names a `locale` parameter. Give the parameter a default, because it is not passed when no locale is set. Forward it to the orchestrator factory, which appends a "respond in <language>" instruction to the system prompt:
+When the `invoke` or `restore` request carries the user's locale (for example `ja` or `pt-BR`), `AgentRuntimeServer` and `StatelessAgentRuntimeServer` pass it as `locale=...` to an agent factory that names a `locale` parameter. Give the parameter a default, because it is not passed when no locale is set. Forward it to the orchestrator factory, which appends to the system prompt an instruction to respond in that language:
 
 ```python
 def agent_factory(mcp_client, storage_dir, locale=None):
