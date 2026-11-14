@@ -93,8 +93,10 @@ finish a step  -> create_worklog(plan_step_id=stepId, description="what you foun
 ## Blocking on a human
 
 To pause the job for a human **without** a HITL task (for example, a plain-chat question), set
-the owning step to `PENDING_HUMAN_INPUT` and stop. The platform detects that status and, in the
-same write, flips the job to `AWAITING_HUMAN_INPUT` — so do **not** also call `update_job_status`.
+the owning step to `PENDING_HUMAN_INPUT`, then end your turn by asking the question as your final
+message (from a turn a platform event started, which has no reply, put the question in a worklog
+instead — contract rule 11). The platform detects that status and, in the same write, flips the
+job to `AWAITING_HUMAN_INPUT` — so do **not** also call `update_job_status`.
 For a **BLOCKING HITL task**, don't set the step yourself on the way in — `start_hitl_task`
 already moves it to `PENDING_HUMAN_INPUT` (see `hitl-loop`).
 
@@ -118,7 +120,10 @@ the chat input away from the user. Gather requirements while the status is `PLAN
 
 Two ordering rules: never walk the status backwards (revise the plan while staying in
 `EXECUTING`), and make `COMPLETED`/`FAILED` your **last** platform call — once terminal, every
-plan write is rejected. Close open steps and post final worklogs first.
+plan write is rejected. Close open steps, post final worklogs, and close any open HITL task first.
+Your summary is not a platform call: write it after the status call returns, as your final
+message — unless the turn started from a platform event, which has no reply: put the summary in
+the last worklog, before the terminal status (contract rule 11).
 
 ## Reorienting on an existing job
 

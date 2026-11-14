@@ -21,6 +21,11 @@ start, announce, poll, read, close, in that order.
 7. close    = close_hitl_task(hitl_task_id, closure_type="CLOSED")
 ```
 
+Chat reaches the user as your reply only when the turn ends (contract rule 11). An ask you write
+in step 4 and then keep polling past is not that reply: a live stream shows it only as progress,
+and the queued path sends only the turn's final message — after they have answered, or, if the
+turn outlasts the agent's wait for a delayed reply, just a note that no response came in time.
+
 The `create_autoform_hitl_task` and `create_autotable_hitl_task` helpers do steps 2 AND 3 in one call, and return the
 `hitl_task_id` plus the status start landed in. Read those off the response and go straight to
 step 4 — calling `start_hitl_task` on a helper-created task fails, because start only accepts a

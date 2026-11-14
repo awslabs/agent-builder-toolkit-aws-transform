@@ -33,7 +33,7 @@ transcript.
 ## When to use it
 
 - Store an episode as you reach each finding/decision/outcome — while it's fresh, not in a
-  batch at the end.
+  batch at the end. When the outcome ends your turn, store it before you write your reply.
 - Retrieve at the start of a turn when you're unsure what's already been established, and
   especially on resume (pair with `get_job` / `list_worklogs` — see job-plan) to rebuild your
   bearings before acting.
