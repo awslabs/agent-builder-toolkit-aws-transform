@@ -358,3 +358,20 @@ class TestServerShutdown:
             await tool_call
         assert waited < 1
         assert "The code-interpreter sessions were not stopped within 0.05 seconds" in caplog.text
+
+    async def test_stateless_shutdown_does_not_run_the_cleanup_hook(self, sandbox: FakeSandbox) -> None:
+        # A subclass written for 1.1.0 expects its _cleanup() override on a STOP request only.
+        cleanups: List[str] = []
+
+        class Subclass(StatelessAgentRuntimeServer):
+            async def _cleanup(self) -> None:
+                cleanups.append("cleanup")
+
+        with patch("agent_builder_sdk.server.stateless_agent_runtime_server.MessageHandler"):
+            server = Subclass(agent_factory=Mock())
+        tools = _tools()
+        with patch.object(server, "_startup"):
+            async with server._lifespan(server.app):
+                _list_files(tools)
+        assert cleanups == []
+        assert sandbox.stopped == ["aws-session-1"]
