@@ -1,10 +1,14 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
+import json
 import tempfile
+from pathlib import Path
 from unittest import mock
 
 import pytest
 from botocore.exceptions import ClientError
+from botocore.model import ServiceModel
+from botocore.validate import ParamValidator
 
 from agent_builder_sdk.agentic_framework.agent_lifecycle import (
     AgentInstanceManager,
@@ -20,6 +24,7 @@ from agent_builder_sdk.agentic_framework.agent_lifecycle import (
     shutdown_subagent_instance,
     wait_for_agent_non_invoking,
 )
+from agent_builder_sdk.agentic_framework.client_factory import PACKAGED_MODELS_DIR
 
 
 @pytest.fixture
@@ -100,7 +105,45 @@ class TestAgentInstanceManager:
         assert result == expected_response
         call_args = agent_instance_manager.client.update_agent_instance.call_args[1]
         assert call_args["agentInstanceStatusReason"] == "Test failure"
-        assert call_args["agentOutput"] == "Error details"
+        assert call_args["agentOutput"] == {"serializedPayload": "Error details"}
+
+    def test_set_completed(self, agent_instance_manager: AgentInstanceManager) -> None:
+        expected_response = {"agentInstanceId": "test-agent", "status": "COMPLETED"}
+        agent_instance_manager.client.update_agent_instance.return_value = expected_response
+
+        result = agent_instance_manager.set_completed(
+            "test-agent", reason="All steps done", agent_output="the result"
+        )
+
+        assert result == expected_response
+        call_args = agent_instance_manager.client.update_agent_instance.call_args.kwargs
+        assert call_args["agentInstanceStatus"] == "COMPLETED"
+        assert call_args["agentInstanceStatusReason"] == "All steps done"
+        assert call_args["agentOutput"] == {"serializedPayload": "the result"}
+
+    def test_set_completed_without_output_sends_no_agent_output(
+        self, agent_instance_manager: AgentInstanceManager
+    ) -> None:
+        agent_instance_manager.set_completed("test-agent")
+
+        call_args = agent_instance_manager.client.update_agent_instance.call_args.kwargs
+        assert set(call_args) == {"agentInstanceId", "agentInstanceStatus", "requestContext"}
+
+    def test_update_status_request_is_valid_for_the_service_model(
+        self, agent_instance_manager: AgentInstanceManager
+    ) -> None:
+        model_file = Path(PACKAGED_MODELS_DIR, "transformagenticservice/2018-05-10/service-2.json")
+        operation = ServiceModel(json.loads(model_file.read_text())).operation_model(
+            "UpdateAgentInstance"
+        )
+
+        agent_instance_manager.update_status(
+            "test-agent", "COMPLETED", status_reason="All steps done", agent_output="the result"
+        )
+
+        request = agent_instance_manager.client.update_agent_instance.call_args.kwargs
+        report = ParamValidator().validate(request, operation.input_shape)
+        assert not report.has_errors(), report.generate_report()
 
     def test_update_status_client_error(self, agent_instance_manager):
         """Test status update with client error."""

@@ -9,7 +9,7 @@ import logging
 import re
 import time
 from functools import lru_cache
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import botocore
 
@@ -93,7 +93,8 @@ class AgentInstanceManager(AgenticApiHelper):
             agent_instance_id: The unique identifier of the agent instance.
             status: The new status to set for the agent instance.
             status_reason: Optional reason for the status change.
-            agent_output: Optional output data from the agent.
+            agent_output: Optional output of the agent, sent as ``agentOutput.serializedPayload``.
+                An empty string is not sent.
 
         Returns:
             dict: The update response from the API.
@@ -102,7 +103,7 @@ class AgentInstanceManager(AgenticApiHelper):
             Exception: If there's an error updating the agent instance status.
         """
         try:
-            request_data = {
+            request_data: Dict[str, Any] = {
                 "agentInstanceId": agent_instance_id,
                 "agentInstanceStatus": status,
             }
@@ -110,7 +111,7 @@ class AgentInstanceManager(AgenticApiHelper):
             if status_reason:
                 request_data["agentInstanceStatusReason"] = status_reason
             if agent_output:
-                request_data["agentOutput"] = agent_output
+                request_data["agentOutput"] = {"serializedPayload": agent_output}
 
             request = self._inject_request_context(request_data)
             return self.client.update_agent_instance(**request)
@@ -164,6 +165,18 @@ class AgentInstanceManager(AgenticApiHelper):
         """Set agent instance status to IDLE."""
         logger.info(f"Setting agent instance {agent_instance_id} to IDLE")
         return self.update_status(agent_instance_id, "IDLE", status_reason=reason)
+
+    def set_completed(
+        self,
+        agent_instance_id: str,
+        reason: Optional[str] = None,
+        agent_output: Optional[str] = None,
+    ) -> dict:
+        """Set agent instance status to COMPLETED, optionally recording its output."""
+        logger.info(f"Setting agent instance {agent_instance_id} to COMPLETED")
+        return self.update_status(
+            agent_instance_id, "COMPLETED", status_reason=reason, agent_output=agent_output
+        )
 
     def restore(self, agent_id: str, agent_type: str) -> dict:
         """Trigger agent restoration for session chaining.
