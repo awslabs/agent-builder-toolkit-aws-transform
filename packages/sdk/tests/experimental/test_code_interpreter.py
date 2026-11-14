@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the code-interpreter tool pair: descriptions, configuration, staging and shutdown."""
 
+import asyncio
 import gc
 import os
 import subprocess
@@ -283,19 +284,31 @@ class TestServerShutdown:
             await _agent_runtime_server()._cleanup()
         assert "Could not stop the code-interpreter sessions: no route to the service" in caplog.text
 
-    async def test_a_stop_that_does_not_return_does_not_hold_up_the_shutdown(
+    def test_a_stop_that_does_not_return_holds_up_neither_the_shutdown_nor_the_exit(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         # The service endpoint does not answer: the stop request stays blocked in its thread.
-        endpoint_answers = threading.Event()
+        endpoint_answers, stop_returned = threading.Event(), threading.Event()
+        stop_threads: List[threading.Thread] = []
+
+        def blocked_stop() -> None:
+            stop_threads.append(threading.current_thread())
+            endpoint_answers.wait(timeout=5)
+            stop_returned.set()
+
         base_server = "agent_builder_sdk.server.base_server"
         with (
-            patch.object(code_interpreter_tool, "stop_all_sessions", lambda: endpoint_answers.wait(timeout=5)),
+            patch.object(code_interpreter_tool, "stop_all_sessions", blocked_stop),
             patch(f"{base_server}._SESSION_STOP_TIMEOUT_SECONDS", 0.05),
             caplog.at_level("WARNING"),
         ):
             try:
-                await _agent_runtime_server()._cleanup()
+                # asyncio.run closes the loop as a process does at its exit: it joins the
+                # threads of the loop's executor.
+                asyncio.run(_agent_runtime_server()._cleanup())
+                assert not stop_returned.is_set()
             finally:
                 endpoint_answers.set()
         assert "The code-interpreter sessions were not stopped within 0.05 seconds" in caplog.text
+        # The interpreter waits at its exit for every thread that is not a daemon.
+        assert [thread.daemon for thread in stop_threads] == [True]

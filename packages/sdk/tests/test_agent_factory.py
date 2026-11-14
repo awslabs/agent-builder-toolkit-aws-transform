@@ -949,7 +949,7 @@ class TestExperimentalToolWiring:
     @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
     @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
     @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
-    def test_code_interpreter_tools_added_when_enabled(self, *mocks):
+    def test_code_interpreter_tools_added_when_enabled(self, *mocks: mock.Mock) -> None:
         mock_orchestrator = mocks[-1]
         mock_orchestrator.return_value = mock.Mock()
 
@@ -976,7 +976,7 @@ class TestExperimentalToolWiring:
     @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
     @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
     @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
-    def test_execute_shell_added_when_enabled(self, *mocks):
+    def test_execute_shell_added_when_enabled(self, *mocks: mock.Mock) -> None:
         mock_orchestrator = mocks[-1]
         mock_orchestrator.return_value = mock.Mock()
 

@@ -14,7 +14,7 @@ import logging
 import threading
 import uuid
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, NamedTuple, Optional, Union
 
 from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import BaseModel, Field
@@ -127,6 +127,24 @@ class CodeInterpreterInput(BaseModel):
     action: Action = Field(discriminator="type")
 
 
+class _Session(NamedTuple):
+    client: CodeInterpreterClient
+    # The client forgets both when it stops, and its own invoke() then starts a new session
+    # on the default interpreter. Calls are sent with these, so a stopped session fails.
+    identifier: str
+    session_id: str
+
+    def call(self, method: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+        return _tool_result(
+            self.client.data_plane_client.invoke_code_interpreter(
+                codeInterpreterIdentifier=self.identifier,
+                sessionId=self.session_id,
+                name=method,
+                arguments=arguments,
+            )
+        )
+
+
 class AgentCoreCodeInterpreter:
     """Runs sandbox actions in Bedrock AgentCore Code Interpreter sessions.
 
@@ -152,7 +170,7 @@ class AgentCoreCodeInterpreter:
         self.identifier = identifier
         self.session_timeout_seconds = session_timeout_seconds
         self.default_session = f"session-{uuid.uuid4().hex[:12]}"
-        self._sessions: Dict[str, CodeInterpreterClient] = {}
+        self._sessions: Dict[str, _Session] = {}
         self._stops = 0  # how many times stop_all_sessions has run
         self._lock = threading.Lock()
 
@@ -186,50 +204,50 @@ class AgentCoreCodeInterpreter:
         # Read before the session lookup: a stop between the two then makes a failed call
         # raise, and never run again.
         stops = self._stops
-        client = self._session(name)
+        session = self._session(name)
         try:
-            return _tool_result(client.invoke(method, arguments))
+            return session.call(method, arguments)
         except ClientError:
-            if not self._forget_if_ended(name, client, stops):
+            if not self._forget_if_ended(name, session, stops):
                 raise
         logger.warning("Sandbox session %s has ended; running the call again in a new session", name)
-        result = _tool_result(self._session(name).invoke(method, arguments))
+        result = self._session(name).call(method, arguments)
         result["content"].insert(0, {"text": NEW_SESSION_NOTICE})
         return result
 
     def stop_all_sessions(self) -> None:
         """Stop every session this instance started, so none runs on until its timeout.
 
-        A session that cannot be stopped is logged and skipped. A call that is in flight fails
-        on its stopped session and is not run again. The instance stays usable: a later call
-        starts a new session.
+        A session that cannot be stopped is logged and skipped. A call that has its session
+        when the stop runs, in flight or about to be sent, fails on the stopped session and is
+        not run again. The instance stays usable: a later call starts a new session.
         """
         with self._lock:
             sessions, self._sessions = self._sessions, {}
             self._stops += 1
-        for name, client in sessions.items():
+        for name, session in sessions.items():
             try:
-                client.stop()
+                session.client.stop()
             except (BotoCoreError, ClientError) as e:
                 logger.warning("Could not stop sandbox session %s: %s", name, e)
 
-    def _session(self, name: str) -> CodeInterpreterClient:
+    def _session(self, name: str) -> _Session:
         # The lock covers the start as well as the lookup, so concurrent first calls on a name
         # share one session instead of starting one each.
         with self._lock:
-            client = self._sessions.get(name)
-            if client is None:
+            session = self._sessions.get(name)
+            if session is None:
                 client = CodeInterpreterClient(region=self.region)
-                client.start(
+                session_id = client.start(
                     identifier=self.identifier,
                     name=name,
                     session_timeout_seconds=self.session_timeout_seconds,
                 )
-                self._sessions[name] = client
-                logger.info("Started sandbox session %s (%s)", name, client.session_id)
-            return client
+                session = self._sessions[name] = _Session(client, self.identifier, session_id)
+                logger.info("Started sandbox session %s (%s)", name, session_id)
+            return session
 
-    def _forget_if_ended(self, name: str, used: CodeInterpreterClient, stops: int) -> bool:
+    def _forget_if_ended(self, name: str, used: _Session, stops: int) -> bool:
         """Whether a call that failed on ``used`` must run again in a new session.
 
         True when the service reports that the session has ended, and when a concurrent call
@@ -242,7 +260,7 @@ class AgentCoreCodeInterpreter:
                 return False
             if self._sessions.get(name) is not used:
                 return True
-            if not _has_ended(used):
+            if not _has_ended(used.client):
                 return False
             del self._sessions[name]
             return True

@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import uuid
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
@@ -100,22 +101,32 @@ class BaseServer(ABC):
         does not need the code-interpreter extra.
 
         Waits at most ``_SESSION_STOP_TIMEOUT_SECONDS`` so that a service endpoint that
-        does not answer cannot hold up the rest of the shutdown. The stop requests then
-        go on in their worker thread; a session they do not stop ends at its timeout.
+        does not answer cannot hold up the rest of the shutdown or the exit of the process.
+        The stop requests then go on in a daemon thread, which ends with the process; a
+        session they do not stop ends at its timeout.
         """
         tools = sys.modules.get("agent_builder_sdk.experimental.code_interpreter.code_interpreter_tool")
         if tools is None:
             return
-        try:
-            # One blocking StopCodeInterpreterSession request per session.
-            await asyncio.wait_for(asyncio.to_thread(tools.stop_all_sessions), _SESSION_STOP_TIMEOUT_SECONDS)
-        except asyncio.TimeoutError:
+        done = threading.Event()
+
+        def stop() -> None:
+            try:
+                tools.stop_all_sessions()
+            except Exception as e:
+                logger.warning(f"Could not stop the code-interpreter sessions: {e}")
+            finally:
+                done.set()
+
+        # One blocking StopCodeInterpreterSession request per session. A daemon thread, not
+        # the loop's executor: the loop and the interpreter join executor threads when they
+        # close, so a request that does not return would hold the process after the wait.
+        threading.Thread(target=stop, name="stop-code-interpreter-sessions", daemon=True).start()
+        if not await asyncio.to_thread(done.wait, _SESSION_STOP_TIMEOUT_SECONDS):
             logger.warning(
                 f"The code-interpreter sessions were not stopped within {_SESSION_STOP_TIMEOUT_SECONDS} "
                 "seconds; the shutdown goes on, and a session that stays running ends at its timeout"
             )
-        except Exception as e:
-            logger.warning(f"Could not stop the code-interpreter sessions: {e}")
 
     @abstractmethod
     def start(self) -> None:

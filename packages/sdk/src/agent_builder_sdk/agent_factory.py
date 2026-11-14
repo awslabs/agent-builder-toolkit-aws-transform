@@ -420,10 +420,12 @@ def create_default_async_orchestrator_with_subagent(
         enable_shell: Enable the experimental command-allowlisted execute_shell tool.
             Off by default. Runs allowlisted commands (and, unless
             ATX_SHELL_ALLOW_PYTHON=false, python/python3) in a subprocess with an enforced
-            timeout and a sanitized environment with no ambient AWS credentials: credential
-            env vars (AWS_PROFILE, container and web-identity credentials) are dropped and
-            the shared credential/config files and instance metadata are switched off, so
-            scripts must use connector-vended temporary credentials. The allowlist is
+            timeout and a sanitized environment in which the AWS SDK and CLI find no
+            credentials by default: credential env vars (AWS_PROFILE, container and
+            web-identity credentials) are dropped and the shared credential/config files
+            and instance metadata are switched off, so scripts must use connector-vended
+            temporary credentials. This is not a credential boundary: a command can still
+            read the environment of the agent process through /proc. The allowlist is
             defense in depth, not a sandbox: awk, sed and python can start other programs
             by design, so the container is the security boundary. Leave this off unless
             you need in-container script execution.

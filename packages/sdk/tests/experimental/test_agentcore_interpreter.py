@@ -151,9 +151,12 @@ def test_stop_all_sessions_stops_each_session_and_the_next_call_starts_a_new_one
     assert len(sandbox.started) == 3
 
 
-def test_a_call_in_flight_when_the_sessions_are_stopped_is_not_run_again(sandbox: FakeSandbox) -> None:
+def test_a_call_that_has_its_session_when_the_sessions_are_stopped_fails_and_is_not_run_again(
+    sandbox: FakeSandbox,
+) -> None:
     interpreter = _interpreter()
     interpreter.invoke(None, "listFiles", _LIST_FILES)
+    # The gate holds the call after its session lookup, before its request is sent.
     sandbox.call_gate = threading.Event()
     with ThreadPoolExecutor(max_workers=1) as pool:
         call = pool.submit(interpreter.invoke, None, "executeCode", {"code": "print(1)"})
