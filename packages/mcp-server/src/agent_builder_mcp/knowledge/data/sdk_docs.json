@@ -2132,7 +2132,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/heartbeat/heartbeat_service.py",
     "module": "agent_builder_sdk.heartbeat.heartbeat_service",
-    "docstring": "Start the background task and return at once.\n\nThe task reads the monitoring type itself, so the caller does not wait for the\nregistry. It beats only when the type is HEARTBEAT. One instance runs one task: a\nlater call does nothing, also after stop().",
+    "docstring": "Start the background task and return at once.\n\nThe task reads the monitoring type itself, so the caller does not wait for the\nregistry. It beats only when the type is HEARTBEAT. One instance runs one task: a\nlater call does nothing, and no call starts a task after stop().",
     "signature": "async start() -> None"
   },
   {

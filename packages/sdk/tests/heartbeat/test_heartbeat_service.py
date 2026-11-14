@@ -124,6 +124,16 @@ class TestShouldEnable:
 
         assert caplog.messages == ["Heartbeat disabled: monitoringType=HEALTHCHECK"]
 
+    def test_returns_false_when_version_has_no_monitoring_type(
+        self, registry: Mock, context: AgentRuntimeContext, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Heartbeat is opt-in: a version with no configuration gets no beat."""
+        registry.get_agent_configuration.return_value = {}
+        with caplog.at_level(logging.INFO, logger=MODULE):
+            assert HeartbeatService(context)._should_enable() is False
+
+        assert caplog.messages == ["Heartbeat disabled: monitoringType=None"]
+
     @pytest.mark.parametrize(
         "error", [Exception("connection error"), _client_error("ThrottlingException")]
     )
@@ -221,6 +231,27 @@ class TestStart:
             await service.stop()
 
         assert first is not None and first.done()
+
+    @pytest.mark.asyncio
+    async def test_start_after_stop_adds_no_task(self, context: AgentRuntimeContext) -> None:
+        service = HeartbeatService(context)
+        with patch.object(service, "_should_enable", return_value=True):
+            await service.start()
+            first = service._task
+            await service.stop()
+            await service.start()
+
+        assert service._task is first and first is not None and first.done()
+
+    @pytest.mark.asyncio
+    async def test_start_does_nothing_when_stop_came_first(
+        self, context: AgentRuntimeContext
+    ) -> None:
+        service = HeartbeatService(context)
+        await service.stop()
+        await service.start()
+
+        assert service._task is None
 
     @pytest.mark.asyncio
     async def test_healthy_run_logs(
@@ -439,6 +470,29 @@ class TestSendHeartbeat:
 
 class TestHeartbeatLoop:
     """Test the background heartbeat loop."""
+
+    @pytest.mark.asyncio
+    async def test_waits_one_interval_before_each_beat(
+        self, registry: Mock, context: AgentRuntimeContext
+    ) -> None:
+        """Without the wait the loop would call the platform back to back for the whole job."""
+        real_sleep = asyncio.sleep
+        events: List[str] = []
+
+        async def record_interval(delay: float) -> None:
+            if delay == 300:
+                events.append("wait")
+            await real_sleep(0 if delay == 300 else delay)
+
+        service = HeartbeatService(context)
+        with patch(f"{MODULE}.asyncio.sleep", new=record_interval), patch(
+            f"{MODULE}.get_agent_status", return_value="RUNNING"
+        ), patch(f"{MODULE}.set_agent_running", side_effect=lambda *_: events.append("beat")):
+            await service.start()
+            await _wait_until(lambda: events.count("beat") >= 2)
+            await service.stop()
+
+        assert events[:4] == ["wait", "beat", "wait", "beat"]
 
     @pytest.mark.asyncio
     async def test_loop_survives_send_failure(

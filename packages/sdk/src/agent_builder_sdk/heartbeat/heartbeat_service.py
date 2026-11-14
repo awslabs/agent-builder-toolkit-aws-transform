@@ -71,9 +71,9 @@ class HeartbeatService:
 
         The task reads the monitoring type itself, so the caller does not wait for the
         registry. It beats only when the type is HEARTBEAT. One instance runs one task: a
-        later call does nothing, also after stop().
+        later call does nothing, and no call starts a task after stop().
         """
-        if self._task is None:
+        if self._task is None and not self._stopped.is_set():
             self._task = asyncio.create_task(self._heartbeat_loop())
 
     async def stop(self) -> None:
