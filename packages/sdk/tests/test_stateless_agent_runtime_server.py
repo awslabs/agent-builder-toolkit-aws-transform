@@ -763,6 +763,27 @@ class TestStatelessAgentRuntimeServer:
                             mock_set_running.assert_not_called()
                             assert stateless_agent_runtime_server.initialized is True
 
+
+@pytest.mark.asyncio
+async def test_stop_request_stops_heartbeat(
+    stateless_agent_runtime_server: StatelessAgentRuntimeServer,
+) -> None:
+    """Test that atx_agent/stop stops the heartbeat, so no beat follows the stop."""
+    mock_heartbeat = mock.AsyncMock()
+    stateless_agent_runtime_server.heartbeat_service = mock_heartbeat
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "atx_agent/stop",
+        "params": {"agentInstanceId": "test-agent"},
+    }
+
+    result = await stateless_agent_runtime_server.handle_jsonrpc(request)
+
+    assert result["error"] is None
+    mock_heartbeat.stop.assert_awaited_once()
+
+
 @pytest.mark.asyncio
 async def test_lifespan_stops_heartbeat_on_shutdown(stateless_agent_runtime_server):
     """Test that lifespan stops heartbeat service during shutdown."""
@@ -776,6 +797,7 @@ async def test_lifespan_stops_heartbeat_on_shutdown(stateless_agent_runtime_serv
             pass  # simulate server running
 
     mock_heartbeat.stop.assert_called_once()
+
 
 @pytest.mark.asyncio
 async def test_lifespan_no_error_without_heartbeat(stateless_agent_runtime_server):

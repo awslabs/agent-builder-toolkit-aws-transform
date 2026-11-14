@@ -257,6 +257,10 @@ class StatelessAgentRuntimeServer(BaseServer):
         """FastAPI lifespan for graceful startup and shutdown."""
         await self._startup()
         yield
+        await self._cleanup()
+
+    async def _cleanup(self) -> None:
+        """Stop the heartbeat. Runs on a stop request and on server shutdown."""
         if self.heartbeat_service:
             await self.heartbeat_service.stop()
 
