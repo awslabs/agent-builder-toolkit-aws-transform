@@ -2,7 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Locale utilities for agent response localization."""
 
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 LOCALE_TO_LANGUAGE = {
     "ja": "Japanese",
@@ -23,8 +26,10 @@ LOCALE_TO_LANGUAGE = {
 def get_locale_instruction(locale: Optional[str]) -> str:
     """Return a system prompt instruction for the given locale.
 
-    Returns empty string for English, None, or unknown locales.
-    Agents must explicitly call this method to opt in to locale-aware responses.
+    Returns empty string for English, None, or unknown locales. Codes match exactly
+    (``ja`` matches, ``ja-JP`` and ``JA`` do not); an unknown code is logged as a warning.
+    Orchestrators created with ``locale=...`` append this instruction themselves; call it
+    directly only when building a system prompt by hand.
     """
     if not locale or not isinstance(locale, str):
         return ""
@@ -32,5 +37,10 @@ def get_locale_instruction(locale: Optional[str]) -> str:
         return ""
     language = LOCALE_TO_LANGUAGE.get(locale)
     if not language:
+        logger.warning(
+            "Locale %r is not supported, so no language instruction is added. Supported: %s",
+            locale,
+            ", ".join(LOCALE_TO_LANGUAGE),
+        )
         return ""
     return f"Respond to the user in {language}. If the user writes in a different language, follow their lead."
