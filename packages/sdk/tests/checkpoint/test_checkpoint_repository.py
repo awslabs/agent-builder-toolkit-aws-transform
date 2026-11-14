@@ -438,6 +438,42 @@ class TestCreateCheckpointRepository:
         assert (dest / "state.json").read_text() == "old"
         assert sorted(os.listdir(dest)) == ["aaa.json", "blocker", "state.json"]
 
+    def test_refused_rename_with_failed_put_back_does_not_extract_in_place(
+        self, checkpoint_repository: CheckpointRepository, tmp_path: Path
+    ) -> None:
+        """An entry stranded in the backup stops the in-place fallback; the error is raised."""
+        dest = tmp_path / "dest"
+        dest.mkdir()
+        live = {"a.txt": "a", "b.txt": "b"}
+        for name, text in live.items():
+            (dest / name).write_text(text)
+        zip_path = tmp_path / "cp.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("new.txt", "new")
+
+        real_replace = os.replace
+        moved_aside = []
+
+        def only_first_move_aside_works(src: Path, dst: Path) -> None:
+            if Path(src).parent == dest and not moved_aside:
+                moved_aside.append(Path(src).name)
+                return real_replace(src, dst)
+            raise OSError(errno.EACCES, os.strerror(errno.EACCES))
+
+        with patch(
+            "agent_builder_sdk.checkpoint.checkpoint_repository.os.replace",
+            side_effect=only_first_move_aside_works,
+        ), patch("agent_builder_sdk.checkpoint.checkpoint_repository.logger") as mock_logger:
+            with pytest.raises(PermissionError):
+                checkpoint_repository._extract_zip_to_path(str(zip_path), str(dest))
+
+        (stranded,) = dest.glob(".checkpoint-restore-*/backup/*")
+        assert stranded.name == moved_aside[0]
+        assert stranded.read_text() == live.pop(stranded.name)
+        in_place = {p.name: p.read_text() for p in dest.iterdir() if p.is_file()}
+        assert in_place == live
+        mock_logger.warning.assert_not_called()
+
     def test_undo_puts_back_entry_recreated_during_swap(
         self, checkpoint_repository: CheckpointRepository, tmp_path: Path
     ) -> None:
