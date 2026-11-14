@@ -3,9 +3,11 @@
 """Move oversized tool results out of the model context into local files."""
 
 import dataclasses
+import json
 import logging
 import os
 import uuid
+from contextvars import ContextVar
 from typing import AbstractSet, Any, FrozenSet, List, Optional
 
 from strands.hooks import AfterToolCallEvent
@@ -33,8 +35,29 @@ DEFAULT_KEEP_IN_CONTEXT_TOOLS: FrozenSet[str] = frozenset(
 )
 
 
+# The blocks that the handler running in the current context gave to the parent offloader.
+_staged_blocks: ContextVar[List[ToolResultContent]] = ContextVar("staged_blocks")
+
+
 def _is_offloadable(block: ToolResultContent) -> bool:
     return bool(block.get("text")) or "json" in block
+
+
+def _with_json_on_short_lines(block: ToolResultContent) -> ToolResultContent:
+    """Return a text block that holds a JSON object or array with that JSON indented, else ``block``."""
+    text = block.get("text")
+    if not text:
+        return block
+    try:
+        parsed = json.loads(text)
+        if not isinstance(parsed, (dict, list)):
+            return block
+        indented = json.dumps(parsed, indent=2, ensure_ascii=False)
+        # json.loads accepts an escaped lone surrogate, which cannot be written as UTF-8.
+        indented.encode()
+    except (ValueError, RecursionError):
+        return block
+    return ToolResultContent(text=indented)
 
 
 def _with_content(result: ToolResult, content: List[ToolResultContent]) -> ToolResult:
@@ -49,6 +72,15 @@ class ToolOutputOffloader(ContextOffloader):
     tokens and one reference per stored block. The model reads the rest with the
     ``retrieve_offloaded_content`` tool that the plugin registers: by line range, by pattern, or
     whole. Image, document and other blocks stay in the result, after the preview.
+
+    Retrieval by line range or pattern works on lines and returns at most ``max_result_tokens * 4``
+    characters. A text block that holds a JSON object or array is therefore stored indented, one
+    value per line, with numbers and string escapes as Python's ``json`` module writes them
+    (``1.10`` becomes ``1.1``). Any other text is stored as the tool returned it: of a single line
+    longer than that limit, only the start is readable by line range or pattern, and the rest only
+    by a whole retrieval. The pattern is a regular expression that the model writes. Strands runs
+    it on the event loop, line by line, with no time limit: a pattern that backtracks heavily on a
+    long line blocks the loop until the search ends.
 
     Files are never evicted, so a reference stays valid for as long as the directory exists: for
     another agent whose offloader uses the same ``storage_dir``, and after a checkpoint restore of
@@ -109,7 +141,14 @@ class ToolOutputOffloader(ContextOffloader):
         )
 
     def _should_offload_tool(self, tool_name: str, token_count: int, **kwargs: Any) -> bool:
-        return tool_name not in self._keep_in_context_tools
+        if tool_name in self._keep_in_context_tools:
+            return False
+        # The parent calls this after it has counted the tokens of the result and before it reads the
+        # blocks for the preview and the files. The line breaks go in here, so max_result_tokens
+        # applies to the text as the tool returned it.
+        blocks = _staged_blocks.get()
+        blocks[:] = [_with_json_on_short_lines(block) for block in blocks]
+        return True
 
     async def _handle_tool_result(self, event: AfterToolCallEvent) -> None:
         """Offload the text and JSON blocks of an oversized result; keep its other blocks."""
@@ -134,6 +173,7 @@ class ToolOutputOffloader(ContextOffloader):
             tool_use={**event.tool_use, "toolUseId": offload_id},
             result=staged_result,
         )
+        token = _staged_blocks.set(offloadable)
         try:
             await super()._handle_tool_result(staged)
         except Exception:
@@ -143,6 +183,8 @@ class ToolOutputOffloader(ContextOffloader):
                 exc_info=True,
             )
             return
+        finally:
+            _staged_blocks.reset(token)
         if staged.result is staged_result:
             return
         kept = [block for block in content if not _is_offloadable(block) and "text" not in block]

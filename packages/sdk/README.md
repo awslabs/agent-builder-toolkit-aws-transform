@@ -186,7 +186,7 @@ The `simple_cli_agent_core.py` entry point exposes the same option as `--concurr
 
 ## Large tool results (opt-in)
 
-A large tool result is sent to the model again on every later call. `ToolOutputOffloader` writes the text and JSON of a result over 12,500 tokens to `<storage_dir>/offloaded` and leaves a 1,000-token preview in the conversation; the model reads the rest with the `retrieve_offloaded_content` tool. Pass it to the orchestrator constructor (the `create_*` factories do not take plugins):
+A large tool result is sent to the model again on every later call. `ToolOutputOffloader` writes the text and JSON of a result over 12,500 tokens to `<storage_dir>/offloaded` and leaves a 1,000-token preview in the conversation; the model reads the rest, by line range, by pattern or whole, with the `retrieve_offloaded_content` tool. Pass it to the orchestrator constructor (the `create_*` factories do not take plugins):
 
 ```python
 from agent_builder_sdk.orchestrator_strands.base_orchestrator import AsyncBaseOrchestrator
@@ -200,7 +200,9 @@ def agent_factory(mcp_client, storage_dir):
     )
 ```
 
-With concurrent streaming, give every offloader one directory under the server's `storage_dir` (for example `os.path.join("/tmp/my_agent", "agent")`) and not the factory's `storage_dir` argument: the factory gets a different directory for buffered turns and for each streaming source, the agents share one history, and a reference is readable only by an offloader on the directory that holds the file.
+With concurrent streaming, the factory must take `**kwargs` and forward `conversation_repository` (see "Factory requirement" above; with the constructor, pass it as `hooks=[ConversationHookProvider(repository=kwargs["conversation_repository"])]`). Give every offloader one directory under the server's `storage_dir` (for example `os.path.join("/tmp/my_agent", "agent")`) and not the factory's `storage_dir` argument: the factory gets a different directory for buffered turns and for each streaming source, the agents then share one history, and a reference is readable only by an offloader on the directory that holds the file.
+
+Retrieval by line range or pattern works on lines and returns at most 50,000 characters by default. A text block that holds a JSON object or array is stored indented, one value per line; of any other single line over that size, only the start is readable that way. The pattern is a regular expression that the model writes, and it runs on the event loop.
 
 The files are never deleted and are included in checkpoints, unless the agent has a Strands sandbox: then they are written inside the sandbox. The developer guide section "Offload Large Tool Results" lists the parameters and limits.
 

@@ -2560,7 +2560,7 @@ See Strands Tools Documentation for more details.
 
 #### Offload Large Tool Results (Optional)
 
-A tool result stays in the conversation, so the model receives it again on every later call. `ToolOutputOffloader` is a Strands plugin that writes a large result to a file and leaves a short preview in the conversation. The model reads the rest on demand with the `retrieve_offloaded_content` tool, which the plugin adds to the agent.
+A tool result stays in the conversation, so the model receives it again on every later call. `ToolOutputOffloader` is a Strands plugin that writes a large result to a file and leaves a short preview in the conversation. The model reads the rest on demand, by line range, by pattern or whole, with the `retrieve_offloaded_content` tool, which the plugin adds to the agent.
 
 ```
 tool result (text / JSON over the limit)
@@ -2588,7 +2588,7 @@ def agent_factory(mcp_client, storage_dir):
 
 The `create_*` factory functions do not take plugins; use the constructor of `AsyncBaseOrchestrator`, `BaseOrchestrator` or your own subclass.
 
-With concurrent streaming (`streaming_config` on `AgentRuntimeServer`), do not use the factory's `storage_dir` argument for the offloader. The server calls the factory once for buffered turns and once per streaming source, each time with a different directory, but these agents share one conversation history. A reference is readable only by an offloader on the directory that holds the file, so give every offloader the same directory under the server's `storage_dir`:
+With concurrent streaming (`streaming_config` on `AgentRuntimeServer`), the factory must accept `**kwargs`: the server rejects the two-argument factory above at startup. The server calls the factory once for buffered turns and once per streaming source, each time with a different `storage_dir`. These agents share one conversation history when the factory passes `kwargs["conversation_repository"]` to a `ConversationHookProvider` in `hooks=` (the SDK README section "Streaming (opt-in)" states the full factory requirement). A reference is readable only by an offloader on the directory that holds the file, so do not use the factory's `storage_dir` argument for the offloader. Give every offloader the same directory under the server's `storage_dir`:
 
 ```
 AgentRuntimeServer(storage_dir=BASE)
@@ -2600,17 +2600,24 @@ AgentRuntimeServer(storage_dir=BASE)
 ```python
 import os
 
+from agent_builder_sdk.orchestrator_strands.hooks.conversation_hook_provider import ConversationHookProvider
+
 SERVER_STORAGE_DIR = "/tmp/my_agent"  # the storage_dir that you pass to AgentRuntimeServer
 OFFLOAD_STORAGE_DIR = os.path.join(SERVER_STORAGE_DIR, "agent")
 
-# In the agent factory, in place of ToolOutputOffloader(storage_dir=storage_dir):
-plugins=[ToolOutputOffloader(storage_dir=OFFLOAD_STORAGE_DIR)],
+def agent_factory(mcp_client, storage_dir, **kwargs):
+    return AsyncBaseOrchestrator(
+        system_prompt="You are a specialized orchestrator for...",
+        mcp_clients=[mcp_client],
+        hooks=[ConversationHookProvider(repository=kwargs["conversation_repository"])],
+        plugins=[ToolOutputOffloader(storage_dir=OFFLOAD_STORAGE_DIR)],
+    )
 ```
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `storage_dir` | required | Directory for the files, which go to its `offloaded` subdirectory. Agents that share a conversation history must use the same one. |
-| `max_result_tokens` | 12,500 | A result is offloaded when its text and JSON blocks exceed this estimate. |
+| `max_result_tokens` | 12,500 | A result is offloaded when its text and JSON blocks, as the tool returned them, exceed this estimate. One retrieval by line range or pattern returns at most 4 characters per token of this value (50,000 by default). |
 | `preview_tokens` | 1,000 | Size of the preview that stays in the conversation. |
 | `keep_in_context_tools` | `DEFAULT_KEEP_IN_CONTEXT_TOOLS` | Tools whose results are never offloaded: by default `skills`, `memory`, `discover_subagents` and the tools that send a message to a subagent. To add a tool, pass `DEFAULT_KEEP_IN_CONTEXT_TOOLS \| {"my_tool"}`. |
 
@@ -2624,6 +2631,9 @@ What to expect:
 - When the agent has a Strands sandbox (`sandbox=`), the files are written through it, inside the sandbox. They are then not in the host storage directory and not in its checkpoints, so a reference does not survive a checkpoint restore.
 - When the token count or the file write fails, the full result stays in the conversation and a warning is logged. The warning for a failed write names a generated id, not the tool. A debug-level line of the logger `agent_builder_sdk.orchestrator_strands.tool_output_offloader` maps that id to the tool name and the tool-use id.
 - A result of `retrieve_offloaded_content` is never offloaded. A retrieval without `line_range` or `pattern` puts the whole stored block back into the conversation.
+- Retrieval by `line_range` or `pattern` works on lines. A text block that holds a JSON object or array is therefore stored indented, one value per line. Numbers and string escapes are then as Python's `json` module writes them (`1.10` becomes `1.1`), and the file is larger than the compact text.
+- Any other text is stored as the tool returned it. Of a single line longer than `max_result_tokens * 4` characters (minified code, or one long string value inside JSON), only the start is readable by `line_range` or `pattern`. The rest needs a whole retrieval.
+- `pattern` is a regular expression that the model writes. Strands runs it on the event loop, one line at a time, with no time limit. A pattern that backtracks heavily on a long line blocks the event loop until the search ends, and a turn timeout does not interrupt it. Newer Strands releases (1.59.0 and later were checked) search a pattern with a nested quantifier, such as `(a+)+`, as plain text; 1.51.0 does not.
 - Requires `strands-agents>=1.51.0`, which is the minimum version of the SDK.
 
 ```

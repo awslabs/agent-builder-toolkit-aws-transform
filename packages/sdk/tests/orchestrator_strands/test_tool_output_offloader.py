@@ -56,6 +56,7 @@ class _ScriptedModel(Model):
             yield event
 
     async def count_tokens(self, messages: Messages, *args: Any, **kwargs: Any) -> int:
+        await asyncio.sleep(0)  # a real suspension, so that concurrent tool results interleave here
         return len(str(messages))
 
 
@@ -197,6 +198,55 @@ async def test_json_result_is_offloaded_and_retrieved_whole(tmp_path: Path) -> N
 
     full = await _retrieve(offloader, agent, _reference(result["content"][0]["text"]))
     assert full["content"] == [{"json": payload}]
+
+
+async def test_one_line_json_text_is_stored_one_value_per_line_and_is_readable_by_pattern(tmp_path: Path) -> None:
+    agent, offloader = _agent(tmp_path)
+    batches = [
+        [{"name": f"pkg-{i}", "version": f"{i}.0.0"} for i in range(first, first + 60)] for first in (100, 200)
+    ]
+    texts = [json.dumps(batch, separators=(",", ":")) for batch in batches]
+    blocks = [{"text": text} for text in texts]
+
+    results = await asyncio.gather(*[_after_tool_call(agent, [block]) for block in blocks])
+
+    assert blocks == [{"text": text} for text in texts]
+    for batch, result in zip(batches, results):
+        reference = _reference(result["content"][0]["text"])
+        stored = await _retrieve(offloader, agent, reference)
+        assert json.loads(stored) == batch
+        assert max(len(line) for line in stored.splitlines()) < 40
+        last = batch[-1]
+        found = await _retrieve(offloader, agent, reference, pattern=f'"{last["name"]}"')
+        assert f'"version": "{last["version"]}"' in found and "truncated" not in found
+
+
+async def test_json_text_that_is_over_the_limit_only_when_indented_stays_in_context(tmp_path: Path) -> None:
+    agent, _ = _agent(tmp_path)
+    text = json.dumps([{"a": i} for i in range(24)], separators=(",", ":"))
+    assert len(json.dumps(json.loads(text), indent=2)) > THRESHOLD
+
+    result = await _after_tool_call(agent, [{"text": text}])
+
+    assert result["content"] == [{"text": text}]
+    assert _files(tmp_path) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["[INFO] start\n" + BIG, json.dumps("\u00e9" * 300), json.dumps([{"note": "\ud83d"}] * 60), "[" * 100_000 + "]" * 100_000],
+    ids=["not JSON", "JSON string", "JSON with an escaped lone surrogate", "JSON nested too deeply"],
+)
+async def test_text_that_is_not_indented_as_json_is_stored_as_returned_without_a_warning(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, text: str
+) -> None:
+    agent, offloader = _agent(tmp_path)
+
+    with caplog.at_level(logging.WARNING):
+        result = await _after_tool_call(agent, [{"text": text}])
+
+    assert await _retrieve(offloader, agent, _reference(result["content"][0]["text"])) == text
+    assert caplog.records == []
 
 
 async def test_media_and_unknown_blocks_follow_the_preview_and_empty_text_is_dropped(tmp_path: Path) -> None:
