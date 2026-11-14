@@ -118,7 +118,10 @@ class CheckpointManager:
             return False
 
     def restore_checkpoint(self, artifact_id: str) -> bool:
-        """Roll back to a specific checkpoint, serialized against background checkpointing."""
+        """Roll back to a specific checkpoint, serialized against background checkpointing.
+
+        Replaces the files only; it does not rebuild a running agent, queue or response store.
+        """
         with self._checkpoint_lock:
             try:
                 self.checkpoint_repository.restore_checkpoint(artifact_id)

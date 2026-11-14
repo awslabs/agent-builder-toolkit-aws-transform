@@ -267,7 +267,10 @@ class CheckpointRepository:
         return checkpoints
 
     def restore_checkpoint(self, artifact_id: str, destination_path: Optional[str] = None) -> None:
-        """Restore a specific past checkpoint by artifact id."""
+        """Restore a specific past checkpoint by artifact id.
+
+        Replaces the files only; it does not rebuild a running agent, queue or response store.
+        """
         restorable = {c["artifactId"] for c in self.list_restorable_checkpoints()}
         if artifact_id not in restorable:
             raise ValueError(f"{artifact_id} is not a restorable checkpoint for this agent")

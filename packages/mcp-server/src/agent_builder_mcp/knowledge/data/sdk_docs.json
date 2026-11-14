@@ -923,7 +923,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/checkpoint/checkpoint_manager.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_manager",
-    "docstring": "Roll back to a specific checkpoint, serialized against background checkpointing.",
+    "docstring": "Roll back to a specific checkpoint, serialized against background checkpointing.\n\nReplaces the files only; it does not rebuild a running agent, queue or response store.",
     "signature": "restore_checkpoint(artifact_id: str) -> bool"
   },
   {
@@ -972,7 +972,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
-    "docstring": "Restore a specific past checkpoint by artifact id.",
+    "docstring": "Restore a specific past checkpoint by artifact id.\n\nReplaces the files only; it does not rebuild a running agent, queue or response store.",
     "signature": "restore_checkpoint(artifact_id: str, destination_path: Optional[str] = None) -> None"
   },
   {
