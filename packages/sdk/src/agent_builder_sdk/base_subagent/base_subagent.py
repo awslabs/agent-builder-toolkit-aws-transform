@@ -8,6 +8,7 @@ import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, ExitStack
+from contextvars import copy_context
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -248,8 +249,9 @@ class BaseSubagent(_BaseSubagent, BaseAgent[Union[str, ProcessMessageRequest], A
         def execute() -> AgentResult:
             return asyncio.run(self._process_message(request.message))
 
+        context = copy_context()
         with ThreadPoolExecutor() as executor:
-            future = executor.submit(execute)
+            future = executor.submit(context.run, execute)
             return future.result()
 
 
