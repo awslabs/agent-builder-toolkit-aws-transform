@@ -455,7 +455,9 @@ class CheckpointRepository:
                 if not self._undo_restore_swap(destination, backup, backed_up, placed):
                     # Only the backup holds files that exist nowhere else.
                     shutil.rmtree(work_dir / "staged", ignore_errors=True)
-                    logger.error(f"Restore failed and could not put back all files; kept in {backup}")
+                    logger.error(
+                        f"Restore failed and could not put back all files; kept in {backup}"
+                    )
                     raise
                 shutil.rmtree(work_dir, ignore_errors=True)
             if not (isinstance(e, OSError) and e.errno in _IN_PLACE_RESTORE_ERRNOS):
