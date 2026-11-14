@@ -1,5 +1,6 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
+import io
 import re
 import socket
 import threading
@@ -101,12 +102,13 @@ def test_calculate_digest_error(mock_sha256):
         common.calculate_digest(b"test content")
 
 
-def test_upload_from_presigned_url_success(session, response, upload_response):
+@pytest.mark.parametrize("bytes_like", [bytes, bytearray, memoryview])
+def test_upload_from_presigned_url_success(session, response, upload_response, bytes_like: type):
     """Test successful upload using presigned URL."""
     response.status_code = 200
     session.put.return_value = response
 
-    content = b"test content"
+    content = bytes_like(b"test content")
     common.upload_from_presigned_url(upload_response, content)
 
     expected_headers = {"Content-Type": "application/octet-stream"}
@@ -361,12 +363,19 @@ def test_download_cut_mid_body_raises_sdk_error(
     assert not destination.exists()
 
 
-def test_upload_sends_str_body_as_release_1_1_0_did(fake_s3: _FakeS3Server) -> None:
-    """The signature says bytes, but 1.1.0 uploaded a str, so a str must not start to fail."""
+@pytest.mark.parametrize("kind", ["str", "BytesIO", "file"])
+def test_upload_sends_non_bytes_body_as_release_1_1_0_did(
+    fake_s3: _FakeS3Server, tmp_path: Path, kind: str
+) -> None:
+    """The signature says bytes, but 1.1.0 uploaded a str or a file object, so neither must
+    start to fail."""
+    path = tmp_path / "artifact.json"
+    path.write_bytes(b'{"a": 1}')
     fake_s3.responses = [(200, b"")]
-    content: Any = '{"a": 1}'
 
-    common.upload_from_presigned_url(fake_s3.presigned, content)
+    with path.open("rb") as file:
+        bodies: dict[str, Any] = {"str": '{"a": 1}', "BytesIO": io.BytesIO(b'{"a": 1}')}
+        common.upload_from_presigned_url(fake_s3.presigned, bodies.get(kind, file))
 
     assert fake_s3.received == [("8", b'{"a": 1}')]
 

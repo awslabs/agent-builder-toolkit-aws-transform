@@ -111,9 +111,13 @@ def upload_from_presigned_url(
                 # Streamed, so the connect timeout bounds each small write rather than one
                 # write of the whole body; urllib3 rewinds the stream for a retry. An empty
                 # body stays bytes: requests sends an empty stream chunked, which S3 rejects,
-                # but empty bytes with Content-Length: 0. A str is outside the signature, but
-                # release 1.1.0 sent one, so it still goes out as it did then.
-                data=io.BytesIO(content) if content and not isinstance(content, str) else content,
+                # but empty bytes with Content-Length: 0. Anything that is not bytes-like (a
+                # str, a file object) goes out as it did in release 1.1.0.
+                data=(
+                    io.BytesIO(content)
+                    if content and isinstance(content, (bytes, bytearray, memoryview))
+                    else content
+                ),
                 headers=headers,
                 timeout=_PRESIGNED_UPLOAD_TIMEOUT,
             )
