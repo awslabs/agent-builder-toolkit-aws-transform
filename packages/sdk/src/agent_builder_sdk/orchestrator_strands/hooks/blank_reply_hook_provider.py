@@ -54,13 +54,15 @@ class BlankReplyHookProvider(HookProvider):
     (https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons).
 
     The continuation reaches the conversation store only once the model answers it, and that answer
-    is marked as its answer: the answer's signed thinking was produced with the ask in context, so
-    replayed history must keep the ask, and it is never removed. An ask whose call raises (a
-    terminal model error, or the turn timing out) is never stored. One stored without its marked
-    answer right after it, because something failed between storing the two or the process died
-    there, stays in the store; ``drop_unanswered_continuations`` removes it from every history
-    ``ConversationHookProvider`` loads, with or without this hook, so it never reaches the model
-    again.
+    is marked as its answer. An answered ask is never removed: the answer's signed thinking was
+    produced with the ask in context, and it is replayed for the rest of that invocation (the
+    answer can call tools). The SDK's base agents drop earlier turns' thinking when an invocation
+    starts, so later turns need the ask only on an agent that still replays that thinking. An ask
+    whose call raises (a terminal model error, or the turn timing out) is never stored. One stored
+    without its marked answer right after it, because something failed between storing the two or
+    the process died there, stays in the store; ``drop_unanswered_continuations`` removes it from
+    every history ``ConversationHookProvider`` loads, with or without this hook, so it never
+    reaches the model again.
 
     Runs late among ``AfterModelCallEvent`` hooks (a high ``HookOrder``). After Strands'
     ``ModelRetryStrategy``, because a retry requested before the strategy runs makes it skip
