@@ -244,7 +244,7 @@
     "module": "agent_builder_sdk.agentic_framework.agent_lifecycle",
     "docstring": "Manages agent instance lifecycle operations.",
     "signature": "AgentInstanceManager(**kwargs)",
-    "description": "Extends: AgenticApiHelper\n\nMethods:\n  list_agent_instances(requester_agent_instance_id: Optional[str] = None) -> dict\n  get_status(agent_instance_id: str) -> dict\n  update_status(agent_instance_id: str, status: str, status_reason: Optional[str] = None, agent_output: Optional[str] = None) -> dict\n  stop_agent(agent_instance_id: str) -> dict\n  set_running(agent_instance_id: str) -> dict\n  set_stopped(agent_instance_id: str, reason: Optional[str] = None) -> dict\n  set_failed(agent_instance_id: str, reason: Optional[str] = None) -> dict\n  set_idle(agent_instance_id: str, reason: Optional[str] = None) -> dict\n  set_completed(agent_instance_id: str, reason: Optional[str] = None, agent_output: Optional[str] = None) -> dict\n  restore(agent_id: str, agent_type: str) -> dict\n  is_invoked() -> bool"
+    "description": "Extends: AgenticApiHelper\n\nMethods:\n  list_agent_instances(requester_agent_instance_id: Optional[str] = None) -> dict\n  get_status(agent_instance_id: str) -> dict\n  update_status(agent_instance_id: str, status: str, status_reason: Optional[str] = None, agent_output: Optional[Union[str, Dict[str, str]]] = None) -> dict\n  stop_agent(agent_instance_id: str) -> dict\n  set_running(agent_instance_id: str) -> dict\n  set_stopped(agent_instance_id: str, reason: Optional[str] = None) -> dict\n  set_failed(agent_instance_id: str, reason: Optional[str] = None) -> dict\n  set_idle(agent_instance_id: str, reason: Optional[str] = None) -> dict\n  set_completed(agent_instance_id: str, reason: Optional[str] = None, agent_output: Optional[str] = None) -> dict\n  restore(agent_id: str, agent_type: str) -> dict\n  is_invoked() -> bool"
   },
   {
     "name": "AgentInstanceManager.get_status",
@@ -331,8 +331,8 @@
     "kind": "method",
     "file": "agent_builder_sdk/agentic_framework/agent_lifecycle.py",
     "module": "agent_builder_sdk.agentic_framework.agent_lifecycle",
-    "docstring": "Update the status of any agent instance by its ID.\n\nArgs:\n    agent_instance_id: The unique identifier of the agent instance.\n    status: The new status to set for the agent instance.\n    status_reason: Optional reason for the status change.\n    agent_output: Optional output of the agent, sent as ``agentOutput.serializedPayload``.\n        An empty string is not sent.\n\nReturns:\n    dict: The update response from the API.\n\nRaises:\n    Exception: If there's an error updating the agent instance status.",
-    "signature": "update_status(agent_instance_id: str, status: str, status_reason: Optional[str] = None, agent_output: Optional[str] = None) -> dict"
+    "docstring": "Update the status of any agent instance by its ID.\n\nArgs:\n    agent_instance_id: The unique identifier of the agent instance.\n    status: The new status to set for the agent instance.\n    status_reason: Optional reason for the status change.\n    agent_output: Optional output of the agent. A string is sent as\n        ``agentOutput.serializedPayload``. A dict is sent unchanged as ``agentOutput``.\n        An empty string or an empty dict is not sent.\n\nReturns:\n    dict: The update response from the API.\n\nRaises:\n    Exception: If there's an error updating the agent instance status.",
+    "signature": "update_status(agent_instance_id: str, status: str, status_reason: Optional[str] = None, agent_output: Optional[Union[str, Dict[str, str]]] = None) -> dict"
   },
   {
     "name": "create_agent_instance_manager",

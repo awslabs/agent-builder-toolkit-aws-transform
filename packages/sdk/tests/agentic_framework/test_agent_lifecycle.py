@@ -3,6 +3,7 @@
 import json
 import tempfile
 from pathlib import Path
+from typing import Dict, Union
 from unittest import mock
 
 import pytest
@@ -129,8 +130,11 @@ class TestAgentInstanceManager:
         call_args = agent_instance_manager.client.update_agent_instance.call_args.kwargs
         assert set(call_args) == {"agentInstanceId", "agentInstanceStatus", "requestContext"}
 
+    @pytest.mark.parametrize("agent_output", ["the result", {"serializedPayload": "the result"}])
     def test_update_status_request_is_valid_for_the_service_model(
-        self, agent_instance_manager: AgentInstanceManager
+        self,
+        agent_instance_manager: AgentInstanceManager,
+        agent_output: Union[str, Dict[str, str]],
     ) -> None:
         model_file = Path(PACKAGED_MODELS_DIR, "transformagenticservice/2018-05-10/service-2.json")
         operation = ServiceModel(json.loads(model_file.read_text())).operation_model(
@@ -138,10 +142,11 @@ class TestAgentInstanceManager:
         )
 
         agent_instance_manager.update_status(
-            "test-agent", "COMPLETED", status_reason="All steps done", agent_output="the result"
+            "test-agent", "COMPLETED", status_reason="All steps done", agent_output=agent_output
         )
 
         request = agent_instance_manager.client.update_agent_instance.call_args.kwargs
+        assert request["agentOutput"] == {"serializedPayload": "the result"}
         report = ParamValidator().validate(request, operation.input_shape)
         assert not report.has_errors(), report.generate_report()
 

@@ -9,7 +9,7 @@ import logging
 import re
 import time
 from functools import lru_cache
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 import botocore
 
@@ -85,7 +85,7 @@ class AgentInstanceManager(AgenticApiHelper):
         agent_instance_id: str,
         status: str,
         status_reason: Optional[str] = None,
-        agent_output: Optional[str] = None,
+        agent_output: Optional[Union[str, Dict[str, str]]] = None,
     ) -> dict:
         """Update the status of any agent instance by its ID.
 
@@ -93,8 +93,9 @@ class AgentInstanceManager(AgenticApiHelper):
             agent_instance_id: The unique identifier of the agent instance.
             status: The new status to set for the agent instance.
             status_reason: Optional reason for the status change.
-            agent_output: Optional output of the agent, sent as ``agentOutput.serializedPayload``.
-                An empty string is not sent.
+            agent_output: Optional output of the agent. A string is sent as
+                ``agentOutput.serializedPayload``. A dict is sent unchanged as ``agentOutput``.
+                An empty string or an empty dict is not sent.
 
         Returns:
             dict: The update response from the API.
@@ -111,7 +112,11 @@ class AgentInstanceManager(AgenticApiHelper):
             if status_reason:
                 request_data["agentInstanceStatusReason"] = status_reason
             if agent_output:
-                request_data["agentOutput"] = {"serializedPayload": agent_output}
+                request_data["agentOutput"] = (
+                    agent_output
+                    if isinstance(agent_output, dict)
+                    else {"serializedPayload": agent_output}
+                )
 
             request = self._inject_request_context(request_data)
             return self.client.update_agent_instance(**request)
