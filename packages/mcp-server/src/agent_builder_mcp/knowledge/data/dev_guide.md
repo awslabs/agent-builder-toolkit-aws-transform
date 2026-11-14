@@ -2871,19 +2871,26 @@ agent = create_default_async_orchestrator_with_subagent(
 | `ATX_CODE_INTERPRETER_ID` | `aws.codeinterpreter.v1` | Identifier of your own interpreter. The default interpreter has no network access. The network access of your own interpreter depends on its network mode. |
 | `ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS` | `900` | Lifetime of a sandbox session in seconds, 1 to 28800. A value over 28800 is used as 28800. A value that is not a whole number, or is below 1, raises `ValueError` when the agent is built. |
 
-`execute_shell`:
+`execute_shell` is not a shell. No shell reads the command: the tool reads it in the small grammar below and starts each program itself with the argument list it read.
 
-- Runs allowlisted commands (file inspection, text processing, archives, `rm`/`mkdir`, `python`) joined by pipes. It rejects `;`, `&&`, `||`, `&` (also `&>file`: write `>file 2>&1`), `>|`, command and process substitution, `${...}` and `$[...]` (plain `$NAME` is allowed), an unquoted `#`, `$'...'` quoting, a backslash at the end of a line, a variable assignment or a redirection before the command name, and the options of `find`, `tar`, `sort` and `rg` that run another program. For `tar` that includes `-T` / `--files-from`: older GNU tar reads options from the list file.
-- In the arguments of `find`, `tar`, `sort` and `rg` it also rejects `$` outside single quotes and an unquoted `*`, `?`, `[` or `{`, because the shell would change the word after the option check. Quote patterns (`find /tmp -name '*.py'`) and write paths out in full. Other commands take globs and `$NAME` as usual.
-- Limits: 30 seconds per command by default (120 maximum). 20 KB of stdout and 10 KB of stderr are kept; the rest is read and dropped, so a large output does not grow the agent's memory. The command gets an empty stdin.
+| Syntax | Meaning |
+|---|---|
+| `program arg ... \| program arg ...` | Allowlisted programs (file inspection, text processing, archives, `rm`/`mkdir`, `python`) joined by pipes. The exit code is that of the last program. A program is given by its name, not by a path, and is looked up in the absolute directories of `PATH`. |
+| `'...'`, `"..."`, `\x` | Single quotes make every character literal. In double quotes a backslash makes `"`, `\`, `$` and a backtick literal. Outside quotes a backslash makes the next character literal. |
+| Unquoted `*`, `?`, `[...]` | The word is replaced by the sorted file names that match in the working directory. The rules are those of Python `glob`: no pattern matches `.` or `..`, a name that starts with a dot needs a pattern that starts with a dot, `[!a]` negates and `[^a]` does not. Without a match the word stays as written. A pattern with more than 10000 matches is rejected. |
+| `2>&1`, `>/dev/null`, `2>/dev/null` | The only redirections, each as a word of its own. They apply in the order written. |
+
+- Everything else that a shell would act on is rejected and nothing runs: `;`, `&&`, `||`, `&`, `$NAME`, `$(...)`, `${...}`, backticks, every other redirection (`> file`, `>> file`, `< file`, `&>`, `>&-`, here-documents), parentheses, `{a,b}`, a leading `~`, an unquoted `#` at the start of a word, `NAME=value` in front of a program, a line break outside quotes and a backslash at the end of a line. The error message names the form. Put a literal `$` in single quotes, write paths in full, and make one call for each command.
+- There is no redirection to a file. Use an option of the program (`sort -o`, `tar -f`, `unzip -d`) or a script.
+- The options of `find`, `tar`, `sort` and `rg` that run another program are rejected, abbreviated or bundled. For `tar` that includes `-T` / `--files-from`: older GNU tar reads options from the list file. The check reads the argument list that the program gets, after pattern expansion.
+- Limits: 30 seconds per command by default (120 maximum); at the limit the process group of every program in the pipeline is killed. 20 KB of stdout and 10 KB of stderr are kept; the rest is read and dropped, so a large output does not grow the agent's memory. The command gets an empty stdin. Pattern expansion runs in the agent process and is not under the time limit.
 - The AWS SDK and CLI find no credentials in the subprocess by default: credential environment variables are removed, and the shared credential files and the instance metadata lookup are switched off. Scripts that call AWS must use temporary credentials from a connector.
 
 Security limits of `execute_shell`. The allowlist is defense in depth. It is not a sandbox:
 
 - `awk`, `sed` and `python` can start other programs from their own scripts. `ATX_SHELL_ALLOW_PYTHON=false` removes `python` only.
-- A command given with a path is matched by its base name.
-- The validator is a set of rules, not a shell parser, so do not rely on it to contain a hostile prompt. It does not cover what the shell's own builtins evaluate (for example `printf -v` or `test -v` with an array subscript).
-- A command can read and delete every file that the container user can.
+- The option rules cover `find`, `tar`, `sort` and `rg`. Do not rely on them to contain a hostile prompt.
+- A command can read and delete every file that the container user can. A program file that the container user can replace in a `PATH` directory runs under its allowlisted name.
 - The credentials of the agent are not out of reach. A command can read the environment of the agent process through `/proc`, and a script can call the credential endpoint of the container directly.
 - Treat the tool as able to run any program in the container. The container and its execution role are the security boundary.
 
