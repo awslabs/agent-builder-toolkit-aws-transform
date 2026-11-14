@@ -398,13 +398,114 @@ class TestCreateCheckpointRepository:
         with patch(
             "agent_builder_sdk.checkpoint.checkpoint_repository.os.replace",
             side_effect=OSError(code, os.strerror(code)),
-        ):
+        ), patch("agent_builder_sdk.checkpoint.checkpoint_repository.logger") as mock_logger:
             assert checkpoint_repository.restore_if_available() is True
 
         assert checkpoint_repository.is_restore_verified is True
         assert (tmp_path / "state.json").read_text() == "restored"
         # extracted over existing files: nothing lost, no scratch dir left
         assert sorted(os.listdir(tmp_path)) == ["live.txt", "state.json"]
+        # the warning is the only signal that stale files were left in place
+        (warning,) = [call.args[0] for call in mock_logger.warning.call_args_list]
+        assert str(tmp_path) in warning and os.strerror(code) in warning
+        assert "extracting over existing files" in warning
+
+    def test_in_place_restore_that_fails_partway_raises(
+        self, checkpoint_repository: CheckpointRepository, tmp_path: Path
+    ) -> None:
+        """A failed in-place extract is raised; the files before the failure stay restored."""
+        dest = tmp_path / "dest"
+        (dest / "ro").mkdir(parents=True)
+        (dest / "aaa.json").write_text("old")
+        (dest / "state.json").write_text("old")
+        zip_path = tmp_path / "cp.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("aaa.json", "restored")
+            zf.writestr("ro/new.txt", "restored")
+            zf.writestr("state.json", "restored")
+
+        (dest / "ro").chmod(0o555)
+        try:
+            with pytest.raises(PermissionError):
+                checkpoint_repository._extract_zip_to_path(str(zip_path), str(dest))
+        finally:
+            (dest / "ro").chmod(0o755)
+
+        assert (dest / "aaa.json").read_text() == "restored"
+        assert (dest / "state.json").read_text() == "old"
+        assert sorted(os.listdir(dest)) == ["aaa.json", "ro", "state.json"]
+
+    def test_undo_puts_back_entry_recreated_during_swap(
+        self, checkpoint_repository: CheckpointRepository, tmp_path: Path
+    ) -> None:
+        """A writer recreating a backed-up directory mid-swap does not strand the original."""
+        dest = tmp_path / "dest"
+        (dest / "memories").mkdir(parents=True)
+        (dest / "memories" / "old1.json").write_text("1")
+        (dest / "memories" / "old2.json").write_text("2")
+        (dest / "keep.txt").write_text("keep")
+        zip_path = tmp_path / "cp.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("memories/m.json", "{}")
+
+        real_replace = os.replace
+        recreated = []
+
+        def replace_after_writer_recreates(src: Path, dst: Path) -> None:
+            if not recreated and not (dest / "memories").exists():
+                recreated.append(True)
+                (dest / "memories").mkdir()
+                (dest / "memories" / "concurrent.json").write_text("racing")
+            return real_replace(src, dst)
+
+        with patch(
+            "agent_builder_sdk.checkpoint.checkpoint_repository.os.replace",
+            side_effect=replace_after_writer_recreates,
+        ):
+            with pytest.raises(OSError) as raised:
+                checkpoint_repository._extract_zip_to_path(str(zip_path), str(dest))
+
+        assert raised.value.errno == errno.ENOTEMPTY
+        restored = {str(p.relative_to(dest)): p.read_text() for p in dest.rglob("*") if p.is_file()}
+        assert restored == {"keep.txt": "keep", "memories/old1.json": "1", "memories/old2.json": "2"}
+
+    def test_completed_restore_removes_backup_with_read_only_directory(
+        self, checkpoint_repository: CheckpointRepository, tmp_path: Path
+    ) -> None:
+        """A read-only directory inside a replaced entry does not strand the backup."""
+        dest = tmp_path / "dest"
+        (dest / "cache" / "sub").mkdir(parents=True)
+        (dest / "cache" / "sub" / "module.bin").write_text("x")
+        (dest / "cache" / "sub").chmod(0o555)
+        zip_path = tmp_path / "cp.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("new.txt", "new")
+
+        checkpoint_repository._extract_zip_to_path(str(zip_path), str(dest))
+
+        assert os.listdir(dest) == ["new.txt"]
+
+    def test_work_dir_that_cannot_be_removed_is_logged(
+        self, checkpoint_repository: CheckpointRepository, tmp_path: Path
+    ) -> None:
+        """The restore still completes; the leftover path and its cause are in a warning."""
+        dest = tmp_path / "dest"
+        dest.mkdir()
+        (dest / "live.txt").write_text("live")
+        zip_path = tmp_path / "cp.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("new.txt", "new")
+
+        with patch(
+            "agent_builder_sdk.checkpoint.checkpoint_repository.shutil.rmtree",
+            side_effect=OSError(errno.EBUSY, os.strerror(errno.EBUSY)),
+        ), patch("agent_builder_sdk.checkpoint.checkpoint_repository.logger") as mock_logger:
+            checkpoint_repository._extract_zip_to_path(str(zip_path), str(dest))
+
+        (work_dir,) = dest.glob(".checkpoint-restore-*")
+        assert (dest / "new.txt").read_text() == "new"
+        (warning,) = [call.args[0] for call in mock_logger.warning.call_args_list]
+        assert str(work_dir) in warning and os.strerror(errno.EBUSY) in warning
 
     def test_restore_into_read_only_dir_with_writable_subdirs(
         self, checkpoint_repository: CheckpointRepository, mock_artifact_store: Mock, tmp_path: Path
@@ -627,6 +728,22 @@ class TestCreateCheckpointRepository:
             zip_content = checkpoint_repository._create_zip_from_path(str(tmp_path))
 
         assert zipfile.ZipFile(BytesIO(zip_content)).namelist() == ["requests.json"]
+
+    def test_create_zip_returns_none_when_every_file_is_removed_mid_checkpoint(
+        self, checkpoint_repository: CheckpointRepository, tmp_path: Path
+    ) -> None:
+        """No file left to write means no checkpoint, not an empty ZIP that a restore applies."""
+        (tmp_path / "requests.tmp").write_text("[1]")
+        real_write = zipfile.ZipFile.write
+
+        def write_after_writer_removes(
+            self: zipfile.ZipFile, filename: Path, *args: Any, **kwargs: Any
+        ) -> None:
+            os.unlink(filename)
+            return real_write(self, filename, *args, **kwargs)
+
+        with patch.object(zipfile.ZipFile, "write", write_after_writer_removes):
+            assert checkpoint_repository._create_zip_from_path(str(tmp_path)) is None
 
     def test_create_zip_skips_file_removed_during_walk(
         self, checkpoint_repository: CheckpointRepository, tmp_path: Path

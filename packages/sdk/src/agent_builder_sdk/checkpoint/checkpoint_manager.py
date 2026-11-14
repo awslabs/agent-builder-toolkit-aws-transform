@@ -123,7 +123,8 @@ class CheckpointManager:
         Replaces the files only; it does not rebuild a running agent, queue or response store.
         If the directory is read-only or an entry in it cannot be moved, the checkpoint is
         extracted over the existing files and files that are not in it remain; the return
-        value is still True.
+        value is still True. If that extract fails partway, the return value is False and
+        only some of the files are restored.
         """
         with self._checkpoint_lock:
             try:

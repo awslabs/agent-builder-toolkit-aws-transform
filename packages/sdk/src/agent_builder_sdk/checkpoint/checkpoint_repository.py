@@ -4,6 +4,7 @@
 Checkpoint repository for agent state/memory/conversation persistence.
 """
 
+import contextlib
 import errno
 import json
 import logging
@@ -284,7 +285,8 @@ class CheckpointRepository:
 
         Replaces the files only; it does not rebuild a running agent, queue or response store.
         If the directory is read-only or an entry in it cannot be moved, the checkpoint is
-        extracted over the existing files and files that are not in it remain.
+        extracted over the existing files and files that are not in it remain. If that
+        extract fails partway, it raises and only some of the files are restored.
         """
         restorable = {c["artifactId"] for c in self.list_restorable_checkpoints()}
         if artifact_id not in restorable:
@@ -424,11 +426,13 @@ class CheckpointRepository:
         fails, the entries already moved are put back. If the destination is read-only
         or entries can't be renamed at all (cross-device, permission, mount point), the
         ZIP is extracted over the existing files instead, which leaves files absent from
-        the checkpoint in place.
+        the checkpoint in place. If that extract fails partway, it raises and the
+        destination holds restored files next to previous versions of the others.
 
         Entries that cannot be put back stay in a backup directory inside the destination.
         The next restore that completes the swap removes it; one that fails or extracts
-        in place does not. Restores into one destination must not run concurrently.
+        in place does not. Restores into one destination must not run concurrently. An
+        entry that a writer recreates during a failed swap is removed by the put-back.
         """
         destination = Path(destination_path)
         destination.mkdir(parents=True, exist_ok=True)
@@ -460,12 +464,12 @@ class CheckpointRepository:
                 backup = work_dir / "backup"
                 if not self._undo_restore_swap(destination, backup, backed_up, placed):
                     # Only the backup holds files that exist nowhere else.
-                    shutil.rmtree(work_dir / "staged", ignore_errors=True)
+                    self._remove_restore_work_dir(work_dir / "staged")
                     logger.error(
                         f"Restore failed and could not put back all files; kept in {backup}"
                     )
                     raise
-                shutil.rmtree(work_dir, ignore_errors=True)
+                self._remove_restore_work_dir(work_dir)
             if not (isinstance(e, OSError) and e.errno in _IN_PLACE_RESTORE_ERRNOS):
                 raise
             logger.warning(f"Cannot swap {destination} ({e}); extracting over existing files")
@@ -475,14 +479,41 @@ class CheckpointRepository:
         # The swap replaced every entry, so this work dir and the backups kept by earlier
         # failed restores hold only superseded files.
         for path in scratch:
-            shutil.rmtree(path, ignore_errors=True)
+            self._remove_restore_work_dir(path)
+
+    def _remove_restore_work_dir(self, path: Path) -> None:
+        """Remove a restore work dir; log a warning with the cause if any of it remains.
+
+        A backed-up tree can hold directories without write permission, so a failed
+        removal is retried once after every directory under ``path`` is set to mode 0700.
+        """
+        try:
+            shutil.rmtree(path)
+        except OSError:
+            # Top-down: each directory is made listable before os.walk descends into it.
+            # A chmod that fails surfaces as the error of the second removal.
+            for root, dirs, _ in os.walk(path):
+                for name in dirs:
+                    subdir = os.path.join(root, name)
+                    if not os.path.islink(subdir):
+                        with contextlib.suppress(OSError):
+                            os.chmod(subdir, 0o700)
+            try:
+                shutil.rmtree(path)
+            except OSError as e:
+                logger.warning(f"Could not remove restore work directory {path}: {e}")
 
     def _undo_restore_swap(
         self, destination: Path, backup: Path, backed_up: list[str], placed: list[str]
     ) -> bool:
-        """Remove placed entries and move backed-up ones back; True if all of it worked."""
+        """Clear the placed and backed-up names, then move the backed-up entries back.
+
+        A backed-up name can exist again when a writer recreated it during the swap; it
+        is removed so the put-back cannot fail on a non-empty directory. Returns True if
+        every removal and every move worked.
+        """
         ok = True
-        for name in placed:
+        for name in dict.fromkeys(placed + backed_up):
             path = destination / name
             try:
                 if path.is_dir() and not path.is_symlink():
@@ -490,7 +521,7 @@ class CheckpointRepository:
                 else:
                     path.unlink(missing_ok=True)
             except OSError as e:
-                logger.error(f"Could not remove restored entry {path}: {e}")
+                logger.error(f"Could not remove {path} to undo the restore: {e}")
                 ok = False
         for name in backed_up:
             try:
