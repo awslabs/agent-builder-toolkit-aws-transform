@@ -118,7 +118,7 @@ Limits:
 - The locale is read once, when the agent is built. Only `invoke` and `restore` carry it, so an agent built from the context of another request (for example a health check) gets no locale. A later change of the user's language does not reach a running agent.
 - With streaming on, every per-user agent gets the locale that the server had when it was set up, not the locale of its own user.
 - Codes match exactly against `LOCALE_TO_LANGUAGE` in `agent_builder_sdk.locale_utils`: `ja` matches, `ja-JP` and `JA` do not. Any other value leaves the system prompt unchanged, and a non-English code that is not listed is logged as a warning.
-- A factory that takes only `**kwargs` does not receive `locale`. Name the parameter.
+- A factory that takes only `**kwargs` does not receive `locale`; the server logs this at INFO. Name the parameter.
 - The `INVOCATION_USER_CURRENT_LOCALE` environment variable is read only when the server starts with `WORKSPACE_ID`, `JOB_ID`, `AGENT_INSTANCE_ID` and `AUTHORIZATION_TOKEN` set and so initializes from the environment. On a Bedrock AgentCore runtime it has no effect.
 
 To build a prompt by hand, call `get_locale_instruction(locale)` from `agent_builder_sdk.locale_utils`.

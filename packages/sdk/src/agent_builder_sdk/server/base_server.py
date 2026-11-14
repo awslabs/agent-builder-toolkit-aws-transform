@@ -63,7 +63,7 @@ def _locale_kwargs(factory: Callable[..., Any], locale: Optional[str]) -> Dict[s
     The locale is passed only when it is set and ``factory`` names a ``locale`` parameter that
     takes a keyword. An unset locale is left out so the factory's own default applies. A bare
     ``**kwargs`` does not count, because such factories often forward it to a callable with a
-    fixed signature.
+    fixed signature. A set locale that is not passed is logged at INFO.
     """
     if not locale:
         return {}
@@ -72,6 +72,11 @@ def _locale_kwargs(factory: Callable[..., Any], locale: Optional[str]) -> Dict[s
         inspect.Parameter.POSITIONAL_OR_KEYWORD,
         inspect.Parameter.KEYWORD_ONLY,
     ):
+        logger.info(
+            "Locale %r is set but the agent factory names no 'locale' keyword parameter, "
+            "so it is not passed",
+            locale,
+        )
         return {}
     return {"locale": locale}
 

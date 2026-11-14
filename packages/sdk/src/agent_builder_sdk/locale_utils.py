@@ -26,9 +26,11 @@ LOCALE_TO_LANGUAGE = {
 def get_locale_instruction(locale: Optional[str]) -> str:
     """Return a system prompt instruction for the given locale.
 
-    Returns empty string for English, None, or unknown locales. Codes match exactly
-    (``ja`` matches, ``ja-JP`` and ``JA`` do not); an unknown code is logged as a warning.
-    Orchestrators created with ``locale=...`` append this instruction themselves; call it
+    Returns an empty string for None, an empty value, a code that starts with ``en`` and is
+    not in LOCALE_TO_LANGUAGE (``en`` and ``en-US``; ``en-GB`` is listed and returns an
+    instruction), and any other code that is not listed. Codes match exactly (``ja`` matches,
+    ``ja-JP`` and ``JA`` do not); an unlisted code that does not start with ``en`` is logged
+    as a warning. Orchestrators created with ``locale=...`` append this instruction themselves; call it
     directly only when building a system prompt by hand.
     """
     if not locale or not isinstance(locale, str):

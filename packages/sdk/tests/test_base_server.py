@@ -6,6 +6,7 @@ Unit tests for Base Server implementation.
 Tests the BaseServer abstract class functionality including setup_tracing.
 """
 
+import logging
 from typing import Any, Callable, Optional
 from unittest import mock
 
@@ -570,3 +571,37 @@ def test_locale_kwargs_needs_a_locale_parameter_that_takes_a_keyword(
 @pytest.mark.parametrize("locale", [None, ""])
 def test_locale_kwargs_leaves_out_an_unset_locale(locale: Optional[str]) -> None:
     assert _locale_kwargs(lambda mcp_client, storage_dir, locale="de": None, locale) == {}
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [lambda mcp_client, storage_dir, **kwargs: None, lambda mcp_client, storage_dir: None],
+    ids=["kwargs_only", "no_locale"],
+)
+def test_locale_kwargs_logs_a_set_locale_that_is_not_passed(
+    factory: Callable[..., Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
+        _locale_kwargs(factory, "ja")
+
+    (record,) = caplog.records
+    assert record.levelno == logging.INFO
+    assert "'ja'" in record.getMessage() and "not passed" in record.getMessage()
+
+
+@pytest.mark.parametrize(
+    "factory, locale",
+    [
+        (lambda mcp_client, storage_dir, locale=None: None, "ja"),
+        (lambda mcp_client, storage_dir, **kwargs: None, None),
+        (lambda mcp_client, storage_dir, **kwargs: None, ""),
+    ],
+    ids=["passed", "unset", "empty"],
+)
+def test_locale_kwargs_is_silent_when_the_locale_is_passed_or_unset(
+    factory: Callable[..., Any], locale: Optional[str], caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.DEBUG, logger="agent_builder_sdk.server.base_server"):
+        _locale_kwargs(factory, locale)
+
+    assert caplog.records == []

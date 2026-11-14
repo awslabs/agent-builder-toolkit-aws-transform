@@ -2182,7 +2182,7 @@
     "kind": "function",
     "file": "agent_builder_sdk/locale_utils.py",
     "module": "agent_builder_sdk.locale_utils",
-    "docstring": "Return a system prompt instruction for the given locale.\n\nReturns empty string for English, None, or unknown locales. Codes match exactly\n(``ja`` matches, ``ja-JP`` and ``JA`` do not); an unknown code is logged as a warning.\nOrchestrators created with ``locale=...`` append this instruction themselves; call it\ndirectly only when building a system prompt by hand.",
+    "docstring": "Return a system prompt instruction for the given locale.\n\nReturns an empty string for None, an empty value, a code that starts with ``en`` and is\nnot in LOCALE_TO_LANGUAGE (``en`` and ``en-US``; ``en-GB`` is listed and returns an\ninstruction), and any other code that is not listed. Codes match exactly (``ja`` matches,\n``ja-JP`` and ``JA`` do not); an unlisted code that does not start with ``en`` is logged\nas a warning. Orchestrators created with ``locale=...`` append this instruction themselves; call it\ndirectly only when building a system prompt by hand.",
     "signature": "get_locale_instruction(locale: Optional[str]) -> str",
     "description": "Parameters:\n  locale: Optional[str] (required)"
   },

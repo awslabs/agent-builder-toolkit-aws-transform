@@ -2950,6 +2950,27 @@ class TestLocaleDelivery:
     ) -> None:
         assert await self._build_agent(factory, "ja") == {}
 
+    @pytest.mark.parametrize(
+        "factory", [kwargs_only_factory, async_kwargs_only_factory, legacy_factory]
+    )
+    async def test_locale_that_is_not_passed_is_logged_once_per_build(
+        self, factory: Any, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
+            await self._build_agent(factory, "ja")
+
+        assert [r.getMessage() for r in caplog.records if "not passed" in r.getMessage()] == [
+            "Locale 'ja' is set but the agent factory names no 'locale' keyword parameter, "
+            "so it is not passed"
+        ]
+
+    async def test_overridden_agent_params_decide_the_locale(self) -> None:
+        server = self._server(named_locale_factory, "ja")
+        with mock.patch.object(server, "_get_agent_params", return_value={"locale": "fr"}):
+            await server._finalize_agent_setup("STOPPED")
+
+        assert server.agent == {"locale": "fr"}
+
     async def test_streaming_agents_get_the_locale_captured_at_setup(self) -> None:
         server = self._server(
             keyword_only_locale_factory, "ja", streaming_config=StreamingConfig()
