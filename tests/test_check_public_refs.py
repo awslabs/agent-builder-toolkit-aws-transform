@@ -97,6 +97,11 @@ class TestRules:
 
         assert list(check_public_refs.find_refs(f"a\\.b\n{escaped}\n")) == [(2, "email", EMAIL)]
 
+    def test_escaped_hyphens_are_flagged_and_show_as_plain_hyphens(self, check_public_refs: ModuleType) -> None:
+        host = "made-up-ama|zon.com".replace("|", "")
+
+        assert list(check_public_refs.find_refs(host.replace("-", "\\-"))) == [(1, "host", host)]
+
     @pytest.mark.parametrize(("unit", "count"), [("a", 30_000), ("\\", 200_000)])
     def test_long_run_of_one_character_scans_in_linear_time(
         self, check_public_refs: ModuleType, unit: str, count: int

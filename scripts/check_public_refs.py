@@ -28,14 +28,14 @@ class Rule(NamedTuple):
     allowed: Optional[re.Pattern[str]] = None
 
 
-# The host, email and escaped-dot patterns start with a lookbehind for the
+# The host, email and escaped-separator patterns start with a lookbehind for the
 # characters they then repeat, so a match cannot start inside a run of them. That
 # keeps the scan linear on files with very long runs (minified or encoded data).
 RULES = (
     # Hosts under amazon.com, amazon.dev, aws.dev, a2z.com and a2z.org, except the public
     # aws.amazon.com sites and the product API endpoints. "}" and ">" catch a host whose
-    # leading label is a template placeholder. A backslash ends a host, so an escape sequence
-    # such as "\n" cannot join a flagged host to an allowed one that would hide it.
+    # leading label is a template placeholder. A backslash that find_refs keeps ends a host, so an
+    # escape sequence such as "\n" cannot join a flagged host to an allowed one that would hide it.
     Rule(
         "host",
         re.compile(
@@ -72,6 +72,7 @@ FLAGGED_SAMPLES = tuple(
         "made-up.a2|z.org",
         r"made-up\.ama|zon\.com",
         r"made-up\\.aw|s\\.dev",
+        r"made-up\-ama|zon\.com",
         r"made-up.ama|zon.com\ndocs.aws.ama|zon.com",
         "first.last@ama|zon.com",
         "first.last+tag@ama|zon.dev",
@@ -109,10 +110,10 @@ ALLOWED_SAMPLES = (
 def find_refs(text: str) -> Iterator[tuple[int, str, str]]:
     """Yield (1-based line number, rule name, matched text) for each match in `text` that its rule does not allow.
 
-    A dot with backslashes before it, as in a regular expression or an escaped string, is read
-    as a plain dot. The matched text shows the plain dot.
+    A dot or a hyphen with backslashes before it, as in a regular expression or an escaped
+    string, is read as the plain character. The matched text shows the plain character.
     """
-    text = re.sub(r"(?<!\\)\\+\.", ".", text)
+    text = re.sub(r"(?<!\\)\\+(?=[.-])", "", text)
     for rule in RULES:
         for match in rule.pattern.finditer(text):
             if not (rule.allowed and rule.allowed.search(match[0])):
