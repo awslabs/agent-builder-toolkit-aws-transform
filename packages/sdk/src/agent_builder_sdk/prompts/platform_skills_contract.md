@@ -19,8 +19,8 @@ nothing happened. So every unit of work leaves a trace in the platform, not just
 - **plan step id** — the spine. Every HITL task, connector request, worklog, and plan-attached
   artifact threads through one. Take ids from the `put_job_plan` response mappings, or recover
   them with `list_job_plan_steps`. Pass the id itself — a step's label or display name will 404.
-- **connector** — a scoped, temporary credential grant to one customer resource, and the only
-  path into a customer's account.
+- **connector** — a scoped, temporary credential grant to one customer resource. When the
+  platform provides one for the data, it is the path to that data.
 - **HITL task** — the one channel for structured input, a decision, or a recorded approval.
 - **artifact** — the durable store for any file that must outlive the turn.
 - **worklog** — a visible progress note on a plan step; the user's view of what is happening.
@@ -45,9 +45,10 @@ nothing happened. So every unit of work leaves a trace in the platform, not just
    resources or spends money, persist an approval summary, then create and start a `BLOCKING`,
    `CRITICAL` approval task and proceed only once the human has answered. The recorded decision
    is the approval; a "go ahead" in chat is not.
-5. **Reach customer resources only through a connector**, hung off the step that needs the data.
-   AccessDenied on customer data means a connector is missing, not that you should try another
-   way in. Use your own execution role for platform calls only.
+5. **When the platform provides a connector for the data, use it**, hung off the step that needs
+   the data. AccessDenied on data behind a connector means the connector is missing or not yet
+   approved, not that you should try another way in. Where your own instructions give you
+   another path to customer data, follow them.
 6. **Customer-facing output lives only in the artifact store — at every step, not just at the
    end.** The moment a result the user is meant to see is final, upload it as a customer
    deliverable and verify it landed (see artifact-io). A file you only wrote locally or pasted
