@@ -283,6 +283,8 @@ class CheckpointRepository:
         """Restore a specific past checkpoint by artifact id.
 
         Replaces the files only; it does not rebuild a running agent, queue or response store.
+        If the directory is read-only or an entry in it cannot be moved, the checkpoint is
+        extracted over the existing files and files that are not in it remain.
         """
         restorable = {c["artifactId"] for c in self.list_restorable_checkpoints()}
         if artifact_id not in restorable:
@@ -359,24 +361,28 @@ class CheckpointRepository:
             cpu_start = time.thread_time()
 
             # Single walk: collect files + empty dirs and compute input size. Writers keep
-            # running during a checkpoint, so a file can vanish (e.g. a temp file renamed
-            # into place) before it is read; such files are skipped, not fatal.
+            # running during a checkpoint, so a file or directory can vanish (e.g. a temp
+            # file renamed into place) before it is read; such entries are skipped, not
+            # fatal. os.walk skips a directory it can no longer list; Path.rglob raises
+            # for one on Python 3.11.
             files: list[Path] = []
             empty_dirs: list[Path] = []
             input_bytes = 0
-            for file_path in source.rglob("*"):
-                if file_path.relative_to(source).parts[0].startswith(_RESTORE_WORK_PREFIX):
-                    continue
-                try:
-                    if file_path.is_file():
-                        input_bytes += file_path.stat().st_size
-                        files.append(file_path)
-                    elif file_path.is_dir() and not any(file_path.iterdir()):
-                        # Only add empty directories (non-empty ones are implicitly
-                        # created by their files).
-                        empty_dirs.append(file_path)
-                except FileNotFoundError:
-                    continue
+            for root, dirs, names in os.walk(source):
+                if Path(root) == source:
+                    dirs[:] = [d for d in dirs if not d.startswith(_RESTORE_WORK_PREFIX)]
+                    names = [n for n in names if not n.startswith(_RESTORE_WORK_PREFIX)]
+                for file_path in (Path(root, name) for name in dirs + names):
+                    try:
+                        if file_path.is_file():
+                            input_bytes += file_path.stat().st_size
+                            files.append(file_path)
+                        elif file_path.is_dir() and not any(file_path.iterdir()):
+                            # Only add empty directories (non-empty ones are implicitly
+                            # created by their files).
+                            empty_dirs.append(file_path)
+                    except FileNotFoundError:
+                        continue
 
             zip_buffer = BytesIO()
             written = 0
@@ -483,12 +489,14 @@ class CheckpointRepository:
                     shutil.rmtree(path)
                 else:
                     path.unlink(missing_ok=True)
-            except OSError:
+            except OSError as e:
+                logger.error(f"Could not remove restored entry {path}: {e}")
                 ok = False
         for name in backed_up:
             try:
                 os.replace(backup / name, destination / name)
-            except OSError:
+            except OSError as e:
+                logger.error(f"Could not put back {name} from {backup}: {e}")
                 ok = False
         return ok
 

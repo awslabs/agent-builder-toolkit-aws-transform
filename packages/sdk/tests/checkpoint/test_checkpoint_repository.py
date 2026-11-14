@@ -6,6 +6,7 @@ Unit tests for checkpoint manager.
 
 import errno
 import os
+import shutil
 import tempfile
 import time
 import zipfile
@@ -374,10 +375,15 @@ class TestCreateCheckpointRepository:
             finally:
                 os.unlink(zip_path)
 
-    def test_restore_falls_back_in_place_on_cross_device_rename(
-        self, checkpoint_repository: CheckpointRepository, mock_artifact_store: Mock, tmp_path: Path
+    @pytest.mark.parametrize("code", [errno.EXDEV, errno.EACCES, errno.EPERM, errno.EBUSY])
+    def test_restore_falls_back_in_place_when_rename_is_refused(
+        self,
+        checkpoint_repository: CheckpointRepository,
+        mock_artifact_store: Mock,
+        tmp_path: Path,
+        code: int,
     ) -> None:
-        """EXDEV on rename (some overlay filesystems return it): restore lands and is verified."""
+        """Cross-device, permission or mount-point error on rename: restore lands, is verified."""
         mock_artifact_store.list_artifacts.return_value = {"artifacts": [{"artifactId": "cp"}]}
 
         def mock_download(artifact_id: str, temp_path: str) -> None:
@@ -391,7 +397,7 @@ class TestCreateCheckpointRepository:
 
         with patch(
             "agent_builder_sdk.checkpoint.checkpoint_repository.os.replace",
-            side_effect=OSError(errno.EXDEV, "Invalid cross-device link"),
+            side_effect=OSError(code, os.strerror(code)),
         ):
             assert checkpoint_repository.restore_if_available() is True
 
@@ -427,6 +433,26 @@ class TestCreateCheckpointRepository:
         assert (tmp_path / "agent" / "conv.json").read_text() == "restored"
         assert (tmp_path / "queue" / "requests.json").read_text() == "[]"
         assert sorted(os.listdir(tmp_path)) == ["agent", "queue"]
+
+    def test_restore_under_read_only_parent_replaces_contents(
+        self, checkpoint_repository: CheckpointRepository, tmp_path: Path
+    ) -> None:
+        """The swap stages inside the destination, so it needs no write access to the parent."""
+        parent = tmp_path / "parent"
+        dest = parent / "state"
+        dest.mkdir(parents=True)
+        (dest / "live.txt").write_text("live")
+        zip_path = tmp_path / "cp.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("state.json", "restored")
+
+        parent.chmod(0o555)
+        try:
+            checkpoint_repository._extract_zip_to_path(str(zip_path), str(dest))
+        finally:
+            parent.chmod(0o755)
+
+        assert {p.name: p.read_text() for p in dest.iterdir()} == {"state.json": "restored"}
 
     def test_extract_zip_failure_mid_backup_keeps_every_live_file(
         self, checkpoint_repository: CheckpointRepository, tmp_path: Path
@@ -489,6 +515,46 @@ class TestCreateCheckpointRepository:
         assert str(kept[0].parent) in mock_logger.error.call_args[0][0]
         # the extracted copy can be downloaded again, so only the backup is kept
         assert os.listdir(kept[0].parent.parent) == ["backup"]
+
+    def test_failed_undo_logs_each_entry_and_cause(
+        self, checkpoint_repository: CheckpointRepository, tmp_path: Path
+    ) -> None:
+        """Each entry the undo could not remove or put back is logged with its error."""
+        dest = tmp_path / "dest"
+        dest.mkdir()
+        (dest / "live.txt").write_text("live")
+        zip_path = tmp_path / "cp.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("a.txt", "a")
+            zf.writestr("b.txt", "b")
+
+        real_replace = os.replace
+        placed = []
+
+        def second_placement_and_put_back_fail(src: Path, dst: Path) -> None:
+            step = Path(src).parent.name
+            if step == "backup":
+                raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+            if step == "staged":
+                placed.append(Path(src).name)
+                if len(placed) == 2:
+                    raise OSError(errno.EIO, os.strerror(errno.EIO))
+            return real_replace(src, dst)
+
+        with patch(
+            "agent_builder_sdk.checkpoint.checkpoint_repository.os.replace",
+            side_effect=second_placement_and_put_back_fail,
+        ), patch.object(
+            Path, "unlink", side_effect=OSError(errno.EBUSY, os.strerror(errno.EBUSY))
+        ), patch("agent_builder_sdk.checkpoint.checkpoint_repository.logger") as mock_logger:
+            with pytest.raises(OSError):
+                checkpoint_repository._extract_zip_to_path(str(zip_path), str(dest))
+
+        errors = [call.args[0] for call in mock_logger.error.call_args_list]
+        assert any(
+            str(dest / placed[0]) in line and os.strerror(errno.EBUSY) in line for line in errors
+        )
+        assert any("live.txt" in line and os.strerror(errno.ENOSPC) in line for line in errors)
 
     def test_completed_restore_removes_backup_kept_by_failed_restore(
         self, checkpoint_repository: CheckpointRepository, tmp_path: Path
@@ -561,6 +627,47 @@ class TestCreateCheckpointRepository:
             zip_content = checkpoint_repository._create_zip_from_path(str(tmp_path))
 
         assert zipfile.ZipFile(BytesIO(zip_content)).namelist() == ["requests.json"]
+
+    def test_create_zip_skips_file_removed_during_walk(
+        self, checkpoint_repository: CheckpointRepository, tmp_path: Path
+    ) -> None:
+        """A file renamed away after the walk listed it, before its size is read, is skipped."""
+        (tmp_path / "requests.json").write_text("[]")
+        (tmp_path / "requests.tmp").write_text("[1]")
+        real_is_file = Path.is_file
+
+        def is_file_then_writer_renames(self: Path) -> bool:
+            result = real_is_file(self)
+            if self.name == "requests.tmp":
+                os.replace(self, tmp_path / "requests.json")
+            return result
+
+        with patch.object(Path, "is_file", is_file_then_writer_renames):
+            zip_content = checkpoint_repository._create_zip_from_path(str(tmp_path))
+
+        assert zipfile.ZipFile(BytesIO(zip_content)).namelist() == ["requests.json"]
+
+    def test_create_zip_skips_directory_removed_during_walk(
+        self, checkpoint_repository: CheckpointRepository, tmp_path: Path
+    ) -> None:
+        """Directories removed after their parent was listed are skipped, not fatal."""
+        for name in ("a", "b", "c"):
+            (tmp_path / name).mkdir()
+            (tmp_path / name / "file.txt").write_text(name)
+        real_is_file = Path.is_file
+
+        def is_file_while_writer_removes_other_dirs(self: Path) -> bool:
+            if self.parent.parent == tmp_path:
+                for other in tmp_path.iterdir():
+                    if other != self.parent:
+                        shutil.rmtree(other)
+            return real_is_file(self)
+
+        with patch.object(Path, "is_file", is_file_while_writer_removes_other_dirs):
+            zip_content = checkpoint_repository._create_zip_from_path(str(tmp_path))
+
+        (survivor,) = tmp_path.iterdir()
+        assert zipfile.ZipFile(BytesIO(zip_content)).namelist() == [f"{survivor.name}/file.txt"]
 
     def test_retrieve_checkpoint_preserves_empty_directories(
         self, checkpoint_repository, mock_artifact_store
