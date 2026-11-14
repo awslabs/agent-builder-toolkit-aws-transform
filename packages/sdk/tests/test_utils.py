@@ -142,7 +142,9 @@ def test_extract_text_from_strands_agent_response(content: list[ContentBlock], e
     assert actual == expected
 
 
-def test_extract_text_from_strands_agent_response_skips_reasoning_quietly(caplog):
+def test_extract_text_from_strands_agent_response_skips_reasoning_quietly(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     reasoning = {"reasoningContent": {"reasoningText": {"text": "", "signature": "sig"}}}
     message = Message(content=[reasoning, {"text": "hello"}], role="assistant")
     result = AgentResult("end_turn", message, EventLoopMetrics(), state=None)

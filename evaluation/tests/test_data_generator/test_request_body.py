@@ -5,6 +5,9 @@
 import io
 import json
 import sys
+from collections.abc import Sequence
+from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -15,7 +18,9 @@ from test_data_generator.intelligent_generator import IntelligentTestGenerator
 MODEL_ID = "us.anthropic.claude-opus-5-5"
 
 
-def _sent_body(obj, content=({"type": "text", "text": "ok"},)):
+def _sent_body(
+    obj: Any, content: Sequence[dict[str, str]] = ({"type": "text", "text": "ok"},)
+) -> dict[str, Any]:
     obj.bedrock = MagicMock()
     obj.bedrock.invoke_model.return_value = {
         "body": io.BytesIO(json.dumps({"content": list(content)}).encode())
@@ -25,13 +30,13 @@ def _sent_body(obj, content=({"type": "text", "text": "ok"},)):
 
 
 @pytest.mark.parametrize("cls", [IntelligentTestGenerator, DomainAnalyzer])
-def test_sends_no_sampling_parameters(cls):
+def test_sends_no_sampling_parameters(cls: type) -> None:
     with patch("boto3.client"):
         obj = cls(region_name="us-west-2", model_id=MODEL_ID)
     assert not {"temperature", "top_p", "top_k"} & _sent_body(obj).keys()
 
 
-def test_cli_fails_when_no_tests_are_generated(tmp_path, monkeypatch):
+def test_cli_fails_when_no_tests_are_generated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "README.md").write_text("An agent that books meetings.")
     argv = ["cli", "--source-context", str(tmp_path), "--output", str(tmp_path / "out")]
     monkeypatch.setattr(sys, "argv", argv)
@@ -42,7 +47,9 @@ def test_cli_fails_when_no_tests_are_generated(tmp_path, monkeypatch):
     assert exit_info.value.code == 1
 
 
-def test_cli_analyze_only_fails_when_analysis_fails(tmp_path, monkeypatch):
+def test_cli_analyze_only_fails_when_analysis_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     (tmp_path / "README.md").write_text("An agent that books meetings.")
     argv = ["cli", "--source-context", str(tmp_path), "--output", str(tmp_path / "out"), "--analyze-only"]
     monkeypatch.setattr(sys, "argv", argv)
@@ -58,7 +65,7 @@ def test_cli_analyze_only_fails_when_analysis_fails(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("cls", [IntelligentTestGenerator, DomainAnalyzer])
-def test_response_text_skips_leading_thinking_block(cls):
+def test_response_text_skips_leading_thinking_block(cls: type) -> None:
     with patch("boto3.client"):
         obj = cls(region_name="us-west-2", model_id=MODEL_ID)
     _sent_body(obj, content=(
