@@ -13,7 +13,7 @@ import zipfile
 from datetime import datetime, timezone
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Iterator
 from unittest.mock import Mock, patch
 
 import pytest
@@ -785,6 +785,39 @@ class TestCreateCheckpointRepository:
 
         (survivor,) = tmp_path.iterdir()
         assert zipfile.ZipFile(BytesIO(zip_content)).namelist() == [f"{survivor.name}/file.txt"]
+
+    def test_create_zip_raises_when_directory_listing_fails(
+        self, checkpoint_repository: CheckpointRepository, tmp_path: Path
+    ) -> None:
+        """A directory that exists but cannot be listed fails the checkpoint.
+
+        Skipping it would produce a ZIP without that subtree.
+        """
+        for name in ("agent", "queue"):
+            (tmp_path / name).mkdir()
+            (tmp_path / name / "file.txt").write_text(name)
+        real_iterdir = Path.iterdir
+        real_scandir = os.scandir
+        probed: list[Path] = []
+
+        def iterdir_then_record(self: Path) -> Iterator[Path]:
+            entries = list(real_iterdir(self))
+            probed.append(self)
+            return iter(entries)
+
+        def scandir_fails_once_probed(path: Any) -> Any:
+            if Path(path) in probed:
+                raise OSError(errno.EIO, os.strerror(errno.EIO), str(path))
+            return real_scandir(path)
+
+        with (
+            patch.object(Path, "iterdir", iterdir_then_record),
+            patch("os.scandir", scandir_fails_once_probed),
+            pytest.raises(OSError) as raised,
+        ):
+            checkpoint_repository._create_zip_from_path(str(tmp_path))
+
+        assert raised.value.errno == errno.EIO
 
     def test_retrieve_checkpoint_preserves_empty_directories(
         self, checkpoint_repository, mock_artifact_store

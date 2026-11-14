@@ -51,6 +51,12 @@ _RESTORE_WORK_PREFIX = ".checkpoint-restore-"
 _IN_PLACE_RESTORE_ERRNOS = {errno.EXDEV, errno.EACCES, errno.EPERM, errno.EBUSY}
 
 
+def _raise_unless_removed(error: OSError) -> None:
+    """os.walk error hook: skip a directory that was removed, raise any other listing error."""
+    if not isinstance(error, FileNotFoundError):
+        raise error
+
+
 class CheckpointRepository:
     """Manages agent checkpointing operations."""
 
@@ -365,12 +371,12 @@ class CheckpointRepository:
             # Single walk: collect files + empty dirs and compute input size. Writers keep
             # running during a checkpoint, so a file or directory can vanish (e.g. a temp
             # file renamed into place) before it is read; such entries are skipped, not
-            # fatal. os.walk skips a directory it can no longer list; Path.rglob raises
-            # for one on Python 3.11.
+            # fatal (Path.rglob raises for a removed directory on Python 3.11). Any other
+            # listing error is fatal: a ZIP without that subtree would delete it on restore.
             files: list[Path] = []
             empty_dirs: list[Path] = []
             input_bytes = 0
-            for root, dirs, names in os.walk(source):
+            for root, dirs, names in os.walk(source, onerror=_raise_unless_removed):
                 if Path(root) == source:
                     dirs[:] = [d for d in dirs if not d.startswith(_RESTORE_WORK_PREFIX)]
                     names = [n for n in names if not n.startswith(_RESTORE_WORK_PREFIX)]
