@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import textwrap
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, Mock, patch
@@ -281,3 +282,20 @@ class TestServerShutdown:
         with caplog.at_level("WARNING"):
             await _agent_runtime_server()._cleanup()
         assert "Could not stop the code-interpreter sessions: no route to the service" in caplog.text
+
+    async def test_a_stop_that_does_not_return_does_not_hold_up_the_shutdown(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # The service endpoint does not answer: the stop request stays blocked in its thread.
+        endpoint_answers = threading.Event()
+        base_server = "agent_builder_sdk.server.base_server"
+        with (
+            patch.object(code_interpreter_tool, "stop_all_sessions", lambda: endpoint_answers.wait(timeout=5)),
+            patch(f"{base_server}._SESSION_STOP_TIMEOUT_SECONDS", 0.05),
+            caplog.at_level("WARNING"),
+        ):
+            try:
+                await _agent_runtime_server()._cleanup()
+            finally:
+                endpoint_answers.set()
+        assert "The code-interpreter sessions were not stopped within 0.05 seconds" in caplog.text

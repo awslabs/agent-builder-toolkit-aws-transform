@@ -309,12 +309,16 @@ _COMMAND_WORD = re.compile(r"[\w./+-]+|\[")
 # Options of otherwise-useful, allowlisted commands that run the program named in
 # their argument: find's exec primaries, tar's compressor, volume-script, remote-shell,
 # checkpoint and per-member hooks, sort's temp-file compressor, and ripgrep's
-# preprocessor and hostname helper.
+# preprocessor and hostname helper. tar's -T / --files-from is listed with them: older
+# GNU tar (1.26, for one) reads options, these included, from the list file, which
+# `printf > file` can write.
 _EXEC_OPTIONS = {
     "find": ("-exec", "-execdir", "-ok", "-okdir"),
     "tar": (
         "-I",
         "-F",
+        "-T",
+        "--files-from",
         "--checkpoint-action",
         "--info-script",
         "--new-volume-script",
@@ -327,10 +331,10 @@ _EXEC_OPTIONS = {
     "rg": ("--pre", "--hostname-bin"),
 }
 
-# tar's -I and -F inside a cluster of short options (`-cIprog`, `-xFscript`). The
+# tar's -I, -F and -T inside a cluster of short options (`-cIprog`, `-xFscript`). The
 # scan stops at `f` and `C`, whose argument is the rest of the word, so an archive
 # name attached to `-f` (`-cfInput.tar`) is not read as the `-I` option.
-_TAR_EXEC_SHORT_OPTION = re.compile(r"-[^-fC]*[IF]")
+_TAR_EXEC_SHORT_OPTION = re.compile(r"-[^-fC]*[IFT]")
 
 # The option check reads the words as typed, so for the commands in _EXEC_OPTIONS the
 # shell must hand them over unchanged. These characters, on the quote-masked stage, mark
@@ -339,20 +343,21 @@ _TAR_EXEC_SHORT_OPTION = re.compile(r"-[^-fC]*[IF]")
 # (`{-exec,}`).
 _SHELL_EXPANSION = re.compile(r"[$*?\[{]")
 
-_REDIRECTION_OPERATOR = re.compile(r"[<>]+")
+_REDIRECTION_OPERATOR = re.compile(r"[<>&]+")
 
 
 def _split_words(stage: str) -> List[str]:
     """Split one pipeline stage into words as the shell does.
 
     Like ``shlex.split``, and a redirection operator also ends a word: the shell reads
-    ``-exec>/dev/null`` as the word ``-exec`` and a redirection. Each run of ``<`` and
-    ``>`` is returned as a word of its own.
+    ``-exec>/dev/null`` as the word ``-exec`` and a redirection. Each run of ``<``,
+    ``>`` and ``&`` (``>&`` is one operator, with or without a space before its target)
+    is returned as a word of its own.
 
     Raises:
         ValueError: The stage has an unterminated quote or escape.
     """
-    lexer = shlex.shlex(stage, posix=True, punctuation_chars="<>")
+    lexer = shlex.shlex(stage, posix=True, punctuation_chars="<>&")
     lexer.whitespace_split = True
     lexer.commenters = ""
     return list(lexer)
@@ -375,8 +380,9 @@ def _is_exec_option(arg: str, exec_options: Tuple[str, ...]) -> bool:
     name = arg.partition("=")[0]
     if name.startswith("--"):
         # GNU getopt takes any unambiguous prefix of a long option (`--to-comm` is
-        # `--to-command`), so a prefix is rejected like the full name.
-        return len(name) > 2 and any(option.startswith(name) for option in exec_options)
+        # `--to-command`), so a prefix is rejected like the full name. An exact name
+        # wins over a prefix: tar's `--file` is not `--files-from`.
+        return len(name) > 2 and name != "--file" and any(option.startswith(name) for option in exec_options)
     # Single-dash names are matched whole: find's `-o` and `-executable` are not `-ok` or `-exec`.
     return name in exec_options
 
@@ -385,7 +391,7 @@ def _tar_short_option_runs_program(args: List[str]) -> bool:
     # tar reads a first word without a dash as a cluster in which every letter is an
     # option and the arguments follow as separate words: `tar cIf prog a.tar`.
     first = _first_argument(args)
-    if not first.startswith("-") and re.search("[IF]", first):
+    if not first.startswith("-") and re.search("[IFT]", first):
         return True
     return any(_TAR_EXEC_SHORT_OPTION.match(arg) for arg in args)
 
@@ -408,7 +414,8 @@ def _validate_command(command: str) -> Tuple[bool, str, str]:
       quote or a word ends ($'...', $"...", an unquoted #, a backslash-newline,
       ``>|``, an unterminated quote);
     - the exec-delegating options of otherwise-allowlisted commands (find -exec,
-      tar --to-command), abbreviated or not. For those commands (find, tar, sort,
+      tar --to-command), abbreviated or not, and tar's -T / --files-from, which can
+      bring them in from a file. For those commands (find, tar, sort,
       rg) it also rejects ``$`` outside single quotes and an unquoted ``*``, ``?``,
       ``[`` or ``{``, so the words checked are the words the program gets.
 

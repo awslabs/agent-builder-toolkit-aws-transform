@@ -57,6 +57,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Longest wait for the code-interpreter sessions to stop during a shutdown.
+_SESSION_STOP_TIMEOUT_SECONDS = 10
+
 
 class BaseServer(ABC):
     """Abstract base class for all server implementations."""
@@ -95,13 +98,22 @@ class BaseServer(ABC):
         Safe to run more than once in a shutdown: a session is stopped once. The module
         is looked up instead of imported, so a server whose agent does not use the tools
         does not need the code-interpreter extra.
+
+        Waits at most ``_SESSION_STOP_TIMEOUT_SECONDS`` so that a service endpoint that
+        does not answer cannot hold up the rest of the shutdown. The stop requests then
+        go on in their worker thread; a session they do not stop ends at its timeout.
         """
         tools = sys.modules.get("agent_builder_sdk.experimental.code_interpreter.code_interpreter_tool")
         if tools is None:
             return
         try:
             # One blocking StopCodeInterpreterSession request per session.
-            await asyncio.to_thread(tools.stop_all_sessions)
+            await asyncio.wait_for(asyncio.to_thread(tools.stop_all_sessions), _SESSION_STOP_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"The code-interpreter sessions were not stopped within {_SESSION_STOP_TIMEOUT_SECONDS} "
+                "seconds; the shutdown goes on, and a session that stays running ends at its timeout"
+            )
         except Exception as e:
             logger.warning(f"Could not stop the code-interpreter sessions: {e}")
 

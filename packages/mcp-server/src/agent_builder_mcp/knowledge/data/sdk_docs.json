@@ -2002,7 +2002,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
     "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
-    "docstring": "Call a sandbox method in a session and return the outcome as a tool result.\n\nA call that fails because the service has ended the session runs once more, in a new\nsession of the same name.\n\nArgs:\n    session_name: Session to run in; ``None`` selects the default session.\n    method: InvokeCodeInterpreter method name, for example ``executeCode``.\n    arguments: Arguments of the method.\n\nReturns:\n    ``{\"status\": \"success\" | \"error\", \"content\": [{\"text\": ...}, ...]}``. The last content\n    block is the sandbox's answer. ``NEW_SESSION_NOTICE`` comes before it when the call\n    ran in a replacement session.\n\nRaises:\n    ClientError: The session could not be started, or the call failed on a session that\n        is still running.\n    BotoCoreError: The request did not reach the service (credentials, endpoint, timeout).",
+    "docstring": "Call a sandbox method in a session and return the outcome as a tool result.\n\nA call that fails because the service has ended the session runs once more, in a new\nsession of the same name. A call that fails after ``stop_all_sessions`` ran is not run\nagain.\n\nArgs:\n    session_name: Session to run in; ``None`` selects the default session.\n    method: InvokeCodeInterpreter method name, for example ``executeCode``.\n    arguments: Arguments of the method.\n\nReturns:\n    ``{\"status\": \"success\" | \"error\", \"content\": [{\"text\": ...}, ...]}``. The last content\n    block is the sandbox's answer. ``NEW_SESSION_NOTICE`` comes before it when the call\n    ran in a replacement session.\n\nRaises:\n    ClientError: The session could not be started, or the call failed on a session that\n        is still running or that ``stop_all_sessions`` stopped during the call.\n    BotoCoreError: The request did not reach the service (credentials, endpoint, timeout).",
     "signature": "invoke(session_name: Optional[str], method: str, arguments: Dict[str, Any]) -> Dict[str, Any]"
   },
   {
@@ -2018,7 +2018,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
     "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
-    "docstring": "Stop every session this instance started, so none runs on until its timeout.\n\nA session that cannot be stopped is logged and skipped. The instance stays usable: a\nlater call starts a new session. Call this when no action is in flight.",
+    "docstring": "Stop every session this instance started, so none runs on until its timeout.\n\nA session that cannot be stopped is logged and skipped. A call that is in flight fails\non its stopped session and is not run again. The instance stays usable: a later call\nstarts a new session.",
     "signature": "stop_all_sessions() -> None"
   },
   {

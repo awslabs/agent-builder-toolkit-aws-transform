@@ -151,6 +151,27 @@ def test_stop_all_sessions_stops_each_session_and_the_next_call_starts_a_new_one
     assert len(sandbox.started) == 3
 
 
+def test_a_call_in_flight_when_the_sessions_are_stopped_is_not_run_again(sandbox: FakeSandbox) -> None:
+    interpreter = _interpreter()
+    interpreter.invoke(None, "listFiles", _LIST_FILES)
+    sandbox.call_gate = threading.Event()
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        call = pool.submit(interpreter.invoke, None, "executeCode", {"code": "print(1)"})
+        assert sandbox.call_waiting.wait(timeout=5)
+        interpreter.stop_all_sessions()
+        sandbox.call_gate.set()
+        with pytest.raises(ClientError, match="ResourceNotFoundException"):
+            call.result(timeout=5)
+    assert len(sandbox.started) == 1
+    assert sandbox.calls == {"aws-session-1": [("listFiles", _LIST_FILES)]}
+
+    # The stop does not end the retry of later calls: a session that the service ends is replaced.
+    interpreter.invoke(None, "listFiles", _LIST_FILES)
+    sandbox.end_all_sessions()
+    assert interpreter.invoke(None, "listFiles", _LIST_FILES)["content"][0] == {"text": NEW_SESSION_NOTICE}
+    assert len(sandbox.started) == 3
+
+
 @pytest.mark.parametrize(
     "error",
     [

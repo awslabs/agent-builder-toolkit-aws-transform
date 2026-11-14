@@ -3,6 +3,7 @@
 """Tests for experimental shell execution support."""
 
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -21,12 +22,29 @@ warnings.filterwarnings(
 
 from agent_builder_sdk.experimental.shell_execution import execute_shell  # noqa: E402
 from agent_builder_sdk.experimental.shell_execution.shell_execution_tool import (  # noqa: E402
+    _MAX_STDERR_BYTES,
     _MAX_STDOUT_BYTES,
     _CappedReader,
     _decode,
+    _finished,
     _sanitized_env,
     _validate_command,
 )
+
+_TOOL_MODULE = "agent_builder_sdk.experimental.shell_execution.shell_execution_tool"
+
+
+def _is_running(pid: int) -> bool:
+    """Whether the process is alive; a zombie (killed, not yet reaped by its parent) is not."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    try:
+        # The state is the first field after the parenthesised command name.
+        return Path(f"/proc/{pid}/stat").read_text().rpartition(")")[2].split()[0] != "Z"
+    except OSError:
+        return True  # no /proc on this platform, or the process ended between the two reads
 
 
 class TestExecuteShellTool:
@@ -122,20 +140,40 @@ class TestExecuteShellTool:
         assert bytes(reader.kept) == b"abcd"
         assert reader.total_bytes == 600_000
 
-    def test_output_far_over_the_limit_is_not_held_in_memory(self, caplog: pytest.LogCaptureFixture) -> None:
-        # 100 MB of output: the result is cut at the limit, and the agent process must
-        # not hold the rest while the command runs.
+    @pytest.mark.parametrize(
+        "redirection, kept, logged",
+        [
+            ("", "\x00" * _MAX_STDOUT_BYTES, "stdout_bytes=100000000, stderr_bytes=0"),
+            (" 1>&2", "[stderr]\n" + "\x00" * _MAX_STDERR_BYTES, "stdout_bytes=0, stderr_bytes=100000000"),
+        ],
+        ids=["stdout", "stderr"],
+    )
+    def test_output_far_over_the_limit_is_not_held_in_memory(
+        self, caplog: pytest.LogCaptureFixture, redirection: str, kept: str, logged: str
+    ) -> None:
+        # 100 MB of output on stdout, then on stderr: the result is cut at the limit of
+        # the stream, and the agent process must not hold the rest while the command runs.
         tracemalloc.start()
         try:
             with warnings.catch_warnings(), caplog.at_level("INFO"):
                 warnings.simplefilter("ignore", FutureWarning)
-                result = execute_shell(command="head -c 100000000 /dev/zero", working_directory="/tmp")
+                result = execute_shell(
+                    command="head -c 100000000 /dev/zero" + redirection, working_directory="/tmp"
+                )
             peak_bytes = tracemalloc.get_traced_memory()[1]
         finally:
             tracemalloc.stop()
-        assert result == "\x00" * _MAX_STDOUT_BYTES + "\n[output truncated]\n[exit code: 0]"
-        assert "stdout_bytes=100000000, stderr_bytes=0" in caplog.text
+        assert result == kept + "\n[output truncated]\n[exit code: 0]"
+        assert logged in caplog.text
         assert peak_bytes < 10 * 1024 * 1024
+
+    @pytest.mark.parametrize("requested, used", [(100000, 120), (0, 1)])
+    def test_timeout_is_kept_between_1_and_120_seconds(self, requested: int, used: int) -> None:
+        with warnings.catch_warnings(), mock.patch(f"{_TOOL_MODULE}._finished", wraps=_finished) as finished:
+            warnings.simplefilter("ignore", FutureWarning)
+            result = execute_shell(command="true", working_directory="/tmp", timeout_seconds=requested)
+        assert result == "[exit code: 0]"
+        assert finished.call_args.args[2] == used
 
     def test_command_does_not_read_the_agents_stdin(self) -> None:
         # With the agent's stdin an open pipe, a command that reads stdin would wait
@@ -153,35 +191,25 @@ class TestExecuteShellTool:
                 os.close(fd)
         assert result == "[exit code: 0]"
 
-    def test_timeout_kills_whole_process_tree(self, tmp_path):
-        # A grandchild spawned by the shell must be killed on timeout, not orphaned.
-        # Needs python3 to launch a trackable background process; skip where the
-        # test environment's sanitized PATH has no python3 (some CI environments).
-        import shutil
-        import time as _time
-
-        if shutil.which("python3") is None:
-            pytest.skip("python3 not on PATH in this environment")
+    def test_timeout_kills_whole_process_tree(self, tmp_path: Path) -> None:
+        # A grandchild of the shell must be killed on timeout, not orphaned. awk starts in
+        # milliseconds, so the probe runs long before the timeout: the shell of its
+        # system() call records its own PID and then becomes the sleep.
+        if shutil.which("awk") is None:
+            pytest.skip("awk not on PATH in this environment")
 
         # Per-test path: two test runs on one host must not share the file.
-        pidfile = str(tmp_path / "shell_timeout_probe.pid")
-        # python3 launches a background sleep, records its PID, then waits on it.
-        cmd = (
-            'python3 -c "import subprocess;'
-            "p=subprocess.Popen(['sleep','30']);"
-            f"open({pidfile!r},'w').write(str(p.pid));"
-            'p.wait()"'
-        )
+        pidfile = tmp_path / "shell_timeout_probe.pid"
+        cmd = f"""awk 'BEGIN {{ system("echo $$ > {pidfile}; exec sleep 30") }}'"""
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
             result = execute_shell(command=cmd, working_directory="/tmp", timeout_seconds=1)
         assert "timed out" in result
-        _time.sleep(0.5)  # let the SIGKILL propagate to the group
-        with open(pidfile) as f:
-            grandchild_pid = int(f.read().strip())
-        with pytest.raises(OSError):
-            # Orphan must be gone; os.kill(pid, 0) raises ProcessLookupError if dead.
-            os.kill(grandchild_pid, 0)
+        grandchild_pid = int(pidfile.read_text())
+        deadline = time.monotonic() + 5
+        while _is_running(grandchild_pid) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert not _is_running(grandchild_pid)
 
 
 class TestCommandValidation:
@@ -421,6 +449,22 @@ class TestCommandValidation:
         assert _validate_command("tar xzf a.tar")[0]
         assert _validate_command("tar tf a.tar Input/File.txt")[0]
 
+    def test_tar_files_from_rejected(self) -> None:
+        # GNU tar 1.26 reads options from the list file, so `--checkpoint-action=exec=...`
+        # in a file that printf wrote would run a program the command line never named.
+        assert not _validate_command("tar -cf a.tar -T /tmp/list")[0]
+        assert not _validate_command("tar -cT /tmp/list -f a.tar")[0]
+        assert not _validate_command("tar cfT a.tar /tmp/list")[0]
+        assert not _validate_command("tar -cf a.tar --files-from=/tmp/list")[0]
+        assert not _validate_command("tar -cf a.tar --files-from /tmp/list")[0]
+        assert not _validate_command("tar -cf a.tar --files=/tmp/list")[0]
+        # `--file` is an option of its own, and lower-case `t` lists the archive.
+        assert _validate_command("tar --file=a.tar -t")[0]
+        assert _validate_command("tar --file a.tar -x -C /tmp/out")[0]
+        assert _validate_command("tar -tf a.tar")[0]
+        assert _validate_command("tar tf a.tar Top/Test.txt")[0]
+        assert _validate_command("tar -cfTest.tar d")[0]
+
     def test_braced_and_arithmetic_expansion_rejected(self) -> None:
         # `${x:=word}` assigns, and an arithmetic context then evaluates the stored text:
         # bash runs the `\$(...)` that the quote scan took as literal.
@@ -482,6 +526,15 @@ class TestCommandValidation:
         assert not _validate_command("tar >/dev/null cIf curl a.tar d")[0]
         assert not _validate_command("tar 2>/dev/null cIf curl a.tar d")[0]
         assert not _validate_command("tar >/dev/null 2>&1 cIf curl a.tar d")[0]
+        # `>&` and `<&` are one operator, also with a space before the target.
+        assert not _validate_command("tar 2>& 1 cIf curl a.tar d")[0]
+        assert not _validate_command("tar <& 0 cIf curl a.tar d")[0]
+        assert not _validate_command("tar >& /dev/null cIf curl a.tar d")[0]
+        assert not _validate_command("tar 2>&1 cIf curl a.tar d")[0]
+        assert _validate_command("tar 2>& 1 xzf a.tar")[0]
+        assert _validate_command("tar >& /dev/null xf a.tar")[0]
+        assert _validate_command("tar -tf a.tar 'a&b' >&2")[0]
+        assert _validate_command("find /tmp -name x >&2")[0]
         assert _validate_command("find /tmp -name x 2>/dev/null")[0]
         assert _validate_command("find /tmp -name '>' -newer /tmp/x")[0]
         assert _validate_command("tar 2>/dev/null xzf a.tar")[0]
@@ -508,6 +561,10 @@ class TestCommandValidation:
             'find {tmp} -maxdepth 0 "-exec$none" touch {tmp}/marker \\;',
             "find {tmp} -maxdepth 0 -ex\\\nec touch {tmp}/marker \\;",
             "find {tmp} -maxdepth 0 -exec>/dev/null touch {tmp}/marker \\;",
+            "tar 2>& 1 cIf 'touch {tmp}/marker' {tmp}/a.tar -C {tmp} src",
+            "tar <& 0 cIf 'touch {tmp}/marker' {tmp}/a.tar -C {tmp} src",
+            "tar >& /dev/null cIf 'touch {tmp}/marker' {tmp}/a.tar -C {tmp} src",
+            "tar -cf /dev/null -T {tmp}/list",
             "find {tmp} -maxdepth 0 >|ls -exec touch {tmp}/marker \\;",
             "ls ${{x:=a[\\$(touch {tmp}/marker)]}} ${{y[x]}}",
             "ls ${{x:=a[\\$(touch {tmp}/marker)]}} $[x]",
@@ -517,8 +574,12 @@ class TestCommandValidation:
     )
     def test_end_to_end_bypass_does_not_run_another_program(self, tmp_path: Path, command: str) -> None:
         # `touch` is not on the allowlist; each command once ran it through execute_shell
-        # (the brace and arithmetic forms where /bin/sh is bash).
+        # (the brace and arithmetic forms where /bin/sh is bash, the `-T` form with GNU
+        # tar 1.26).
         (tmp_path / "src").write_text("x")
+        (tmp_path / "list").write_text(
+            f"--checkpoint=1\n--checkpoint-action=exec=touch {tmp_path}/marker\n{tmp_path}/src\n"
+        )
         # The working directory holds one entry, for the glob forms to match.
         (tmp_path / "cwd" / "-exec").mkdir(parents=True)
         with warnings.catch_warnings(), mock.patch.dict(os.environ, {"ATX_SHELL_ALLOW_PYTHON": "false"}):
@@ -562,6 +623,22 @@ class TestSanitizedEnv:
         ):
             env = _sanitized_env()
         assert env.get("PYTHONPATH") == "/opt/agent/site-packages"
+
+    def test_execute_shell_runs_the_command_with_the_sanitized_env(self) -> None:
+        parent = {
+            "PATH": os.environ.get("PATH", ""),
+            "AWS_PROFILE": "persona",
+            "AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            "AWS_CONTAINER_CREDENTIALS_FULL_URI": "http://127.0.0.1:9/creds",
+        }
+        command = (
+            "printf '%s|%s' \"$AWS_PROFILE$AWS_SECRET_ACCESS_KEY$AWS_CONTAINER_CREDENTIALS_FULL_URI\" "
+            '"$AWS_EC2_METADATA_DISABLED"'
+        )
+        with warnings.catch_warnings(), mock.patch.dict(os.environ, parent, clear=True):
+            warnings.simplefilter("ignore", FutureWarning)
+            result = execute_shell(command=command, working_directory="/tmp")
+        assert result == "|true\n[exit code: 0]"
 
     def test_no_ambient_credentials_in_subprocess(self, tmp_path):
         # Dummy credentials everywhere botocore looks without an env var (the shared

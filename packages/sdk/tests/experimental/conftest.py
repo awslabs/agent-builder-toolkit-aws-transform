@@ -24,6 +24,8 @@ class FakeSandbox:
         self.invoke_error: Optional[ClientError] = None  # raised by calls on a running session
         self.stop_error: Optional[Exception] = None
         self.ended_barrier: Optional[threading.Barrier] = None  # see FakeClient.invoke
+        self.call_gate: Optional[threading.Event] = None  # when set, calls wait for it
+        self.call_waiting = threading.Event()  # a call has reached the gate
         self.session_started = threading.Event()
         self._ids = itertools.count(1)
 
@@ -63,12 +65,16 @@ class FakeClient:
         if self.sandbox.stop_error:
             raise self.sandbox.stop_error
         self.sandbox.stopped.append(str(self.session_id))
+        self.sandbox.ended.add(str(self.session_id))
         return True
 
     def get_session(self) -> Dict[str, Any]:
         return {"status": "TERMINATED" if self.session_id in self.sandbox.ended else "READY"}
 
     def invoke(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        if self.sandbox.call_gate:
+            self.sandbox.call_waiting.set()
+            self.sandbox.call_gate.wait(timeout=5)
         if self.session_id in self.sandbox.ended:
             # With a barrier, parallel calls on the ended session meet here: one fails at
             # once, the rest only after a replacement session has started.
