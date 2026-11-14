@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the BaseOrchestrator class."""
 
+from contextvars import ContextVar
+from typing import Any
 from unittest import mock
 from unittest.mock import AsyncMock, Mock, create_autospec, patch
 
@@ -30,6 +32,8 @@ from agent_builder_sdk.orchestrator_strands.hooks.conversation_hook_provider imp
 from agent_builder_sdk.orchestrator_strands.hooks.memory_hook_provider import (
     MemoryHookProvider,
 )
+
+_caller_var: ContextVar[str] = ContextVar("caller_var", default="unset")
 
 
 @pytest.fixture(autouse=True)
@@ -266,6 +270,26 @@ def test_invoke_with_source_different_source_types(orchestrator):
             CURRENT_SOURCE_TYPE_KEY, MessageSourceType.NOTIFICATION
         )
         orchestrator.state.set.assert_any_call(CURRENT_SOURCE_ID_KEY, "SYSTEM")
+
+
+def test_invoke_with_source_runs_the_turn_in_the_callers_context(
+    orchestrator: BaseOrchestrator,
+) -> None:
+    orchestrator.state = Mock()
+    seen: list[str] = []
+
+    async def invoke(*args: Any, **kwargs: Any) -> Mock:
+        seen.append(_caller_var.get())
+        return Mock(message="Test response")
+
+    token = _caller_var.set("caller")
+    try:
+        with patch.object(orchestrator, "invoke_async", side_effect=invoke):
+            orchestrator.invoke_with_source("test message", "test-source", MessageSourceType.USER)
+    finally:
+        _caller_var.reset(token)
+
+    assert seen == ["caller"]
 
 
 async def test_invoke_with_source_async_enters_mcp_client_context(mock_model):
