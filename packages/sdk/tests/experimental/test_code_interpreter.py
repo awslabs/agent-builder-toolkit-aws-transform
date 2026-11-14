@@ -9,6 +9,8 @@ import subprocess
 import sys
 import textwrap
 import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from unittest.mock import AsyncMock, Mock, patch
@@ -312,3 +314,47 @@ class TestServerShutdown:
         assert "The code-interpreter sessions were not stopped within 0.05 seconds" in caplog.text
         # The interpreter waits at its exit for every thread that is not a daemon.
         assert [thread.daemon for thread in stop_threads] == [True]
+
+    def test_a_stop_that_returns_after_the_loop_closed_ends_without_an_error(self) -> None:
+        endpoint_answers = threading.Event()
+        stop_threads: List[threading.Thread] = []
+        thread_errors: List[Any] = []
+
+        def late_stop() -> None:
+            stop_threads.append(threading.current_thread())
+            endpoint_answers.wait(timeout=5)
+
+        with (
+            patch.object(code_interpreter_tool, "stop_all_sessions", late_stop),
+            patch("agent_builder_sdk.server.base_server._SESSION_STOP_TIMEOUT_SECONDS", 0.05),
+            patch.object(threading, "excepthook", thread_errors.append),
+        ):
+            asyncio.run(_agent_runtime_server()._cleanup())
+            endpoint_answers.set()
+            stop_threads[0].join(timeout=5)
+        assert not stop_threads[0].is_alive()
+        assert thread_errors == []
+
+    async def test_the_stop_wait_ends_at_its_limit_when_the_executor_is_busy(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # Blocking tool calls run on the default executor of the loop. With every worker
+        # busy, a wait that needs a worker would start only when one is free.
+        release = threading.Event()
+        loop = asyncio.get_running_loop()
+        loop.set_default_executor(ThreadPoolExecutor(max_workers=1))
+        tool_call = loop.run_in_executor(None, release.wait, 3)
+        try:
+            with (
+                patch.object(code_interpreter_tool, "stop_all_sessions", lambda: release.wait(3)),
+                patch("agent_builder_sdk.server.base_server._SESSION_STOP_TIMEOUT_SECONDS", 0.05),
+                caplog.at_level("WARNING"),
+            ):
+                start = time.monotonic()
+                await _agent_runtime_server()._cleanup()
+                waited = time.monotonic() - start
+        finally:
+            release.set()
+            await tool_call
+        assert waited < 1
+        assert "The code-interpreter sessions were not stopped within 0.05 seconds" in caplog.text
