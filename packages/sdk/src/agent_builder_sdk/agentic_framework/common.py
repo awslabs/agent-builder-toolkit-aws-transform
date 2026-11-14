@@ -52,7 +52,13 @@ _PRESIGNED_DOWNLOAD_TIMEOUT = (5, 60)
 
 # ConnectTimeout subclasses ConnectionError, but ReadTimeout does not, so catching only
 # ConnectionError would let the timeouts above escape as an unhandled ReadTimeout.
-_TRANSPORT_ERRORS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
+# ChunkedEncodingError subclasses neither: requests raises it when the connection drops
+# while the response body is read, whether or not the body is chunked.
+_TRANSPORT_ERRORS = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+)
 
 
 @dataclass
