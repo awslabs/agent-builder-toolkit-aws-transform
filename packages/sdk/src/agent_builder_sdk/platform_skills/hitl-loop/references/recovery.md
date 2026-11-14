@@ -33,8 +33,8 @@ than trusting a filter to do it.)
 ## You created a duplicate
 
 Do not ignore the extra one. Pick the task you will poll — prefer whichever the user has already
-touched (status `IN_PROGRESS`, or an answer artifact present) — and close the other with
-`closure_type="CANCELLED"`.
+touched (status `IN_PROGRESS` or `AWAITING_APPROVAL`, or an answer artifact present) — and close
+the other with `closure_type="CANCELLED"`.
 
 An abandoned BLOCKING task keeps its plan step marked pending-human-input forever: nothing in the
 platform retires that marker, and the task stays in the user's pending list indefinitely.

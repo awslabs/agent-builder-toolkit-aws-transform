@@ -7,8 +7,9 @@ Unit tests for agent factory functions.
 import json
 import logging
 import os
+import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from unittest import mock
 
 import pytest
@@ -986,6 +987,16 @@ def test_factory_keeps_its_positional_parameter_order(name):
     assert params[: len(_V1_POSITIONAL[name])] == _V1_POSITIONAL[name]
 
 
+def _agentic_service_shapes() -> dict[str, Any]:
+    import agent_builder_sdk
+
+    model_path = Path(agent_builder_sdk.__file__).parent.joinpath(
+        "botocore_models", "transformagenticservice", "2018-05-10", "service-2.json"
+    )
+    shapes: dict[str, Any] = json.loads(model_path.read_text(encoding="utf-8"))["shapes"]
+    return shapes
+
+
 class TestPlatformKnowledge:
     """enable_platform_skills loads the platform skills and appends the platform contract;
     with it off (the default for every 1.0 consumer) neither happens."""
@@ -1169,17 +1180,26 @@ class TestPlatformKnowledge:
         assert [name for name in sorted(_PLATFORM_CONTRACT_TOOL_NAMES) if name not in taught] == []
 
     def test_job_plan_skill_teaches_the_status_info_shape_of_the_service_model(self) -> None:
-        import agent_builder_sdk
-
-        model_path = Path(agent_builder_sdk.__file__).parent.joinpath(
-            "botocore_models", "transformagenticservice", "2018-05-10", "service-2.json"
-        )
-        shapes = json.loads(model_path.read_text(encoding="utf-8"))["shapes"]
+        shapes = _agentic_service_shapes()
         taught = (_PLATFORM_SKILLS_DIR / "job-plan" / "SKILL.md").read_text(encoding="utf-8")
 
         needed = [f'"{m}"' for m in shapes["StatusInfo"]["members"]]
         needed += [f'"{c}"' for c in shapes["FailureCategory"]["enum"]]
         assert [text for text in needed if text not in taught] == []
+
+    def test_hitl_loop_poll_table_has_a_row_for_every_task_status_of_the_service_model(
+        self,
+    ) -> None:
+        skill = (_PLATFORM_SKILLS_DIR / "hitl-loop" / "SKILL.md").read_text(encoding="utf-8")
+        table = skill.split("Branch on what you see:\n\n")[1].split("\n\n")[0]
+        do_by_status = {
+            status: row.split("|")[3]
+            for row in table.splitlines()[2:]
+            for status in re.findall(r"`([A-Z_]+)`", row.split("|")[1])
+        }
+
+        assert set(do_by_status) == set(_agentic_service_shapes()["HitlTaskStatus"]["enum"])
+        assert "keep waiting" in do_by_status["AWAITING_APPROVAL"]
 
     def test_packaged_platform_skills_load_strictly(self) -> None:
         names = {Skill.from_file(p, strict=True).name for p in _PLATFORM_SKILLS_DIR.glob("*/SKILL.md")}

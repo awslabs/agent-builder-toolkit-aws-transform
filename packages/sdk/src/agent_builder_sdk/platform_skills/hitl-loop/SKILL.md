@@ -67,7 +67,8 @@ End the loop when **the answer exists**: `humanArtifact.artifactId` is present, 
 `SUBMITTED` or `CLOSED`. Do not wait for the literal `SUBMITTED` — a `NON_BLOCKING` feedback task
 goes straight to `CLOSED` on submit, and a loop watching for `SUBMITTED` hangs forever on a task
 the user already answered. When you land on `CLOSED`, read the output and skip step 7; the
-platform already closed it.
+platform already closed it. A task that waits for an approver (`AWAITING_APPROVAL`) is not
+answered yet, even when an answer artifact is already present.
 
 Branch on what you see:
 
@@ -75,9 +76,12 @@ Branch on what you see:
 |---|---|---|
 | `CREATED` | start never landed | call `start_hitl_task` |
 | `AWAITING_HUMAN_INPUT` / `IN_PROGRESS` | healthy, waiting | keep waiting (check `action` — see rejection) |
+| `AWAITING_APPROVAL` / `WAITING_APPROVAL` | healthy, the user sent it and an approver has to confirm it | keep waiting and leave it open: never close or recreate it, do not read it yet |
 | `SUBMITTED` / answer artifact present | answered | read it |
 | `CLOSED` | answered and auto-closed | read it, do not close |
+| `CLOSED_PENDING_NEXT_TASK` | you closed it to chain a follow-up | poll the follow-up task |
 | `CANCELLED` | someone killed it | stop polling |
+| `DELIVERED` | a display-only (`DASHBOARD`) task was shown; no answer comes | stop polling |
 
 Nothing pushes a regular task to the user, so a task without the step-4 ask sits in a list
 nobody is looking at. When a later turn finds the task still waiting, repeat the ask in that
@@ -94,7 +98,8 @@ Before anything that changes customer resources or spends money, run exactly thi
    the helper defaults does not pause the job and does not mark the plan step: it is a suggestion,
    not a gate.
 3. Start it (the helpers already did).
-4. Ask and end the turn (protocol step 4 for `BLOCKING`). Once the answer exists, 5. read it,
+4. Ask and end the turn (protocol step 4 for `BLOCKING`). Say in the ask that an approver may
+   have to confirm the task after the user sends it. Once the answer exists, 5. read it,
    6. close with `closure_type="CLOSED"`.
 7. **Only then** perform the mutation.
 
@@ -106,7 +111,8 @@ record. A chat "yes go ahead" is not an approval: it leaves no record the platfo
 
 `IN_PROGRESS` is ambiguous — a rejected task and a freshly started chained task both sit there.
 Read the task's **`action`** field on every poll: `REJECT` is a rejection, `APPROVE` is a
-submission. Treat `SUBMITTED` → `IN_PROGRESS` as "rework requested".
+submission. Treat a task that goes back to `IN_PROGRESS` from `AWAITING_APPROVAL` or `SUBMITTED`
+as "rework requested".
 
 On rejection, reuse the SAME task: end the turn with a final message that acknowledges it and
 asks what needs to change, and check the same `hitl_task_id` again in the turns that follow. Do
