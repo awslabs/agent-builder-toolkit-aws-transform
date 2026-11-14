@@ -6,11 +6,12 @@ Agent factory functions for creating orchestrator instances.
 
 import logging
 import os
-from typing import Any, Optional, Set, TypeVar, Union
+from typing import Any, Iterable, Optional, Set, TypeVar, Union
 
 from botocore.config import Config as BotocoreConfig
 from strands.hooks import HookProvider
 from strands.models.model import Model
+from strands.plugins import Plugin
 from strands.tools.mcp.mcp_client import MCPClient
 
 from agent_builder_sdk.base_subagent.base_subagent import AsyncBaseSubagent, BaseSubagent
@@ -70,7 +71,16 @@ def _create_default_orchestrator(
     locale: Optional[str] = None,
     conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
     memory_manager: Optional[MemoryManager] = None,
+    plugins: Optional[Iterable[Plugin]] = None,
+    excluded_tool_names: Optional[Set[str]] = None,
 ) -> OrchestratorT:
+    caller_plugins = list(plugins or ())
+    for plugin in caller_plugins:
+        if not isinstance(plugin, Plugin):
+            raise TypeError(f"plugins must contain strands Plugin instances, got {plugin!r}")
+    if isinstance(excluded_tool_names, str):
+        raise TypeError(f"excluded_tool_names must be a set of tool names, got the str {excluded_tool_names!r}")
+
     logger.info("Creating default orchestrator with full feature set")
 
     custom_tools: list[Any] = []
@@ -101,13 +111,14 @@ def _create_default_orchestrator(
         custom_tools.append(send_message_tools.send_message_to_subagent)
 
     # Build skills plugin if enabled
-    skills_plugin = None
+    agent_plugins: list[Plugin] = []
     if enable_skills:
         from strands.vended_plugins.skills import AgentSkills
 
         skills_source = skills_dir or os.environ.get("STRANDS_SKILLS_DIR") or "./skills"
-        skills_plugin = AgentSkills(skills=[skills_source])
+        agent_plugins.append(AgentSkills(skills=[skills_source]))
         logger.info("Created AgentSkills plugin for orchestrator")
+    agent_plugins.extend(caller_plugins)
 
     # Add experimental code execution tool if enabled
     if enable_code_execution:
@@ -155,9 +166,10 @@ def _create_default_orchestrator(
         model=model,
         boto_client_config=boto_client_config,
         trace_attributes=trace_attributes,
+        excluded_tool_names=excluded_tool_names,
         excluded_mcp_tool_names=excluded_mcp_tool_names,
         metrics_config=metrics_config,
-        plugins=[skills_plugin] if skills_plugin else None,
+        plugins=agent_plugins or None,
         locale=locale,
         enable_prompt_caching=enable_prompt_caching,
     )
@@ -240,6 +252,8 @@ def create_default_async_orchestrator(
     conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
     memory_manager: Optional[MemoryManager] = None,
     boto_client_config: Optional[BotocoreConfig] = None,
+    plugins: Optional[Iterable[Plugin]] = None,
+    excluded_tool_names: Optional[Set[str]] = None,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support.
 
@@ -257,6 +271,12 @@ def create_default_async_orchestrator(
         model_id: Optional model ID for Bedrock inference
         model: Optional Strands Model instance or model ID string (takes precedence over model_id)
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        plugins: Strands plugins to attach to the agent, in the given order. Raises TypeError
+            when an element is not a strands Plugin instance. A plugin tool replaces a factory,
+            custom or MCP tool of the same name without an error.
+        excluded_tool_names: Names of tools to leave off the agent. Applies to the factory's own
+            tools (for example "memory"), custom_tools and MCP tools. Tools that a plugin
+            registers are not filtered. Raises TypeError for a bare str.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
@@ -279,6 +299,8 @@ def create_default_async_orchestrator(
         locale=locale,
         conversation_repository=conversation_repository,
         memory_manager=memory_manager,
+        plugins=plugins,
+        excluded_tool_names=excluded_tool_names,
     )
 
 
@@ -362,6 +384,8 @@ def create_default_async_orchestrator_with_subagent(
     enable_blank_reply_continuation: bool = False,
     enable_prompt_caching: bool = False,
     boto_client_config: Optional[BotocoreConfig] = None,
+    plugins: Optional[Iterable[Plugin]] = None,
+    excluded_tool_names: Optional[Set[str]] = None,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.
 
@@ -397,6 +421,17 @@ def create_default_async_orchestrator_with_subagent(
             empty right after tool results (see BlankReplyHookProvider).
         enable_prompt_caching: Turn on Bedrock prompt caching for the orchestrator's model (see
             AsyncBaseOrchestrator). Off by default.
+        plugins: Strands plugins to attach to the agent, in the given order, after the
+            AgentSkills plugin that enable_skills adds. Raises TypeError when an element is not
+            a strands Plugin instance. Strands rejects two plugins with the same name, so do not
+            pass an AgentSkills plugin together with enable_skills=True. A plugin tool replaces a
+            factory, custom or MCP tool of the same name without an error.
+        excluded_tool_names: Names of tools to leave off the agent. Applies to the factory's own
+            tools (for example "discover_subagents"), custom_tools and MCP tools, where
+            excluded_mcp_tool_names applies to MCP tools only; an MCP tool named in either set
+            is left off. Tools that a plugin registers are not filtered; that includes the
+            "skills" tool, which the AgentSkills plugin of enable_skills registers. Raises TypeError
+            for a bare str.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
@@ -436,6 +471,8 @@ def create_default_async_orchestrator_with_subagent(
         locale=locale,
         conversation_repository=conversation_repository,
         memory_manager=memory_manager,
+        plugins=plugins,
+        excluded_tool_names=excluded_tool_names,
     )
 
 
