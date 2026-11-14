@@ -184,6 +184,39 @@ The `simple_cli_agent_core.py` entry point exposes the same option as `--concurr
 
 **History repair**: when a turn is interrupted (timeout, client disconnect, crash), the next history load gives the unanswered message a placeholder reply, so the next turn answers its own prompt. A turn ended by a terminating tool (`stop_event_loop`) stores its `force_stop_response` as the reply.
 
+## Reading image files (opt-in)
+
+`image_reader` lets the model look at an image file in the agent's workspace (a screenshot, a diagram, a chart). `ImageBlockGuardHook` keeps the image blocks that any tool returns within the Bedrock Converse limits. Neither is on by default:
+
+```python
+from agent_builder_sdk.agent_factory import create_default_orchestrator
+from agent_builder_sdk.orchestrator_strands.hooks.image_block_guard import ImageBlockGuardHook
+from agent_builder_sdk.orchestrator_strands.tools import image_reader
+
+
+def agent_factory(mcp_client):
+    orchestrator = create_default_orchestrator(
+        mcp_client=mcp_client,
+        system_prompt="Your custom system prompt here",
+        custom_tools=[image_reader],
+    )
+    orchestrator.hooks.add_hook(ImageBlockGuardHook())
+    return orchestrator
+```
+
+A class built on `BaseOrchestrator` or `BaseSubagent` takes the same two objects as `custom_tools=[image_reader]` and `hooks=[ImageBlockGuardHook()]`.
+
+| Piece | What it does | Limits |
+|---|---|---|
+| `image_reader` | Returns the image at the path the model gives as one image block. An image over 3.75 MB or 1568 px per side is downscaled and re-encoded first. | Reads any regular file of at most 20 MiB that the agent process can read (`~` is expanded, symbolic links are followed). Accepts PNG, JPEG, GIF, WebP, BMP, TIFF, ICO and PPM. Any other file gives the model an error message, never the file content. |
+| `ImageBlockGuardHook` | Applies the same limits to the image blocks of every tool result (an MCP tool, your own tool): corrects a wrong declared format, downscales an oversized image, and replaces an unreadable one with a text note. | Checks blocks with a `bytes` source only. A re-encoded animation keeps its first frame only. |
+
+**Why the hook**: Converse rejects a request that holds an image over 3.75 MB or one whose bytes do not match its declared format. The tool result stays in history, so one such image fails every later turn of the job.
+
+**Replaces the Strands tool**: `strands-agents-tools` 0.9.0 removed its `image_reader`; this one keeps the tool name and input schema.
+
+**Module-style tools**: a Strands tool defined as a module with `TOOL_SPEC`, such as `image_reader`, can be passed in `custom_tools` and named in `excluded_tool_names`.
+
 ## Requirements
 
 - Python 3.11+

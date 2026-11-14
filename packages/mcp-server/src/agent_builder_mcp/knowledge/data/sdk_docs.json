@@ -3509,6 +3509,23 @@
     "signature": "register_hooks(registry: HookRegistry, **kwargs: Any) -> None"
   },
   {
+    "name": "ImageBlockGuardHook",
+    "kind": "class",
+    "file": "agent_builder_sdk/orchestrator_strands/hooks/image_block_guard.py",
+    "module": "agent_builder_sdk.orchestrator_strands.hooks.image_block_guard",
+    "docstring": "Keep the image blocks of tool results within the Bedrock Converse limits.\n\nConverse rejects a request that holds an image over 3.75 MB or an image whose bytes do not\nmatch its declared format. The tool result stays in history, so one such image fails every\nlater model call of the conversation. After each tool call this hook:\n\n- leaves a valid png, jpeg, gif or webp block of at most 3.75 MB and 1568 px per side as is;\n- corrects a wrong declared format;\n- downscales and re-encodes any other image (first frame only; png when it has\n  transparency, jpeg otherwise);\n- replaces an image that cannot be read or made to fit with a text block that names the\n  reason, so the model knows an image was there.\n\nOnly blocks with a ``bytes`` source are checked. Other blocks keep their place and content.",
+    "signature": "ImageBlockGuardHook()",
+    "description": "Extends: HookProvider\n\nMethods:\n  register_hooks(registry: HookRegistry, **kwargs: Any) -> None"
+  },
+  {
+    "name": "ImageBlockGuardHook.register_hooks",
+    "kind": "method",
+    "file": "agent_builder_sdk/orchestrator_strands/hooks/image_block_guard.py",
+    "module": "agent_builder_sdk.orchestrator_strands.hooks.image_block_guard",
+    "docstring": "",
+    "signature": "register_hooks(registry: HookRegistry, **kwargs: Any) -> None"
+  },
+  {
     "name": "MemoryHookProvider",
     "kind": "class",
     "file": "agent_builder_sdk/orchestrator_strands/hooks/memory_hook_provider.py",
@@ -3559,6 +3576,15 @@
     "docstring": "Conduct research on a topic.\n\nPerforms comprehensive research on the specified topic, including gathering sources,\nanalyzing findings, cross-referencing data, and synthesizing insights. Progress updates\nare sent during the research process.\n\nArgs:\n    topic: The research topic to investigate\n\nReturns:\n    Confirmation that research has started",
     "signature": "async research_topic(topic: str, tool_context: ToolContext) -> str",
     "description": "Parameters:\n  topic: str (required) - The research topic to investigate\n  tool_context: ToolContext (required)"
+  },
+  {
+    "name": "image_reader",
+    "kind": "function",
+    "file": "agent_builder_sdk/orchestrator_strands/tools/image_reader.py",
+    "module": "agent_builder_sdk.orchestrator_strands.tools.image_reader",
+    "docstring": "Return the image at ``tool[\"input\"][\"image_path\"]`` as one Converse image block.\n\nThe path may be any file the agent process can read: ``~`` is expanded, a relative path\nis resolved against the working directory, and symbolic links are followed. The file must\nbe a regular file of at most MAX_IMAGE_FILE_BYTES that holds a PNG, JPEG, GIF, WebP, BMP,\nTIFF, ICO or PPM image. An image over the Converse limits is downscaled and re-encoded.\nFile content is returned only as an image; every failure is an ``error`` result with a\nmessage for the model, never an exception.",
+    "signature": "image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult",
+    "description": "Parameters:\n  tool: ToolUse (required)"
   },
   {
     "name": "MemoryTool",
@@ -4815,6 +4841,24 @@
     "signature": "build() -> str"
   },
   {
+    "name": "ImageConversionError",
+    "kind": "class",
+    "file": "agent_builder_sdk/util/converse_image.py",
+    "module": "agent_builder_sdk.util.converse_image",
+    "docstring": "The bytes are not an image that can be brought within the Converse limits.",
+    "signature": "ImageConversionError()",
+    "description": "Extends: ValueError"
+  },
+  {
+    "name": "submit_conversion",
+    "kind": "function",
+    "file": "agent_builder_sdk/util/converse_image.py",
+    "module": "agent_builder_sdk.util.converse_image",
+    "docstring": "Start the conversion of ``raw`` to image bytes and a format that Converse accepts.\n\nThe result is ``raw`` itself, with its real format, when it is a complete png, jpeg, gif or\nwebp of at most MAX_IMAGE_BYTES and MAX_EDGE px per side. Any other image is decoded (first\nframe only), downscaled until it fits and encoded again: png when it has transparency, jpeg\notherwise.\n\nAt most two conversions run at a time; the others wait in a queue. The future raises\nImageConversionError when the bytes are not a readable image of a supported format, when a\ndecode would exceed MAX_DECODE_PIXELS, or when the image is still over MAX_IMAGE_BYTES at\nMIN_EDGE px.",
+    "signature": "submit_conversion(raw: bytes) -> Future[tuple[bytes, ImageFormat]]",
+    "description": "Parameters:\n  raw: bytes (required)"
+  },
+  {
     "name": "experimental",
     "kind": "function",
     "file": "agent_builder_sdk/util/decorators.py",
@@ -4982,9 +5026,9 @@
     "kind": "function",
     "file": "agent_builder_sdk/utils.py",
     "module": "agent_builder_sdk.utils",
-    "docstring": "Combine tools from MCP clients with custom tools, with optional filtering.\n\nArgs:\n    mcp_clients: List of MCP clients to get tools from\n    custom_tools: List of custom tools to include\n    excluded_tool_names: Set of tool names to exclude\n\nReturns:\n    Combined list of tools with duplicates checked and exclusions applied\n\nRaises:\n    ValueError: If duplicate tool names are found",
+    "docstring": "Combine tools from MCP clients with custom tools, with optional filtering.\n\nArgs:\n    mcp_clients: List of MCP clients to get tools from\n    custom_tools: List of custom tools to include: ``@tool`` functions, ``AgentTool``\n        objects or module-style tools\n    excluded_tool_names: Set of tool names to exclude\n\nReturns:\n    Combined list of tools with duplicates checked and exclusions applied\n\nRaises:\n    ValueError: If duplicate tool names are found",
     "signature": "combine_tools(mcp_clients: Optional[List[Any]] = None, custom_tools: Optional[List[Any]] = None, excluded_tool_names: Optional[Set[str]] = None, excluded_mcp_tool_names: Optional[Set[str]] = None) -> Optional[List[Any]]",
-    "description": "Parameters:\n  mcp_clients: Optional[List[Any]] (default=None) - List of MCP clients to get tools from\n  custom_tools: Optional[List[Any]] (default=None) - List of custom tools to include\n  excluded_tool_names: Optional[Set[str]] (default=None) - Set of tool names to exclude\n  excluded_mcp_tool_names: Optional[Set[str]] (default=None)"
+    "description": "Parameters:\n  mcp_clients: Optional[List[Any]] (default=None) - List of MCP clients to get tools from\n  custom_tools: Optional[List[Any]] (default=None) - List of custom tools to include: ``@tool`` functions, ``AgentTool`` objects or module-style tools\n  excluded_tool_names: Optional[Set[str]] (default=None) - Set of tool names to exclude\n  excluded_mcp_tool_names: Optional[Set[str]] (default=None)"
   },
   {
     "name": "convert_queue_response_to_send_message_output",
