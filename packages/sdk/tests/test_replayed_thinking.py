@@ -316,12 +316,20 @@ def test_model_call_without_an_overflow_keeps_thinking(exception: Exception | No
     ("config", "kept"),
     [
         ({"additional_request_fields": _MANUAL_THINKING}, True),
+        ({"params": _MANUAL_THINKING}, True),
         ({"additional_request_fields": {"thinking": {"type": "adaptive"}}}, False),
         ({"additional_request_fields": None}, False),
         ({}, False),
         (None, False),
     ],
-    ids=["manual", "adaptive", "no-request-fields", "no-thinking-setting", "config-not-a-mapping"],
+    ids=[
+        "manual-in-request-fields",
+        "manual-in-params",
+        "adaptive",
+        "no-request-fields",
+        "no-thinking-setting",
+        "config-not-a-mapping",
+    ],
 )
 def test_overflow_strip_spares_only_manual_thinking(config: Any, kept: bool) -> None:
     agent = _agent([_tool_call()], config)

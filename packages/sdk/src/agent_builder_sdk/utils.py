@@ -292,12 +292,14 @@ class _StripReplayedThinking(HookProvider):
 
     Thinking produced during an invocation otherwise stays in place for its own tool loop.
 
-    A Bedrock model set to manual extended thinking (``thinking`` of type ``enabled`` in
-    ``additional_request_fields``) is never stripped: the mode requires the tool call in
-    progress to start with its thinking block, also when the invocation resumes that call after
-    an interrupt, and the models that accept it (Claude 4.6 and earlier) do not bind thinking to
-    the prefix. This follows the published API rules and was not checked against a live model.
-    A thinking setting in another provider's config is not read, so that model is stripped.
+    A model set to manual extended thinking (``thinking`` of type ``enabled`` in the Bedrock
+    provider's ``additional_request_fields`` or in the Anthropic provider's ``params``) is never
+    stripped: the mode requires the tool call in progress to start with its thinking block, also
+    when the invocation resumes that call after an interrupt, and the models that accept it
+    (Claude 4.6 and earlier) do not bind thinking to the prefix. This follows the published API
+    rules and was not checked against a live model. A manual-mode setting under any other config
+    key is not read: that model is stripped, and its overflow retry or resumed tool call is then
+    rejected.
     """
 
     def __init__(self) -> None:
@@ -342,11 +344,22 @@ class _StripReplayedThinking(HookProvider):
 
 
 def _uses_manual_thinking(model: Model) -> bool:
-    """Whether a Bedrock model's config asks for extended thinking with a fixed token budget."""
+    """Whether a model's config asks for extended thinking with a fixed token budget.
+
+    Reads ``thinking`` under ``additional_request_fields`` (Bedrock provider) and under
+    ``params`` (Anthropic provider). The LiteLLM provider keeps the setting under ``params``
+    too and so matches, but Strands sends no reasoning blocks back through it: the strip does
+    not change its requests.
+    """
     config = model.get_config()
-    fields = config.get("additional_request_fields") if isinstance(config, Mapping) else None
-    thinking = fields.get("thinking") if isinstance(fields, Mapping) else None
-    return isinstance(thinking, Mapping) and thinking.get("type") == "enabled"
+    if not isinstance(config, Mapping):
+        return False
+    for key in ("additional_request_fields", "params"):
+        fields = config.get(key)
+        thinking = fields.get("thinking") if isinstance(fields, Mapping) else None
+        if isinstance(thinking, Mapping) and thinking.get("type") == "enabled":
+            return True
+    return False
 
 
 def describe_agent_result(result: Any) -> str:
