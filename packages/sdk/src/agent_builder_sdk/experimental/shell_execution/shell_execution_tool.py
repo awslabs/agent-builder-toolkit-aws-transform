@@ -1,41 +1,71 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Command-allowlisted shell execution tool.
+"""Command-allowlisted execution tool.
 
 Lets the agent run inspection commands (ls, cat, find, grep, ...) and, when
 ``ATX_SHELL_ALLOW_PYTHON`` is not "false", ``python``/``python3`` — the latter is
 what skill scripts are launched with.
 
+This is not a shell, and no shell reads the command. The tool reads it in the grammar
+below and starts each program itself with the argument list it read:
+
+    command      = stage { "|" stage }
+    stage        = ( word | redirection ) { word | redirection }
+    redirection  = "2>&1" | ">/dev/null" | "1>/dev/null" | "2>/dev/null"
+
+- Words are separated by spaces and tabs. A word is made of plain characters,
+  'single-quoted' text (every character literal), "double-quoted" text (a backslash
+  makes ``"``, ``\\``, ``$`` and a backtick literal) and backslash escapes (the next
+  character is literal).
+- An unquoted ``*``, ``?`` or ``[`` makes the word a file-name pattern. It is replaced
+  by the sorted matches of Python's ``glob`` in the working directory, or left as
+  written when nothing matches. There is no other expansion.
+- ``|`` connects the stdout of a stage to the stdin of the next with an OS pipe. The
+  exit code is that of the last stage.
+- A redirection is a word of its own (``> /dev/null`` with a space is read too) and is
+  not an argument. Redirections apply in the order written.
+- The first word of a stage, after pattern expansion, is the program: a name on the
+  allowlist, without a path. Its file is looked up in the absolute directories of the
+  sanitized PATH.
+- Everything else that a shell would act on is rejected, not run: ``;``, ``&``, ``&&``,
+  ``||``, every other redirection, ``$`` and backticks outside single quotes,
+  parentheses, ``{``, a leading ``~`` or ``#``, an assignment in front of a program, a
+  line break outside quotes and a backslash at the end of a line.
+
 AgentCore provides container-level isolation (each agent runs in its own
 container), so filesystem sandboxing is handled at the infrastructure layer.
 This tool adds application-level defense-in-depth:
 
-1. Command allowlist — only known-safe commands are permitted
+1. Command allowlist — only known-safe commands are permitted, and the options of
+   find, tar, sort and rg that run another program are rejected. The option check
+   reads the argument list the program gets, after pattern expansion.
 2. Sanitized environment — only safe env vars passed to subprocess. No credential
    vars are passed (AWS_PROFILE and the AWS_CONTAINER_CREDENTIALS_* URIs are all
    dropped), and the shared credential/config files and the instance metadata
    endpoint are switched off, so a subprocess boto3 client has no ambient credential
    chain and must use connector-vended temporary credentials instead.
-3. Timeout + output limits — a command is killed, with its process group, after its
-   timeout (30 seconds by default, 120 at most). At most 20 KB of stdout and 10 KB of
-   stderr are kept, in the agent's memory as well as in the result: the rest is read and
-   dropped, so a high-volume command cannot grow the agent process.
+3. Timeout + output limits — a command is killed, with the process group of every
+   stage, after its timeout (30 seconds by default, 120 at most). At most 20 KB of
+   stdout and 10 KB of stderr are kept, in the agent's memory as well as in the result:
+   the rest is read and dropped, so a high-volume command cannot grow the agent process.
 
 The allowlist is not a sandbox. awk, sed and python start other programs from their
-own scripts by design, a command given with a path is matched by its basename only,
-and the validator is a set of rules, not a shell parser. Treat the tool as able to run
-any program the container user can run; the container is the security boundary.
+own scripts by design. Treat the tool as able to run any program the container user
+can run; the container is the security boundary.
 """
 
+import contextlib
+import glob
+import itertools
 import logging
 import os
 import re
-import shlex
+import shutil
 import signal
 import subprocess
 import threading
 import time
-from typing import IO, FrozenSet, List, Optional, Sequence, Tuple
+from typing import IO, Dict, FrozenSet, List, NamedTuple, Optional, Sequence, Tuple
 
 from strands.tools import tool
 
@@ -58,8 +88,11 @@ _MAX_STDOUT_BYTES = 20 * 1024  # 20 KB
 _MAX_STDERR_BYTES = 10 * 1024  # 10 KB
 _READ_CHUNK_BYTES = 64 * 1024
 
-# After a timeout kill, how long to wait for the process and its output to end.
+# After a timeout kill, how long to wait for the processes and their output to end.
 _REAP_SECONDS = 5
+
+# Most file names one pattern may expand to. The matches are held in the agent's memory.
+_MAX_PATTERN_MATCHES = 10_000
 
 # Only these environment variables are passed to subprocesses. No credential vars
 # are included: AWS_PROFILE and the AWS_CONTAINER_CREDENTIALS_* / AWS_WEB_IDENTITY_*
@@ -228,90 +261,180 @@ class _CappedReader(threading.Thread):
                 self.kept += chunk[: self._limit - len(self.kept)]
 
 
-def _finished(proc: "subprocess.Popen[bytes]", readers: Sequence[_CappedReader], seconds: float) -> bool:
-    """Wait up to ``seconds`` for the output to end and the process to exit; False if either did not."""
+def _finished(
+    procs: Sequence["subprocess.Popen[bytes]"], readers: Sequence[_CappedReader], seconds: float
+) -> bool:
+    """Wait up to ``seconds`` for the output to end and every process to exit; False if either did not."""
     deadline = time.monotonic() + seconds
     for reader in readers:
         reader.join(max(0.0, deadline - time.monotonic()))
     try:
-        proc.wait(max(0.0, deadline - time.monotonic()))
+        for proc in procs:
+            proc.wait(max(0.0, deadline - time.monotonic()))
     except subprocess.TimeoutExpired:
         return False
     return not any(reader.is_alive() for reader in readers)
 
 
-def _split_on_unquoted_separators(command: str) -> list:
-    """Split on ``|`` and newlines that are not inside single or double quotes."""
-    stages: list = [""]
-    quote: str = ""  # current quote char, or empty
+def _kill(procs: Sequence["subprocess.Popen[bytes]"]) -> None:
+    """SIGKILL the process group of every stage, so that no descendant outlives the command."""
+    for proc in procs:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            # The stage and its descendants ended on their own.
+            pass
+
+
+class _Rejected(Exception):
+    """The command is outside the grammar, the allowlist or the option rules."""
+
+    def __init__(self, message: str, reason: str) -> None:
+        super().__init__(message)
+        self.message = message  # for the model; may quote the command
+        self.reason = reason  # a fixed category, safe to log
+
+
+class _Word(NamedTuple):
+    text: str  # quotes and escapes removed
+    pattern: Optional[str]  # set when the word has an unquoted *, ? or [; quoted ones are escaped in it
+
+
+# (2, 1) is 2>&1; (1, None) and (2, None) send stdout and stderr to /dev/null.
+_Redirection = Tuple[int, Optional[int]]
+
+
+class _Stage(NamedTuple):
+    argv: List[str]
+    redirections: List[_Redirection]
+
+
+_REDIRECTION = re.compile(r"(?:2>&1|([12]?)>[ \t]*/dev/null)(?=[ \t|]|\Z)")
+
+# Unquoted characters that a shell acts on and this tool does not; `$` and the backtick
+# also inside double quotes. The text names the form in the error message.
+_UNSUPPORTED = {
+    ";": "';' between commands",
+    "&": "'&' (a background command, '&&', '&>')",
+    "(": "a parenthesis (a subshell, a process substitution)",
+    ")": "a parenthesis (a subshell, a process substitution)",
+    "<": "'<' (input from a file, a here-document)",
+    ">": "a redirection other than 2>&1, >/dev/null and 2>/dev/null (each a word of its own)",
+    "$": "'$' outside single quotes (a variable, $(...), ${...}, $((...)), $'...')",
+    "`": "a backtick outside single quotes (command substitution)",
+    "{": "an unquoted '{' (brace expansion)",
+    "\n": "a line break outside quotes",
+    "\r": "a line break outside quotes",
+}
+
+_SYNTAX = (
+    "execute_shell is not a shell. It runs allowlisted programs joined by pipes (|). The only "
+    "other syntax is 'single quotes', \"double quotes\", backslash escapes, the file-name "
+    "patterns *, ? and [...], and the redirections 2>&1, >/dev/null and 2>/dev/null."
+)
+
+
+def _unsupported(form: str) -> _Rejected:
+    return _Rejected(f"Error: {form} is not supported. {_SYNTAX}", "unsupported shell syntax")
+
+
+def _split_stages(command: str) -> List[Tuple[List[_Word], List[_Redirection]]]:
+    """Read ``command`` in the grammar of the module docstring: the words and redirections of each stage.
+
+    Raises:
+        _Rejected: The command has a form that is not in the grammar.
+    """
+    stages: List[Tuple[List[_Word], List[_Redirection]]] = [([], [])]
+    text: List[str] = []
+    pattern: List[str] = []
+    in_word = is_pattern = False
+    quote = ""
+
+    def end_word() -> None:
+        nonlocal in_word, is_pattern
+        if in_word:
+            stages[-1][0].append(_Word("".join(text), "".join(pattern) if is_pattern else None))
+        text.clear()
+        pattern.clear()
+        in_word = is_pattern = False
+
     i = 0
     while i < len(command):
-        ch = command[i]
-        if ch == "\\" and quote != "'" and i + 1 < len(command):
-            stages[-1] += ch + command[i + 1]
-            i += 2
-        elif ch in ("'", '"') and (not quote or quote == ch):
-            quote = "" if quote else ch
-            stages[-1] += ch
+        ch, following = command[i], command[i + 1 : i + 2]
+        i += 1
+        literal = ""
+        if ch == quote:
+            quote = ""
+        elif quote == "'" or (quote and ch not in "\\$`"):
+            literal = ch
+        elif ch == "\\" and (not quote or following in ('"', "\\", "$", "`", "\n")):
+            if not following:
+                raise _Rejected("Error: The command ends with a backslash.", "unterminated quote or escape")
+            if following == "\n":
+                raise _unsupported("a backslash at the end of a line")
+            literal = following
             i += 1
-        elif ch in ("|", "\n", "\r") and not quote:
-            stages.append("")
-            i += 1
+        elif ch == "\\":
+            literal = ch  # inside double quotes, in front of any other character
+        elif quote:
+            raise _unsupported(_UNSUPPORTED[ch])
+        elif ch in ("'", '"'):
+            quote = ch
+            in_word = True  # '' is a word: an empty argument
+        elif ch in " \t":
+            end_word()
+        elif ch == "|":
+            if following in ("|", "&"):
+                raise _unsupported(f"'|{following}'")
+            end_word()
+            stages.append(([], []))
+        elif not in_word and (redirection := _REDIRECTION.match(command, i - 1)):
+            stages[-1][1].append((2, 1) if redirection[1] is None else (int(redirection[1] or 1), None))
+            i = redirection.end()
+        elif ch in _UNSUPPORTED:
+            raise _unsupported(_UNSUPPORTED[ch])
+        elif ch in "#~" and not in_word:
+            raise _unsupported("a word that starts with '#' (a comment) or '~' (a home directory)")
+        elif ch in "*?[":
+            in_word = is_pattern = True
+            text.append(ch)
+            pattern.append(ch)
         else:
-            stages[-1] += ch
-            i += 1
+            literal = ch
+        if literal:
+            in_word = True
+            text.append(literal)
+            pattern.append(glob.escape(literal))
+    if quote:
+        raise _Rejected("Error: The command has an unterminated quote.", "unterminated quote or escape")
+    end_word()
+    if not all(words for words, _ in stages):
+        raise _Rejected(
+            "Error: A program name is missing: the command, or one side of a pipe (|), is empty.",
+            "empty pipeline stage",
+        )
     return stages
 
 
-def _mask_quoted(command: str) -> str:
-    """Blank out characters the shell treats as literal, for the operator check.
+def _expand(word: _Word, cwd: str) -> List[str]:
+    """The sorted file names that match the word's pattern; the word itself without a pattern or a match."""
+    if word.pattern is None:
+        return [word.text]
+    matches = list(itertools.islice(glob.iglob(word.pattern, root_dir=cwd), _MAX_PATTERN_MATCHES + 1))
+    if len(matches) > _MAX_PATTERN_MATCHES:
+        raise _Rejected(
+            f"Error: A file-name pattern matches more than {_MAX_PATTERN_MATCHES} names. Narrow the pattern.",
+            "pattern with too many matches",
+        )
+    return sorted(matches) or [word.text]
 
-    Single-quoted content and backslash-escaped characters are fully literal —
-    blanked. Inside double quotes ``$`` and backticks STAY ACTIVE (command
-    substitution still runs there in a real shell), so those are preserved,
-    along with parens so the ``$(`` pattern survives; everything else quoted
-    is blanked. An unquoted newline stays unmasked so the operator scan catches
-    it as a command separator; a quoted newline is literal content and is
-    blanked like any other quoted character. The quote that opens ``$'...'`` or
-    ``$"..."`` also stays, and so does a ``{`` or ``[`` that follows ``$`` inside
-    double quotes, so the operator scan can reject those forms. The newline of a
-    backslash-newline pair stays as well: the shell removes the pair and joins the
-    words around it, also inside double quotes.
-    """
-    out: list = []
-    quote: str = ""
-    i = 0
-    while i < len(command):
-        ch = command[i]
-        if ch == "\\" and quote != "'" and i + 1 < len(command):
-            out.append(" \n" if command[i + 1] == "\n" else "  ")
-            i += 2
-            continue
-        if ch in ("'", '"') and (not quote or quote == ch):
-            out.append(ch if not quote and out[-1:] == ["$"] else " ")
-            quote = "" if quote else ch
-        elif quote == "'":
-            out.append(" ")
-        elif quote == '"':
-            out.append(ch if ch in "$`()" or (ch in "{[" and out[-1:] == ["$"]) else " ")
-        else:
-            out.append(ch)
-        i += 1
-    return "".join(out)
-
-
-# What may stand in command position: a bare name or path. Any other first word is
-# either not the command (after a redirection such as `2>/tmp/ls` or an assignment
-# such as `X=/ls` the shell runs the NEXT word, and an assignment also sets a variable
-# the sanitized environment left out) or a word the shell rewrites before it runs it.
-_COMMAND_WORD = re.compile(r"[\w./+-]+|\[")
 
 # Options of otherwise-useful, allowlisted commands that run the program named in
 # their argument: find's exec primaries, tar's compressor, volume-script, remote-shell,
 # checkpoint and per-member hooks, sort's temp-file compressor, and ripgrep's
 # preprocessor and hostname helper. tar's -T / --files-from is listed with them: older
-# GNU tar (1.26, for one) reads options, these included, from the list file, which
-# `printf > file` can write.
+# GNU tar (1.26, for one) reads options, these included, from the list file, which a
+# command of the allowlist can write.
 _EXEC_OPTIONS = {
     "find": ("-exec", "-execdir", "-ok", "-okdir"),
     "tar": (
@@ -336,45 +459,6 @@ _EXEC_OPTIONS = {
 # name attached to `-f` (`-cfInput.tar`) is not read as the `-I` option.
 _TAR_EXEC_SHORT_OPTION = re.compile(r"-[^-fC]*[IFT]")
 
-# The option check reads the words as typed, so for the commands in _EXEC_OPTIONS the
-# shell must hand them over unchanged. These characters, on the quote-masked stage, mark
-# a word the shell rewrites first: `$` (also inside double quotes; `-exec$none` becomes
-# `-exec`), a glob (`-exe[c]` or `*` matches a file named `-exec`) or a brace expansion
-# (`{-exec,}`).
-_SHELL_EXPANSION = re.compile(r"[$*?\[{]")
-
-_REDIRECTION_OPERATOR = re.compile(r"[<>&]+")
-
-
-def _split_words(stage: str) -> List[str]:
-    """Split one pipeline stage into words as the shell does.
-
-    Like ``shlex.split``, and a redirection operator also ends a word: the shell reads
-    ``-exec>/dev/null`` as the word ``-exec`` and a redirection. Each run of ``<``,
-    ``>`` and ``&`` (``>&`` is one operator, with or without a space before its target)
-    is returned as a word of its own.
-
-    Raises:
-        ValueError: The stage has an unterminated quote or escape.
-    """
-    lexer = shlex.shlex(stage, posix=True, punctuation_chars="<>&")
-    lexer.whitespace_split = True
-    lexer.commenters = ""
-    return list(lexer)
-
-
-def _first_argument(args: List[str]) -> str:
-    """The first word the program gets: the shell takes leading redirections (``2>file``) out."""
-    i = 0
-    while i < len(args):
-        # A number in front of an operator is its file descriptor.
-        if args[i].isdigit() and i + 1 < len(args) and _REDIRECTION_OPERATOR.fullmatch(args[i + 1]):
-            i += 1
-        if not _REDIRECTION_OPERATOR.fullmatch(args[i]):
-            return args[i]
-        i += 2  # the operator and its target
-    return ""
-
 
 def _is_exec_option(arg: str, exec_options: Tuple[str, ...]) -> bool:
     name = arg.partition("=")[0]
@@ -390,150 +474,162 @@ def _is_exec_option(arg: str, exec_options: Tuple[str, ...]) -> bool:
 def _tar_short_option_runs_program(args: List[str]) -> bool:
     # tar reads a first word without a dash as a cluster in which every letter is an
     # option and the arguments follow as separate words: `tar cIf prog a.tar`.
-    first = _first_argument(args)
-    if not first.startswith("-") and re.search("[IFT]", first):
+    if args and not args[0].startswith("-") and re.search("[IFT]", args[0]):
         return True
     return any(_TAR_EXEC_SHORT_OPTION.match(arg) for arg in args)
 
 
-def _validate_command(command: str) -> Tuple[bool, str, str]:
-    """Validate that every command in the pipeline is on the allowlist.
+def _parse_command(command: str, cwd: str) -> List[_Stage]:
+    """The stages of ``command``, each with the exact argument list its program gets.
 
-    Splits on unquoted pipes (|) and checks the first word of each stage, which
-    must be a plain command name or path. Rejects:
-
-    - unquoted shell operators that would start another command (;, &, &&, ||,
-      $(), ``, <(, >(, an unquoted newline). ``&`` passes only directly after
-      ``<`` or ``>`` (``2>&1``); ``&>file`` is rejected because a shell without
-      that operator runs the words after it as a second command;
-    - ``${...}`` and ``$[...]``, also inside double quotes: they can assign a
-      variable and evaluate arithmetic, and that evaluation runs a
-      backslash-escaped ``$(...)`` that this check took as literal. Plain
-      ``$NAME`` passes;
-    - the forms on which this check and the shell would disagree about where a
-      quote or a word ends ($'...', $"...", an unquoted #, a backslash-newline,
-      ``>|``, an unterminated quote);
-    - the exec-delegating options of otherwise-allowlisted commands (find -exec,
-      tar --to-command), abbreviated or not, and tar's -T / --files-from, which can
-      bring them in from a file. For those commands (find, tar, sort,
-      rg) it also rejects ``$`` outside single quotes and an unquoted ``*``, ``?``,
-      ``[`` or ``{``, so the words checked are the words the program gets.
-
-    Quoted operator characters are fine — payloads like CSS (full of
-    semicolons) inside python3 -c '...' or printf '...' must not trip it.
+    Reads the command in the grammar of the module docstring, expands file-name patterns
+    in ``cwd``, and then checks every stage: the program name is on the allowlist and has
+    no path, and the arguments hold none of the options in ``_EXEC_OPTIONS``, abbreviated
+    or bundled, nor tar's -T / --files-from, which can bring them in from a file.
 
     Note: python3/awk/sed are Turing-complete and can spawn subprocesses from
-    their own scripts; the allowlist trusts them by design. The rules above are
-    not a shell parser: what the shell's own builtins evaluate (``printf -v`` or
-    ``test -v`` with an array subscript) is not covered.
+    their own scripts; the allowlist trusts them by design.
 
-    Returns:
-        (is_valid, error_message, reason) — both strings empty when valid. The message,
-        for the model, may quote the command; the reason is a fixed category, safe to log.
+    Raises:
+        _Rejected: The command is outside the grammar, the allowlist or the option rules.
     """
+    if "\0" in command:
+        raise _Rejected("Error: The command contains a NUL character.", "unsupported shell syntax")
     allowed = _ALLOWED_COMMANDS | _PYTHON_COMMANDS if _python_allowed() else _ALLOWED_COMMANDS
 
-    # Block unquoted chaining/substitution operators. Pipes (|) are allowed as
-    # separators since each resulting stage is validated below; a bare ; && || &
-    # $() `` <( ) >( ) or unquoted newline is not. Run on the quote-masked command
-    # so operators inside quotes (e.g. python3 -c 'a; b') don't trip it. `[<>]\(`
-    # catches process substitution — its inner command runs under shell=True but is
-    # never seen by the per-stage allowlist check — while leaving plain redirection
-    # (>, >>, <), which is not followed by `(`.
-    # `(?<![<>])&` leaves `&` only where every shell reads it as part of a
-    # redirection, directly after `<` or `>` (2>&1, >&2, >&file). Anywhere else it
-    # backgrounds a command and runs whatever follows unchecked; that includes
-    # `&>file`, which only bash reads as a redirection.
-    # `\$[{\[]`: `${x:=word}` assigns and `${y[x]}`, `$[x]` and `${PATH:x}` evaluate
-    # arithmetic, which runs a `\$(...)` stored in x.
-    # `>\|` is a redirection, but the stage split below would take its `|` for a pipe.
-    # `#` and `\$['"]` are not operators, but this check and the shell must agree on
-    # where quotes open and close: the shell skips a quote character inside a
-    # comment, and `$'...'` (when /bin/sh is bash) lets `\'` continue the quoted
-    # text, so either one could present an operator to this check as quoted.
-    if re.search(r"[;`#\n\r]|\$[('\"{\[]|[<>]\(|>\||\|\||(?<![<>])&", _mask_quoted(command)):
-        return False, (
-            "Error: Unquoted shell operators (;, newline, &, &&, ||, >|, $(), ``, <(, >(), "
-            "${...} and $[...], an unquoted #, a backslash at the end of a line and $'...' or "
-            "$\"...\" quoting are not allowed. Use pipes (|) to chain commands, $NAME for a "
-            "variable, >file 2>&1 instead of &>file, and put a literal # inside plain quotes."
-        ), "unquoted shell operator"
-
-    stages = _split_on_unquoted_separators(command)
-    for stage in stages:
-        stage = stage.strip()
-        if not stage:
-            continue
-        try:
-            tokens = _split_words(stage)
-        except ValueError:
-            return False, "Error: The command has an unterminated quote or escape.", "unparsable command"
-        if not tokens:
-            continue
-
-        if not _COMMAND_WORD.fullmatch(tokens[0]):
-            return False, (
-                "Error: A command must start with a plain command name. A variable assignment "
-                "or a redirection in front of the command name is not allowed."
-            ), "no plain command name in first position"
-
-        cmd_name = os.path.basename(tokens[0])
-        if cmd_name not in allowed:
-            return False, (
-                f"Error: Command '{cmd_name}' is not allowed. "
-                f"Allowed commands: {', '.join(sorted(allowed))}"
-            ), "command not on the allowlist"
-
-        exec_options = _EXEC_OPTIONS.get(cmd_name)
-        if not exec_options:
-            continue
-        if _SHELL_EXPANSION.search(_mask_quoted(stage)):
-            return False, (
-                f"Error: '{cmd_name}' arguments must not contain $ outside single quotes or an "
-                f"unquoted *, ?, [ or {{: the shell would rewrite the word after it was checked "
-                f"for options that run another program. Quote the pattern (for example '*.py') "
-                f"and write paths out in full."
-            ), "shell expansion in a command with exec options"
-        args = tokens[1:]
-        if any(_is_exec_option(arg, exec_options) for arg in args) or (
-            cmd_name == "tar" and _tar_short_option_runs_program(args)
+    stages: List[_Stage] = []
+    for words, redirections in _split_stages(command):
+        argv = [argument for word in words for argument in _expand(word, cwd)]
+        name, args = argv[0], argv[1:]
+        if "=" in name:
+            raise _Rejected(
+                f"Error: A variable assignment in front of a program (NAME=value) is not supported. {_SYNTAX}",
+                "assignment before the command",
+            )
+        if "/" in name:
+            # A path could name a file that the agent wrote; a bare name is looked up in PATH.
+            raise _Rejected(
+                f"Error: Give the program by its name ('{os.path.basename(name)}'), not by a path.",
+                "command given with a path",
+            )
+        if name not in allowed:
+            raise _Rejected(
+                f"Error: Command '{name}' is not allowed. Allowed commands: {', '.join(sorted(allowed))}",
+                "command not on the allowlist",
+            )
+        exec_options = _EXEC_OPTIONS.get(name)
+        if exec_options and (
+            any(_is_exec_option(arg, exec_options) for arg in args)
+            or (name == "tar" and _tar_short_option_runs_program(args))
         ):
-            return False, (
-                f"Error: '{cmd_name}' options that run another program ({', '.join(exec_options)}, "
-                f"also abbreviated or bundled) would bypass the allowlist and are not allowed."
-            ), "exec-delegating flag"
+            raise _Rejected(
+                f"Error: '{name}' options that run another program ({', '.join(exec_options)}, "
+                f"also abbreviated or bundled) would bypass the allowlist and are not allowed.",
+                "exec-delegating flag",
+            )
+        stages.append(_Stage(argv, redirections))
+    return stages
 
-    return True, "", ""
+
+def _start(
+    stages: Sequence[_Stage], programs: Sequence[str], cwd: str, env: Dict[str, str]
+) -> Tuple[List["subprocess.Popen[bytes]"], _CappedReader, _CappedReader]:
+    """Start every stage without a shell, the stages connected by OS pipes.
+
+    ``programs`` holds the executable file of each stage; the program still gets its
+    name as typed in ``argv[0]``.
+
+    Each stage is the leader of a session and a process group of its own, so a timeout
+    can kill it with its descendants. The first stage reads an empty stdin: not the
+    agent's, which a command would wait on and could take input from.
+
+    Returns:
+        The processes, and the readers of the last stage's stdout and of the stderr that
+        the stages share.
+    """
+    procs: List["subprocess.Popen[bytes]"] = []
+    # The parent's copies of the descriptors it hands to the stages are closed when the
+    # block ends, on every path: a pipe ends only when no copy of its write end is open,
+    # and a stage gets SIGPIPE only when no copy of the read end is.
+    with contextlib.ExitStack() as parent_copies:
+        devnull = os.open(os.devnull, os.O_RDWR)
+        parent_copies.callback(os.close, devnull)
+        stderr_read, stderr_write = os.pipe()
+        parent_copies.callback(os.close, stderr_write)
+        # One byte over each limit is kept so that _decode can tell that output was cut.
+        stderr_reader = _CappedReader(os.fdopen(stderr_read, "rb"), _MAX_STDERR_BYTES + 1)
+        stdin = devnull
+        try:
+            for stage, program in zip(stages, programs):
+                stdout_read, stdout_write = os.pipe()
+                parent_copies.callback(os.close, stdout_write)
+                if stage is stages[-1]:
+                    stdout_reader = _CappedReader(os.fdopen(stdout_read, "rb"), _MAX_STDOUT_BYTES + 1)
+                else:
+                    parent_copies.callback(os.close, stdout_read)
+                streams = {1: stdout_write, 2: stderr_write}
+                for stream, source in stage.redirections:
+                    streams[stream] = devnull if source is None else streams[source]
+                procs.append(
+                    subprocess.Popen(
+                        stage.argv,
+                        executable=program,
+                        stdin=stdin,
+                        stdout=streams[1],
+                        stderr=streams[2],
+                        cwd=cwd,
+                        env=env,
+                        start_new_session=True,
+                    )
+                )
+                stdin = stdout_read
+        except BaseException:
+            _kill(procs)
+            for proc in procs:
+                proc.wait()
+            raise
+    return procs, stdout_reader, stderr_reader
 
 
 @tool
-@experimental("Shell runs in-container without a sandbox beyond the command allowlist.")
+@experimental("Programs run in the agent container without a sandbox beyond the command allowlist.")
 def execute_shell(
     command: str,
     working_directory: Optional[str] = None,
     timeout_seconds: Optional[int] = None,
 ) -> str:
-    """Execute a shell command in the agent's container environment.
+    """Run allowlisted programs in the agent's container. This is not a shell.
 
     Use this to explore downloaded artifact contents, extract archives, run
     bundled skill scripts (via ``python``/``python3``), or clean up temp files.
 
-    Only allowlisted commands are permitted: file inspection (ls, cat, head,
+    Only allowlisted programs are permitted: file inspection (ls, cat, head,
     tail, find, grep, wc, file, tree, diff), text processing (awk, sed, sort,
     uniq, cut, tr), archive handling (unzip, tar, gzip), cleanup (rm, rmdir,
-    mkdir), and python/python3 (unless ATX_SHELL_ALLOW_PYTHON=false). Blocked:
-    network (curl, wget, ssh), package managers (pip, npm), command wrappers
-    that run an arbitrary binary (env, xargs) or exec-delegating options
-    (find -exec, tar --to-command), and anything else. Unquoted shell chaining
-    (;, newline, &, &&, ||, $(), ``, <(, >() is blocked; use pipes (|) instead.
-    Operators inside quotes are fine. Output redirection (>, >>, 2>&1) is
-    allowed after the command name; write >file 2>&1, not &>file. Each command
-    must start with its name: no VAR=value and no redirection in front of it.
-    $NAME is allowed, ${...} and $[...] are not. An unquoted #, a backslash at
-    the end of a line and $'...' quoting are blocked; put a literal # inside
-    plain quotes. In the arguments of find, tar, sort and rg, put $ in single
-    quotes and quote *, ?, [ and { (for example find /tmp -name '*.py'), and
-    write paths out in full.
+    mkdir), and python/python3 (unless ATX_SHELL_ALLOW_PYTHON=false). Give the
+    program by its name, not by a path. Blocked: network (curl, wget, ssh),
+    package managers (pip, npm), command wrappers that run an arbitrary binary
+    (env, xargs), the options that run another program (find -exec,
+    tar --to-command, tar -I, tar -T, sort --compress-program, rg --pre), and
+    anything else.
+
+    No shell reads the command. The whole syntax is:
+
+    - ``program arg ... | program arg ...``: pipes; the exit code is that of
+      the last program.
+    - 'single quotes' (every character literal), "double quotes" and backslash
+      escapes.
+    - An unquoted *, ? or [...] is matched against file names in the working
+      directory (sorted; left as written when nothing matches).
+    - 2>&1, >/dev/null and 2>/dev/null, each as a word of its own.
+
+    Everything else that a shell would act on is rejected and nothing runs:
+    ; && || &, $NAME, $(...), ${...}, backticks, any other redirection
+    (> file, >> file, < file, <<EOF), parentheses, {a,b}, a leading ~ or #,
+    NAME=value in front of a program, and a line break outside quotes. Put a
+    literal $ or backtick in single quotes and write paths in full (no $HOME,
+    no ~). Make one call for each command instead of chaining. To write a
+    file, use an option of the program (sort -o, tar -f, unzip -d) or a script.
 
     The command reads no input (stdin is empty). At most 20 KB of stdout and
     10 KB of stderr are kept; a result over that ends with "[output truncated]".
@@ -546,25 +642,16 @@ def execute_shell(
     temporary credentials rather than ambient ones.
 
     Args:
-        command: The shell command to execute. Only allowlisted commands are permitted.
+        command: The programs to run, in the syntax above. Only allowlisted programs are permitted.
         working_directory: Working directory for the command. Defaults to /tmp.
         timeout_seconds: Maximum execution time in seconds (1-120). Defaults to 30.
 
     Returns:
-        Command output (stdout/stderr) and exit code.
+        Command output (stdout/stderr) and exit code. A program that a signal ended has
+        the exit code 128 plus the signal number.
     """
     if not command or not command.strip():
         return "Error: Command cannot be empty."
-
-    is_valid, error_msg, reason = _validate_command(command)
-    if not is_valid:
-        # Log the length and fixed reason, never the text or the message: the command may
-        # embed sensitive values, even in the rejected word the message quotes
-        # (e.g. `KEY=secret python3 x.py`).
-        logger.warning(
-            "Command rejected by allowlist: command_length=%d, reason=%s", len(command), reason
-        )
-        return error_msg
 
     cwd = working_directory or _DEFAULT_CWD
     if not os.path.isdir(cwd):
@@ -578,47 +665,37 @@ def execute_shell(
             timeout = _DEFAULT_TIMEOUT
     timeout = max(1, min(timeout, _MAX_TIMEOUT))
 
-    # Log command length, not content — the command may embed sensitive values.
-    logger.info(
-        "execute_shell starting: command_length=%d, cwd=%s, timeout=%ds",
-        len(command),
-        cwd,
-        timeout,
+    env = _sanitized_env()
+    # A relative directory in PATH would name files in the working directory, which a
+    # command can write; only absolute directories are searched.
+    search_path = os.pathsep.join(
+        directory for directory in env.get("PATH", os.defpath).split(os.pathsep) if os.path.isabs(directory)
     )
-
     start_time = time.monotonic()
     try:
-        # Run in its own session/process group so a timeout kills the whole tree,
-        # not just the top-level shell. subprocess.run(timeout=) would SIGKILL only
-        # the direct child, orphaning any descendant (e.g. a python3 skill script)
-        # to run past the deadline — defeating the runaway-command protection.
-        proc = subprocess.Popen(
-            command,
-            shell=True,
-            cwd=cwd,
-            # Not the agent's stdin: a command that reads it (`cat`, `grep pattern`) would
-            # wait until the timeout and could take input meant for the agent.
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            env=_sanitized_env(),
-            start_new_session=True,
+        stages = _parse_command(command, cwd)
+        programs: List[str] = []
+        for stage in stages:
+            program = shutil.which(stage.argv[0], path=search_path)
+            if program is None:
+                return f"Error: Command '{stage.argv[0]}' is on the allowlist but is not installed in this container."
+            programs.append(program)
+
+        # Log command length, not content — the command may embed sensitive values.
+        logger.info(
+            "execute_shell starting: command_length=%d, cwd=%s, timeout=%ds",
+            len(command),
+            cwd,
+            timeout,
         )
-        # One byte over each limit is kept so that _decode can tell that output was cut.
-        stdout_reader = _CappedReader(proc.stdout, _MAX_STDOUT_BYTES + 1)
-        stderr_reader = _CappedReader(proc.stderr, _MAX_STDERR_BYTES + 1)
+        procs, stdout_reader, stderr_reader = _start(stages, programs, cwd, env)
         readers = (stdout_reader, stderr_reader)
-        if not _finished(proc, readers, timeout):
-            # Kill the entire process group, then reap so no orphan survives.
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                # The process exited on its own between the timeout and the kill; nothing left to reap.
-                pass
-            # Bound the reap: a descendant that escaped the group (setsid/double-fork)
-            # could hold the pipe open forever, reintroducing the very hang the timeout
+        if not _finished(procs, readers, timeout):
+            _kill(procs)
+            # Bound the reap: a descendant that escaped its group (setsid/double-fork)
+            # could hold a pipe open forever, reintroducing the very hang the timeout
             # guards against. Give up after a short grace.
-            if not _finished(proc, readers, _REAP_SECONDS):
+            if not _finished(procs, readers, _REAP_SECONDS):
                 # The primary timeout failure is already being reported, so don't
                 # block the caller any longer.
                 logger.debug("post-timeout reap timed out; continuing")
@@ -627,11 +704,14 @@ def execute_shell(
             )
             return f"Error: Command timed out after {timeout} seconds."
 
+        # As a shell reports it: 128 plus the signal number for a program that a signal ended.
+        returncode = procs[-1].returncode
+        exit_code = returncode if returncode >= 0 else 128 - returncode
         duration = time.monotonic() - start_time
         logger.info(
             "execute_shell completed: exit_code=%d, duration=%.2fs, "
             "stdout_bytes=%d, stderr_bytes=%d",
-            proc.returncode,
+            exit_code,
             duration,
             stdout_reader.total_bytes,
             stderr_reader.total_bytes,
@@ -645,10 +725,18 @@ def execute_shell(
             parts.append(stdout)
         if stderr:
             parts.append(f"[stderr]\n{stderr}")
-        parts.append(f"[exit code: {proc.returncode}]")
+        parts.append(f"[exit code: {exit_code}]")
 
         return "\n".join(parts)
 
+    except _Rejected as rejected:
+        # Log the length and fixed reason, never the text or the message: the command may
+        # embed sensitive values, even in the rejected word the message quotes
+        # (e.g. `KEY=secret python3 x.py`).
+        logger.warning(
+            "Command rejected by allowlist: command_length=%d, reason=%s", len(command), rejected.reason
+        )
+        return rejected.message
     except Exception as e:
         logger.error("Shell execution error: %s", e, exc_info=True)
         return f"Error: Shell execution failed: {e}"

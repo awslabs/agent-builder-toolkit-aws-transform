@@ -3,8 +3,9 @@
 """
 Experimental shell execution support.
 
-Provides a command-allowlisted shell execution tool for agents. This is an
-experimental feature - the API may change.
+Provides a command-allowlisted execution tool for agents. The tool is not a
+shell: it starts the allowlisted programs itself. This is an experimental
+feature - the API may change.
 
 Usage:
     from agent_builder_sdk.experimental.shell_execution import execute_shell
@@ -23,7 +24,7 @@ from agent_builder_sdk.experimental.shell_execution.shell_execution_tool import 
 
 warnings.warn(
     "agent_builder_sdk.experimental.shell_execution is an experimental feature. "
-    "Shell runs in-container guarded only by a command allowlist. Use with caution.",
+    "Programs run in the agent container guarded only by a command allowlist. Use with caution.",
     category=FutureWarning,
     stacklevel=2,
 )

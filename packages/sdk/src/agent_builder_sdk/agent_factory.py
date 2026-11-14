@@ -418,8 +418,11 @@ def create_default_async_orchestrator_with_subagent(
         enable_prompt_caching: Turn on Bedrock prompt caching for the orchestrator's model (see
             AsyncBaseOrchestrator). Off by default.
         enable_shell: Enable the experimental command-allowlisted execute_shell tool.
-            Off by default. Runs allowlisted commands (and, unless
-            ATX_SHELL_ALLOW_PYTHON=false, python/python3) in a subprocess with an enforced
+            Off by default. The tool is not a shell: it reads the command itself
+            (programs joined by pipes, quotes, file-name patterns, and the redirections
+            2>&1, >/dev/null and 2>/dev/null), rejects every other shell form, and starts
+            each program without a shell. Runs allowlisted commands (and, unless
+            ATX_SHELL_ALLOW_PYTHON=false, python/python3) with an enforced
             timeout and a sanitized environment in which the AWS SDK and CLI find no
             credentials by default: credential env vars (AWS_PROFILE, container and
             web-identity credentials) are dropped and the shared credential/config files
