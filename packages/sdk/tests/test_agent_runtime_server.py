@@ -1155,6 +1155,29 @@ class TestAgentRuntimeServer:
             mock_queue_stop.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_finalize_agent_setup_starts_heartbeat_service(
+        self, agent_runtime_server: AgentRuntimeServer, mock_heartbeat_service: MagicMock
+    ) -> None:
+        """Test _finalize_agent_setup creates the heartbeat service for its context and starts it."""
+        agent_runtime_server.context = AgentRuntimeContext(
+            workspace_id="test-workspace", job_id="test-job", agent_instance_id="test-agent"
+        )
+
+        with mock.patch.multiple(
+            "agent_builder_sdk.server.agent_runtime_server",
+            get_auth_token_refresher=mock.DEFAULT,
+            build_agentic_api_endpoint_from_env=mock.DEFAULT,
+            MCPClientFactory=mock.DEFAULT,
+            get_agentic_api_client=mock.DEFAULT,
+            JobManager=mock.DEFAULT,
+        ):
+            await agent_runtime_server._finalize_agent_setup("RUNNING")
+
+        mock_heartbeat_service.assert_called_once_with(agent_runtime_server.context)
+        mock_heartbeat_service.return_value.start.assert_awaited_once()
+        assert agent_runtime_server.heartbeat_service is mock_heartbeat_service.return_value
+
+    @pytest.mark.asyncio
     async def test_cleanup_stops_heartbeat_service(self, agent_runtime_server):
         """Test _cleanup awaits heartbeat_service.stop()."""
         agent_runtime_server.heartbeat_service = mock.AsyncMock()
