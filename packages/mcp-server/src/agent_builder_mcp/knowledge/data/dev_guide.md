@@ -2578,8 +2578,8 @@ Choose one of two paths. When both are configured, the Web Search API path is us
 
 | | Web Search API | Gateway |
 | --- | --- | --- |
-| Environment variable | `ATX_WEB_SEARCH_REGION`: the Region to call, for example `us-east-1` | `ATX_WEB_SEARCH_GATEWAY_URL`: the `https://` URL of the Gateway MCP endpoint. Optional `ATX_WEB_SEARCH_GATEWAY_REGION`: the Region of the Gateway (default: `AWS_REGION`, then `us-east-1`) |
-| Resource you create | None | An AgentCore Gateway with `AWS_IAM` inbound authorization and one `web-search` connector target |
+| Environment variable | `ATX_WEB_SEARCH_REGION`: the Region to call, for example `us-east-1` | `ATX_WEB_SEARCH_GATEWAY_URL`: the `https://` URL of the Gateway MCP endpoint. `ATX_WEB_SEARCH_GATEWAY_REGION`: the Region of the Gateway (default: `AWS_REGION`; when neither is set, `us-east-1` with one warning) |
+| Resource you create | None | An AgentCore Gateway with `AWS_IAM` inbound authorization, MCP version `2025-11-25` in its `supportedVersions`, and one `web-search` connector target |
 | Permission on AgentCoreExecutionRole | `bedrock-agentcore:InvokeWebSearch` on `arn:aws:bedrock-agentcore:<region>:aws:tool/web-search.v1` | `bedrock-agentcore:InvokeGateway` on the Gateway ARN |
 | Other permission | None | The Gateway service role needs `bedrock-agentcore:InvokeWebSearch` |
 | botocore in the agent image | 1.43.127 or later | No added requirement |
@@ -2603,7 +2603,8 @@ Things to know:
 - Limits per search: a query of at most 200 characters, at most 10 results (default 5), at most 4,000 characters of text per result, about 60 seconds.
 - Results are untrusted text. The tool returns them between `<<<BEGIN UNTRUSTED WEB CONTENT>>>` and `<<<END UNTRUSTED WEB CONTENT>>>` with a notice that tells the model to treat them as data and to cite the source URL of every fact. Keep these citations and links in the output you show to users; the service's acceptable use terms require it.
 - The tool description tells the model not to put customer data, file contents or credentials in a query. Add the same rule to your system prompt when your agent handles sensitive data.
-- A failed search does not raise. The model gets an `Error: ...` text; a missing permission names the action to add.
+- On the Gateway path the tool sends `tools/list` and `tools/call` with the header `MCP-Protocol-Version: 2025-11-25` and reads a JSON reply. A Gateway that does not accept that version, or that replies with an event stream, gives an `Error: ...` text for each search.
+- A failed search does not raise. The model gets an `Error: ...` text. A refused call names the permission to check; on the Gateway path an HTTP 403 also names the Region the request was signed for, because a wrong `ATX_WEB_SEARCH_GATEWAY_REGION` gives the same 403 as a missing permission.
 
 ```
 #### Create Your Entry Point - Bedrock AgentCore (Recommended)
