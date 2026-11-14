@@ -69,6 +69,7 @@ def test_auth_token_refresher_shutdown_force_kill():
         mock_process.kill.assert_called_once()
 
 
+@pytest.mark.usefixtures("mock_auth_dependencies")
 def test_auth_token_refresher_shutdown_no_process():
     """Test AuthTokenRefresher shutdown when no process exists."""
     refresher = AuthTokenRefresher(
@@ -93,7 +94,7 @@ def restore_sigterm() -> Iterator[None]:
     signal.signal(signal.SIGTERM, signal.SIG_DFL if saved is None else saved)
 
 
-@pytest.mark.usefixtures("restore_sigterm")
+@pytest.mark.usefixtures("mock_auth_dependencies", "restore_sigterm")
 def test_auth_process_main_exception(caplog):
     """Test _auth_process_main handles general exceptions with proper logging."""
     refresher = AuthTokenRefresher(
@@ -139,10 +140,14 @@ def test_auth_process_main_resets_inherited_sigterm_handler() -> None:
 
 @pytest.fixture
 def mock_auth_dependencies():
-    """Fixture to mock the common AuthTokenRefresher dependencies."""
-    with mock.patch.object(
-        AuthTokenRefresher, "start_child_process_for_token_refresh"
-    ) as mock_start_process:
+    """Keep the constructor from forking, writing the token file or leaking the env var."""
+    with (
+        mock.patch.object(
+            AuthTokenRefresher, "start_child_process_for_token_refresh"
+        ) as mock_start_process,
+        mock.patch("agent_builder_sdk._auth_token_refresher.write_content_to_file"),
+        mock.patch.dict(os.environ),
+    ):
         mock_start_process.return_value = mock.Mock()
         yield {
             "mock_start_process": mock_start_process,
