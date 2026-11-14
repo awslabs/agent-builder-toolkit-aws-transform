@@ -17,6 +17,11 @@ This tool adds application-level defense-in-depth:
    endpoint are switched off, so a subprocess boto3 client has no ambient credential
    chain and must use connector-vended temporary credentials instead.
 3. Timeout + output limits — prevent runaway commands
+
+The allowlist is not a sandbox. awk, sed and python start other programs from their
+own scripts by design, a command given with a path is matched by its basename only,
+and the validator is a set of rules, not a shell parser. Treat the tool as able to run
+any program the container user can run; the container is the security boundary.
 """
 
 import logging
@@ -26,7 +31,7 @@ import shlex
 import signal
 import subprocess
 import time
-from typing import FrozenSet, Optional, Tuple
+from typing import FrozenSet, List, Optional, Tuple
 
 from strands.tools import tool
 
@@ -57,9 +62,9 @@ _MAX_STDERR_BYTES = 10 * 1024  # 10 KB
 _SAFE_ENV_VARS = frozenset(
     {
         "PATH",
-        # boto3/botocore live in /usr/local but their deps (s3transfer, dateutil,
-        # etc.) are only on the base-agent site-packages that PYTHONPATH points at;
-        # without it a script's `import boto3` fails with ModuleNotFoundError.
+        # Some images install the agent's dependencies in a directory that only
+        # PYTHONPATH names; without it a script's `import boto3` fails there with
+        # ModuleNotFoundError.
         "PYTHONPATH",
         "HOME",
         "LANG",
@@ -181,13 +186,14 @@ def _sanitized_env() -> dict:
     return env
 
 
-def _truncate(text: str, max_bytes: int) -> str:
-    """Truncate text to max_bytes (UTF-8), appending an indicator if truncated."""
-    encoded = text.encode("utf-8", errors="replace")
-    if len(encoded) <= max_bytes:
-        return text
-    truncated = encoded[:max_bytes].decode("utf-8", errors="replace")
-    return truncated + "\n[output truncated]"
+def _decode(output: bytes, max_bytes: int) -> str:
+    """Decode the first max_bytes of output, appending an indicator if more was cut off.
+
+    Decodes leniently: one non-UTF-8 byte (a binary file, an odd filename) must not
+    throw away the output and exit code of a command that already ran.
+    """
+    text = output[:max_bytes].decode("utf-8", errors="replace")
+    return text + "\n[output truncated]" if len(output) > max_bytes else text
 
 
 def _split_on_unquoted_separators(command: str) -> list:
@@ -222,7 +228,8 @@ def _mask_quoted(command: str) -> str:
     along with parens so the ``$(`` pattern survives; everything else quoted
     is blanked. An unquoted newline stays unmasked so the operator scan catches
     it as a command separator; a quoted newline is literal content and is
-    blanked like any other quoted character.
+    blanked like any other quoted character. The quote that opens ``$'...'`` or
+    ``$"..."`` also stays, so the operator scan can reject those forms.
     """
     out: list = []
     quote: str = ""
@@ -234,8 +241,8 @@ def _mask_quoted(command: str) -> str:
             i += 2
             continue
         if ch in ("'", '"') and (not quote or quote == ch):
+            out.append(ch if not quote and out[-1:] == ["$"] else " ")
             quote = "" if quote else ch
-            out.append(" ")
         elif quote == "'":
             out.append(" ")
         elif quote == '"':
@@ -246,44 +253,67 @@ def _mask_quoted(command: str) -> str:
     return "".join(out)
 
 
-# Commands whose whole job is to run another command from their arguments. The
-# allowlist only checks the first token of each stage, so these would let any
-# non-allowlisted binary (and, via `env KEY=VALUE`, a re-injected AWS_PROFILE)
-# run through the allowlisted wrapper. They are NOT on the allowlist; this set
-# guards against re-adding them and gives a clear error if a model tries one.
-_COMMAND_WRAPPERS: FrozenSet[str] = frozenset({"env", "xargs", "nice", "nohup", "timeout", "time"})
+# What may stand in command position: a bare name or path. Any other first word is
+# either not the command (after a redirection such as `2>/tmp/ls` or an assignment
+# such as `X=/ls` the shell runs the NEXT word, and an assignment also sets a variable
+# the sanitized environment left out) or a word the shell rewrites before it runs it.
+_COMMAND_WORD = re.compile(r"[\w./+-]+|\[")
 
-# Flags on otherwise-useful, allowlisted commands that hand execution to an
-# arbitrary child process. These are matched whole-word (== or flag=VALUE), which
-# is correct for find's primaries — matching a prefix would wrongly reject the
-# safe `find -executable` because it startswith `-exec` — and for tar/sort/rg long
-# options. tar's SHORT `-I` is handled separately below because it also has
-# attached/bundled getopt forms (`-Iprog`, `-cIprog`) that a whole-word check misses.
-_EXEC_FLAG_PATTERNS = (
-    ("find", ("-exec", "-execdir", "-ok", "-okdir")),
-    ("tar", ("--checkpoint-action", "--to-command", "--use-compress-program")),
-    # sort --compress-program=PROG runs PROG to (de)compress temp files; ripgrep
-    # --pre=CMD / --hostname-bin=CMD each exec CMD. Same escape as find -exec.
-    ("sort", ("--compress-program",)),
-    ("rg", ("--pre", "--hostname-bin")),
-)
+# Options of otherwise-useful, allowlisted commands that run the program named in
+# their argument: find's exec primaries, tar's compressor, volume-script, remote-shell,
+# checkpoint and per-member hooks, sort's temp-file compressor, and ripgrep's
+# preprocessor and hostname helper.
+_EXEC_OPTIONS = {
+    "find": ("-exec", "-execdir", "-ok", "-okdir"),
+    "tar": (
+        "-I",
+        "-F",
+        "--checkpoint-action",
+        "--info-script",
+        "--new-volume-script",
+        "--rmt-command",
+        "--rsh-command",
+        "--to-command",
+        "--use-compress-program",
+    ),
+    "sort": ("--compress-program",),
+    "rg": ("--pre", "--hostname-bin"),
+}
 
-# tar -I / --use-compress-program runs an arbitrary program. The long form is in
-# the table above; the short form attaches its argument in getopt style, so it
-# appears as `-Iprog`, `-cIprog` (bundled after no-arg flags), or a bare `-I`
-# with the program as the next token. This matches an `I` inside any single-dash
-# cluster, stopping the letter run at `f`/`F` so an archive name attached to
-# `-f` (e.g. `-fInput.tar`) is not mistaken for the `-I` option.
-_TAR_COMPRESS_SHORT_FLAG = re.compile(r"-[^-fF]*I")
+# tar's -I and -F inside a cluster of short options (`-cIprog`, `-xFscript`). The
+# scan stops at `f` and `C`, whose argument is the rest of the word, so an archive
+# name attached to `-f` (`-cfInput.tar`) is not read as the `-I` option.
+_TAR_EXEC_SHORT_OPTION = re.compile(r"-[^-fC]*[IF]")
+
+
+def _is_exec_option(arg: str, exec_options: Tuple[str, ...]) -> bool:
+    name = arg.partition("=")[0]
+    if name.startswith("--"):
+        # GNU getopt takes any unambiguous prefix of a long option (`--to-comm` is
+        # `--to-command`), so a prefix is rejected like the full name.
+        return len(name) > 2 and any(option.startswith(name) for option in exec_options)
+    # Single-dash names are matched whole: find's `-o` and `-executable` are not `-ok` or `-exec`.
+    return name in exec_options
+
+
+def _tar_short_option_runs_program(args: List[str]) -> bool:
+    # tar reads a first word without a dash as a cluster in which every letter is an
+    # option and the arguments follow as separate words: `tar cIf prog a.tar`.
+    if args and not args[0].startswith("-") and re.search("[IF]", args[0]):
+        return True
+    return any(_TAR_EXEC_SHORT_OPTION.match(arg) for arg in args)
 
 
 def _validate_command(command: str) -> Tuple[bool, str, str]:
     """Validate that every command in the pipeline is on the allowlist.
 
     Splits on unquoted pipes (|) and newlines and checks the first token of
-    each stage. Rejects unquoted shell operators that could bypass the
-    allowlist (;, &&, ||, $(), ``, unquoted newline) and the exec-delegating
-    flags of otherwise-allowlisted commands (find -exec, tar --to-command).
+    each stage, which must be a plain command name or path. Rejects unquoted
+    shell operators that could bypass the allowlist (;, &&, ||, $(), ``,
+    unquoted newline), the forms whose quoting or comment rules would hide such
+    an operator from this check ($'...', $"...", an unquoted #, an unterminated
+    quote) and the exec-delegating options of otherwise-allowlisted commands
+    (find -exec, tar --to-command), abbreviated or not.
     Quoted operator characters are fine — payloads like CSS (full of
     semicolons) inside python3 -c '...' or printf '...' must not trip it.
 
@@ -309,10 +339,15 @@ def _validate_command(command: str) -> Tuple[bool, str, str]:
     # runs whatever follows unchecked, while leaving the redirection forms that
     # legitimately contain it: in 2>&1 / 1>&2 / >& / &> the `&` always sits beside
     # a `>` (never directly after a bare digit), so those pass and `-5&curl` does not.
-    if re.search(r"[;`\n\r]|\$\(|[<>]\(|&&|\|\||(?<![>&])&(?![>&])", _mask_quoted(command)):
+    # `#` and `\$['"]` are not operators, but this check and the shell must agree on
+    # where quotes open and close: the shell skips a quote character inside a
+    # comment, and `$'...'` (when /bin/sh is bash) lets `\'` continue the quoted
+    # text, so either one could present an operator to this check as quoted.
+    if re.search(r"[;`#\n\r]|\$[('\"]|[<>]\(|&&|\|\||(?<![>&])&(?![>&])", _mask_quoted(command)):
         return False, (
-            "Error: Unquoted shell operators (;, newline, &, &&, ||, $(), ``, <(, >() are not "
-            "allowed. Use pipes (|) to chain commands."
+            "Error: Unquoted shell operators (;, newline, &, &&, ||, $(), ``, <(, >(), an "
+            "unquoted # and $'...' or $\"...\" quoting are not allowed. Use pipes (|) to "
+            "chain commands, and put a literal # inside plain quotes."
         ), "unquoted shell operator"
 
     stages = _split_on_unquoted_separators(command)
@@ -323,10 +358,15 @@ def _validate_command(command: str) -> Tuple[bool, str, str]:
         try:
             tokens = shlex.split(stage)
         except ValueError:
-            # shlex can't parse — let it through to subprocess which will also fail
-            tokens = stage.split()
+            return False, "Error: The command has an unterminated quote or escape.", "unparsable command"
         if not tokens:
             continue
+
+        if not _COMMAND_WORD.fullmatch(tokens[0]):
+            return False, (
+                "Error: A command must start with a plain command name. A variable assignment "
+                "or a redirection in front of the command name is not allowed."
+            ), "no plain command name in first position"
 
         cmd_name = os.path.basename(tokens[0])
         if cmd_name not in allowed:
@@ -335,29 +375,14 @@ def _validate_command(command: str) -> Tuple[bool, str, str]:
                 f"Allowed commands: {', '.join(sorted(allowed))}"
             ), "command not on the allowlist"
 
-        if cmd_name in _COMMAND_WRAPPERS:
-            return False, (
-                f"Error: '{cmd_name}' runs another command from its arguments, which would "
-                f"bypass the allowlist. Run the target command directly instead."
-            ), "command wrapper"
-
-        for wrapper, exec_flags in _EXEC_FLAG_PATTERNS:
-            if cmd_name == wrapper and any(
-                token == flag or token.startswith(flag + "=")
-                for token in tokens[1:]
-                for flag in exec_flags
-            ):
-                return False, (
-                    f"Error: '{cmd_name}' with an exec flag ({', '.join(exec_flags)}) can run an "
-                    f"arbitrary command, which would bypass the allowlist."
-                ), "exec-delegating flag"
-
-        if cmd_name == "tar" and any(
-            _TAR_COMPRESS_SHORT_FLAG.match(token) for token in tokens[1:] if token.startswith("-")
+        exec_options = _EXEC_OPTIONS.get(cmd_name, ())
+        args = tokens[1:]
+        if any(_is_exec_option(arg, exec_options) for arg in args) or (
+            cmd_name == "tar" and _tar_short_option_runs_program(args)
         ):
             return False, (
-                "Error: 'tar' with -I (--use-compress-program) can run an arbitrary command, "
-                "which would bypass the allowlist."
+                f"Error: '{cmd_name}' options that run another program ({', '.join(exec_options)}, "
+                f"also abbreviated or bundled) would bypass the allowlist and are not allowed."
             ), "exec-delegating flag"
 
     return True, "", ""
@@ -380,10 +405,13 @@ def execute_shell(
     uniq, cut, tr), archive handling (unzip, tar, gzip), cleanup (rm, rmdir,
     mkdir), and python/python3 (unless ATX_SHELL_ALLOW_PYTHON=false). Blocked:
     network (curl, wget, ssh), package managers (pip, npm), command wrappers
-    that run an arbitrary binary (env, xargs) or exec-delegating flags
+    that run an arbitrary binary (env, xargs) or exec-delegating options
     (find -exec, tar --to-command), and anything else. Unquoted shell chaining
     (;, newline, &&, ||, $(), ``, <(, >() is blocked; use pipes (|) instead.
-    Operators inside quotes are fine. Output redirection (>, >>) is allowed.
+    Operators inside quotes are fine. Output redirection (>, >>) is allowed
+    after the command name. Each command must start with its name: no
+    VAR=value and no redirection in front of it. An unquoted # and $'...'
+    quoting are blocked; put a literal # inside plain quotes.
 
     The subprocess has no AWS credentials: AWS_PROFILE is stripped, no
     credential env vars are passed, and the shared credential/config files and
@@ -445,12 +473,6 @@ def execute_shell(
             cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
-            # Decode leniently: one non-UTF-8 byte (a binary file, an odd filename)
-            # must not throw away the output and exit code of a command that already
-            # ran, nor mask the timeout message on the post-kill reap.
-            encoding="utf-8",
-            errors="replace",
             env=_sanitized_env(),
             start_new_session=True,
         )
@@ -483,8 +505,8 @@ def execute_shell(
             "stdout_bytes=%d, stderr_bytes=%d",
             proc.returncode,
             duration,
-            len(stdout_raw) if stdout_raw else 0,
-            len(stderr_raw) if stderr_raw else 0,
+            len(stdout_raw),
+            len(stderr_raw),
         )
 
         # Output is buffered fully then truncated, so the byte caps bound the
@@ -492,8 +514,8 @@ def execute_shell(
         # (`yes`, `cat` of a huge file) can accumulate for up to `timeout` before
         # being cut off. Acceptable for this timeout-bounded sample tool; switch to
         # an incremental read with a running cap + early kill if memory matters.
-        stdout = _truncate(stdout_raw, _MAX_STDOUT_BYTES) if stdout_raw else ""
-        stderr = _truncate(stderr_raw, _MAX_STDERR_BYTES) if stderr_raw else ""
+        stdout = _decode(stdout_raw, _MAX_STDOUT_BYTES)
+        stderr = _decode(stderr_raw, _MAX_STDERR_BYTES)
 
         parts = []
         if stdout:

