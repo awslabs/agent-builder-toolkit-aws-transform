@@ -319,10 +319,13 @@ class TestGetBedrockSharedCapacityRoleArn:
             assert result == test_arn
 
     @pytest.mark.parametrize("region", ["us-east-1", "us-west-2", "eu-west-1"])
-    def test_returns_none_when_env_var_unset(self, region: str) -> None:
-        """Test that function returns None in every region when the env var is unset."""
+    def test_returns_none_when_env_var_unset(self, region: str, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that an unset env var gives None and a warning that names the variable and the region."""
+        caplog.set_level("WARNING")
         with mock.patch.dict(os.environ, {}, clear=True):
             assert get_bedrock_shared_capacity_role_arn(region) is None
+        assert "BEDROCK_SHARED_CAPACITY_ROLE_ARN" in caplog.text
+        assert region in caplog.text
 
     def test_returns_none_when_env_var_empty(self) -> None:
         """Test that an empty value counts as unset."""
