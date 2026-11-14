@@ -23,7 +23,8 @@ class ImageBlockGuardHook(HookProvider):
     that reads larger images still gets them downscaled. After each tool call this hook:
 
     - leaves a valid png, jpeg, gif or webp block of at most 3.75 MB and 1568 px per side as
-      is, unless it is an animation of more than 50 million pixels over all its frames;
+      is, unless it is an animation of more than 1,000 frames or 50 million pixels over all
+      its frames;
     - corrects a wrong declared format;
     - downscales and re-encodes any other image (first frame only; png when it has
       transparency, jpeg at quality 85 otherwise);

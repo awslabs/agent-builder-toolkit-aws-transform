@@ -23,15 +23,19 @@ MAX_EDGE = 1568
 MIN_EDGE = 64
 # Pixels of the one frame that is decoded to be encoded again, checked against the header before
 # any pixel is decoded. Pillow and the codecs hold up to about 17 bytes a pixel (measured for
-# WebP), so one image takes at most about 350 MB whatever its content.
+# WebP), which is about 350 MB for one image at this limit.
 MAX_DECODE_PIXELS = 20_000_000
 # Pixels decoded to check an image that is passed on as it is, summed over its frames. Each
 # frame is within MAX_EDGE, so this bounds the time of the check, not its memory.
 MAX_FRAME_PIXELS = 50_000_000
+# Frames decoded in that check. A frame costs a seek whatever its size, so the pixel budget
+# alone does not bound the time.
+MAX_FRAMES = 1_000
 
-# Untrusted bytes reach only these Pillow decoders (the JPEG decoder also opens MPO). ICO is
-# left out: Pillow decodes it on open, at the size its payload states.
-_OPEN_FORMATS = ("PNG", "JPEG", "GIF", "WEBP", "BMP", "TIFF", "PPM")
+# Untrusted bytes reach only these Pillow decoders (the JPEG decoder also opens MPO). Two are
+# left out because the header size does not bound their memory: ICO is decoded on open at the
+# size its payload states, and TIFF takes memory by its tile size and its count of strips.
+_OPEN_FORMATS = ("PNG", "JPEG", "GIF", "WEBP", "BMP", "PPM")
 # Finite float32 bound: a pixel beyond it, or NaN, is zeroed before the value range is measured.
 _FLOAT_LIMIT = 3.0e38
 # A marker in JPEG scan data: not a stuffed 0xFF, a restart marker or a fill byte.
@@ -50,9 +54,10 @@ def submit_conversion(raw: bytes) -> Future[tuple[bytes, ImageFormat]]:
     """Start the conversion of ``raw`` to image bytes and a format that Converse accepts.
 
     The result is ``raw`` itself, with its real format, when it is a complete png, jpeg, gif or
-    webp of at most MAX_IMAGE_BYTES and MAX_EDGE px per side (every frame) whose frames hold
-    at most MAX_FRAME_PIXELS. Any other image is decoded (first frame only), downscaled until
-    it fits and encoded again: png when it has transparency, jpeg otherwise.
+    webp of at most MAX_IMAGE_BYTES and MAX_EDGE px per side (every frame) with at most
+    MAX_FRAMES frames that hold at most MAX_FRAME_PIXELS. Any other image is decoded (first
+    frame only), downscaled until it fits and encoded again: png when it has transparency,
+    jpeg otherwise.
 
     At most two conversions run at a time; the others wait in a queue. The future raises
     ImageConversionError when the bytes are not a readable image of a supported format, when
@@ -94,16 +99,17 @@ def _convert(raw: bytes) -> tuple[bytes, ImageFormat]:
 def _decode_frames(image: Image.Image, first_only: bool) -> bool:
     """Decode the frames, so that a damaged or truncated frame raises.
 
-    False, with the later frames not decoded, when the frames hold more than MAX_FRAME_PIXELS
-    or when one of them is over MAX_EDGE (a GIF frame can be larger than the first one).
+    False, with the later frames not decoded, when there are more than MAX_FRAMES frames, when
+    they hold more than MAX_FRAME_PIXELS, or when one of them is over MAX_EDGE (a GIF frame
+    can be larger than the first one).
     """
     if first_only:
         image.load()
         return True
     decoded = 0
-    for frame in ImageSequence.Iterator(image):
+    for index, frame in enumerate(ImageSequence.Iterator(image)):
         decoded += frame.width * frame.height
-        if decoded > MAX_FRAME_PIXELS or max(frame.size) > MAX_EDGE:
+        if index >= MAX_FRAMES or decoded > MAX_FRAME_PIXELS or max(frame.size) > MAX_EDGE:
             return False
         frame.load()
     return True
@@ -119,9 +125,9 @@ def _reencode(image: Image.Image, raw: bytes) -> tuple[bytes, ImageFormat]:
             "RGB",
             (max(1, MAX_EDGE * width // long_side), max(1, MAX_EDGE * height // long_side)),
         )
-        # The decoder holds the coefficients of a progressive or multi-scan JPEG at full size
-        # at any scale.
-        if not image.info.get("progressive") and _has_one_scan(raw):
+        # The decoder holds the coefficients of a JPEG at full size, at any scale, when it is
+        # progressive or when its first scan does not code every component.
+        if not image.info.get("progressive") and _has_one_scan(raw, len(image.getbands())):
             width, height = image.size
     if width * height > MAX_DECODE_PIXELS:
         raise ImageConversionError(f"{width}x{height} px exceeds the decode limit")
@@ -157,15 +163,16 @@ def _reencode(image: Image.Image, raw: bytes) -> tuple[bytes, ImageFormat]:
             raise ImageConversionError(f"still over {MAX_IMAGE_BYTES:,} bytes at {MIN_EDGE} px")
 
 
-def _has_one_scan(raw: bytes) -> bool:
-    """Whether the first image of a JPEG file is coded as one scan; False when unsure."""
+def _has_one_scan(raw: bytes, components: int) -> bool:
+    """Whether one scan codes all ``components`` of a JPEG file's first image; False if unsure."""
     position = 2
-    while position + 4 <= len(raw) and raw[position] == 0xFF:
-        marker = raw[position + 1]
+    while position + 4 < len(raw) and raw[position] == 0xFF:
+        marker, in_scan = raw[position + 1], raw[position + 4]
         position += 2 + int.from_bytes(raw[position + 2 : position + 4], "big")
         if marker == 0xDA:
             following = _JPEG_MARKER.search(raw, position)
-            return following is None or following.group()[1] == 0xD9
+            last = following is None or following.group()[1] == 0xD9
+            return last and in_scan == components
     return False
 
 

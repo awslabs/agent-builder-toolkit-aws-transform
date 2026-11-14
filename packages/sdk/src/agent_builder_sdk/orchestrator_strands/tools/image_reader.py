@@ -48,8 +48,8 @@ def image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult:
 
     The path may be any file the agent process can read: ``~`` is expanded, a relative path
     is resolved against the working directory, and symbolic links are followed. The file must
-    be a regular file of at most MAX_IMAGE_FILE_BYTES that holds a PNG, JPEG, GIF, WebP, BMP,
-    TIFF or PPM image. An image over 3.75 MB (the Converse limit) or 1568 px per side is
+    be a regular file of at most MAX_IMAGE_FILE_BYTES that holds a PNG, JPEG, GIF, WebP, BMP
+    or PPM image. An image over 3.75 MB (the Converse limit) or 1568 px per side is
     downscaled and re-encoded; one that needs more than 20 million pixels decoded is an error.
     File content is returned only as an image; every failure is an ``error`` result with a
     message for the model that quotes no file content, never an exception.

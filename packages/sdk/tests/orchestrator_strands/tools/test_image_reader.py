@@ -72,7 +72,7 @@ def test_a_missing_file_is_an_error(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "content,reason",
     [
-        ("secret-content", "not a PNG/JPEG/GIF/WEBP/BMP/TIFF/PPM image"),
+        ("secret-content", "not a PNG/JPEG/GIF/WEBP/BMP/PPM image"),
         ("P2 2 2 255 private-text-of-the-file", "damaged or unsupported image data (ValueError)"),
         ("P2 private-text-of-the-file", "damaged or unsupported image data (ValueError)"),
     ],

@@ -263,7 +263,7 @@ def test_icc_profile_is_dropped_when_the_colour_space_changes() -> None:
 def test_mode_i_image_is_scaled_to_its_own_range_not_clipped_white() -> None:
     image = Image.new("I", (3000, 100), 10000)
     image.paste(30000, (0, 0, 1500, 100))
-    out = _decoded(_guarded(_encode(image, "TIFF"))).convert("L")
+    out = _decoded(_guarded(_encode(image, "PPM"))).convert("L")
     left, right = out.getpixel((10, 50)), out.getpixel((out.size[0] - 10, 50))
     assert (left, right) == (255, 0)
 
@@ -282,7 +282,7 @@ def test_mode_i_image_is_scaled_to_its_own_range_not_clipped_white() -> None:
 def test_single_value_high_depth_image_is_scaled_by_its_full_range(
     image: Image.Image, low: int, high: int
 ) -> None:
-    fmt = "PNG" if image.mode == "I;16" else "TIFF"
+    fmt = "PNG" if image.mode == "I;16" else "PPM"
     assert low <= _decoded(_guarded(_encode(image, fmt))).convert("L").getpixel((1, 1)) < high
 
 
@@ -294,11 +294,11 @@ def test_float_image_with_a_non_finite_pixel_keeps_its_contrast(
     image = Image.new("F", (3000, 100), 0.5)
     image.paste(1.0, (0, 0, 1500, 100))
     image.putpixel(position, bad)
-    out = _decoded(_guarded(_encode(image, "TIFF"))).convert("L")
+    out = _decoded(_guarded(_encode(image, "PPM"))).convert("L")
     assert out.getpixel((10, 20)) > out.getpixel((out.size[0] - 10, 20))
 
 
-@pytest.mark.parametrize("mode,fmt", [("F", "TIFF"), ("I", "TIFF"), ("I;16", "PNG")])
+@pytest.mark.parametrize("mode,fmt", [("F", "PPM"), ("I", "PPM"), ("I;16", "PNG")])
 def test_high_depth_image_is_downscaled_before_its_value_range_is_mapped(
     monkeypatch: pytest.MonkeyPatch, mode: str, fmt: str
 ) -> None:
@@ -362,7 +362,18 @@ def _with_a_second_scan(baseline_jpeg: bytes) -> bytes:
     return baseline_jpeg[:-2] + b"\xff\xda\x00\x08\x01\x01\x00\x00\x3f\x00\xff\xd9"
 
 
-@pytest.mark.parametrize("kind", ["progressive", "sequential", "progressive header, one scan"])
+def _with_three_components_declared(gray_jpeg: bytes) -> bytes:
+    start = gray_jpeg.index(b"\xff\xc0")
+    assert gray_jpeg[start + 2 : start + 4] == b"\x00\x0b" and gray_jpeg[start + 9] == 1
+    frame = b"\xff\xc0\x00\x11" + gray_jpeg[start + 4 : start + 9] + b"\x03"
+    frame += gray_jpeg[start + 10 : start + 13] + b"\x02\x11\x00\x03\x11\x00"
+    return gray_jpeg[:start] + frame + gray_jpeg[start + 13 :]
+
+
+@pytest.mark.parametrize(
+    "kind",
+    ["progressive", "sequential", "progressive header, one scan", "one scan of 1 component in 3"],
+)
 def test_jpeg_that_is_not_one_sequential_scan_is_charged_at_full_size_without_decoding(
     monkeypatch: pytest.MonkeyPatch, kind: str
 ) -> None:
@@ -373,6 +384,9 @@ def test_jpeg_that_is_not_one_sequential_scan_is_charged_at_full_size_without_de
     elif kind == "progressive header, one scan":
         assert raw.count(b"\xff\xc0") == 1
         raw = raw.replace(b"\xff\xc0", b"\xff\xc2")
+    elif kind == "one scan of 1 component in 3":
+        raw = _with_three_components_declared(_encode(image.convert("L"), "JPEG"))
+        assert Image.open(io.BytesIO(raw)).mode == "RGB"
     monkeypatch.setattr(converse_image, "MAX_DECODE_PIXELS", 1_000_000)
     monkeypatch.setattr(converse_image, "MAX_EDGE", 300)
     monkeypatch.setattr(ImageFile.ImageFile, "load", Mock(side_effect=AssertionError("decoded")))
@@ -402,14 +416,15 @@ def test_an_animation_truncated_after_its_first_frame_becomes_a_note(
     assert "not shown" in block["text"]
 
 
-def test_a_many_frame_animation_over_the_frame_budget_keeps_its_first_frame(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("limit,value", [("MAX_FRAME_PIXELS", 10 * 64 * 64), ("MAX_FRAMES", 10)])
+def test_a_many_frame_animation_over_a_frame_budget_keeps_its_first_frame(
+    monkeypatch: pytest.MonkeyPatch, limit: str, value: int
 ) -> None:
     frames = [Image.new("RGB", (64, 64), (200, 30, 30))]
     frames += [Image.new("RGB", (64, 64), (0, 5 * index, 200)) for index in range(39)]
     raw = _encode(frames[0], "GIF", save_all=True, append_images=frames[1:])
     assert Image.open(io.BytesIO(raw)).n_frames == 40
-    monkeypatch.setattr(converse_image, "MAX_FRAME_PIXELS", 10 * 64 * 64)
+    monkeypatch.setattr(converse_image, limit, value)
     visited: list[int] = []
     real_next = ImageSequence.Iterator.__next__
 
@@ -449,10 +464,11 @@ def test_a_gif_frame_over_the_edge_limit_after_the_first_one_is_not_decoded(
     assert getattr(_decoded(block), "n_frames", 1) == 1
 
 
-def test_an_ico_file_is_not_decoded(monkeypatch: pytest.MonkeyPatch) -> None:
-    raw = _encode(Image.new("RGBA", (64, 64), (1, 2, 3, 4)), "ICO")
+@pytest.mark.parametrize("fmt", ["ICO", "TIFF"])
+def test_an_ico_or_tiff_file_is_not_decoded(monkeypatch: pytest.MonkeyPatch, fmt: str) -> None:
+    raw = _encode(Image.new("RGBA", (64, 64), (1, 2, 3, 4)), fmt)
     monkeypatch.setattr(ImageFile.ImageFile, "load", Mock(side_effect=AssertionError("decoded")))
-    assert "not shown: not a PNG/JPEG/GIF/WEBP/BMP/TIFF/PPM image" in _guarded(raw)["text"]
+    assert "not shown: not a PNG/JPEG/GIF/WEBP/BMP/PPM image" in _guarded(raw)["text"]
 
 
 def test_an_mpo_with_a_damaged_trailing_image_keeps_its_primary_photo() -> None:
