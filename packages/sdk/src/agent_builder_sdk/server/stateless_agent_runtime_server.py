@@ -25,11 +25,16 @@ from agent_builder_sdk.agentic_framework.agent_lifecycle import (
 )
 from agent_builder_sdk.agentic_framework.client_factory import get_agentic_api_client
 from agent_builder_sdk.agentic_framework.job_manager import JobManager
+from agent_builder_sdk.constants import (
+    DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS,
+    DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS,
+)
 from agent_builder_sdk.env_var import has_mde_environment, set_runtime_env_vars
 from agent_builder_sdk.interfaces import AnyBaseAgent
 from agent_builder_sdk.mcp_client_factory import MCPClientFactory
 from agent_builder_sdk.messages.message_handler import MessageHandler
-from agent_builder_sdk.server.base_server import BaseServer, _accepts_locale
+from agent_builder_sdk.orchestrator_strands.conversation.constants import MessageSourceType
+from agent_builder_sdk.server.base_server import BaseServer
 from agent_builder_sdk.server.request_context import RequestContextMiddleware
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 from agent_builder_sdk.task_handler import TaskHandler
@@ -60,13 +65,12 @@ class StatelessAgentRuntimeServer(BaseServer):
         Initialize the Stateless Agent Runtime Server.
 
         Args:
-            agent_factory: Factory function for creating custom agents (required). A factory that
-                takes a ``locale`` argument (or ``**kwargs``) also receives the user's locale, or None.
-            host: Server host address (default: "0.0.0.0")
-            port: Server port (default: 8080)
+            agent_factory: Factory function for creating custom agents (required)
+            host: Server host address
+            port: Server port
             binary_location: Path to the MCP binary for tool integration
             storage_dir: Directory for agent data storage
-            auto_transition_job_to_executing: Automatically transition job from ASSESSING to EXECUTING on agent initialization (default: True)
+            auto_transition_job_to_executing: Automatically transition job from ASSESSING to EXECUTING on agent initialization
             tracing: Type of tracing to use (optional)
         """
         self.stop_requested = False
@@ -84,8 +88,8 @@ class StatelessAgentRuntimeServer(BaseServer):
         self.context: Optional[AgentRuntimeContext] = None
 
         # Set timeouts
-        self._timeout = 28
-        self._delayed_timeout = 60 * 5
+        self._timeout = DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS
+        self._delayed_timeout = DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS
 
         # Initialize components
         self.notification_handler = None  # TODO: add non-queue notification handler
@@ -194,19 +198,13 @@ class StatelessAgentRuntimeServer(BaseServer):
                 "job_id": self.context.job_id,
                 "agent_instance_id": self.context.agent_instance_id,
             }
-            # Only factories that take ``locale`` get it, so existing factories keep working.
-            locale_kwarg = (
-                {"locale": self.context.locale} if _accepts_locale(self.agent_factory) else {}
-            )
 
             if accepts_kwargs(self.agent_factory):
                 # If agent_factory has **kwargs, pass all parameters
-                self.agent = self.agent_factory(
-                    mcp_client, self.storage_dir, **agent_params, **locale_kwarg
-                )
+                self.agent = self.agent_factory(mcp_client, self.storage_dir, **agent_params)
             else:
                 # Fall back to original signature for backward compatibility
-                self.agent = self.agent_factory(mcp_client, self.storage_dir, **locale_kwarg)
+                self.agent = self.agent_factory(mcp_client, self.storage_dir)
 
             # Auto-transition job from ASSESSING to EXECUTING if enabled
             if self.auto_transition_job_to_executing:
@@ -240,6 +238,11 @@ class StatelessAgentRuntimeServer(BaseServer):
     async def handle_mde_notification(self, request: Dict[str, Any]) -> Dict[str, Any]:
         logger.info("Received notification request - implementing as no-op")
         return {"status": "acknowledged"}
+
+    async def _get_agent_for_streaming(self, source_id: str, source_type: MessageSourceType):
+        """Streaming ingress hook. The stateless server does not support concurrent
+        streaming; it rejects rather than serving multiple sources off one shared agent."""
+        raise NotImplementedError("This server does not support streaming")
 
     @asynccontextmanager
     async def _lifespan(self, app: FastAPI):

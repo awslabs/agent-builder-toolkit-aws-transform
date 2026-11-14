@@ -14,6 +14,9 @@ from agent_builder_sdk.custom_types.orchestrator_agent_types import (
     MemoryContext,
 )
 from agent_builder_sdk.memory.memory_manager import MemoryManager
+from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
+    BLANK_REPLY_CONTINUATION_MARKER,
+)
 from agent_builder_sdk.orchestrator_strands.hooks.memory_hook_provider import (
     MemoryHookProvider,
 )
@@ -94,6 +97,35 @@ class TestMemoryHookProvider:
 
         # Should not call memory manager for tool result messages
         hook_provider.memory_manager.get_context_for_message.assert_not_called()
+
+    def test_retrieve_memories_skips_blank_reply_continuation(self, hook_provider, mock_agent):
+        """The continuation BlankReplyHookProvider adds is not user input to recall against."""
+        continuation = {
+            "role": "user",
+            "content": [{"text": "Your last response was empty"}],
+            "metadata": {"custom": {BLANK_REPLY_CONTINUATION_MARKER: True}},
+        }
+        mock_agent.messages = [continuation]
+        event = MessageAddedEvent(message=continuation, agent=mock_agent)
+
+        hook_provider.retrieve_memories(event)
+
+        hook_provider.memory_manager.get_context_for_message.assert_not_called()
+        assert continuation["content"] == [{"text": "Your last response was empty"}]
+
+    @pytest.mark.parametrize(
+        "metadata",
+        (None, {"custom": None}, {"custom": {"other": 1}}),
+        ids=["metadata", "custom", "other"],
+    )
+    def test_retrieve_memories_without_the_marker(self, hook_provider, mock_agent, metadata):
+        message = {"role": "user", "content": [{"text": "hi"}], "metadata": metadata}
+        mock_agent.messages = [message]
+        hook_provider.memory_manager.get_context_for_message.return_value = None
+
+        hook_provider.retrieve_memories(MessageAddedEvent(message=message, agent=mock_agent))
+
+        hook_provider.memory_manager.get_context_for_message.assert_called_once()
 
     def test_retrieve_memories_empty_text(self, hook_provider, mock_agent):
         """Test retrieve_memories with empty text content."""

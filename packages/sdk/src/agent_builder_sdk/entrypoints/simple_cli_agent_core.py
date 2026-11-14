@@ -24,6 +24,7 @@ from agent_builder_sdk.notification.notification_handler import NotificationProc
 from agent_builder_sdk.observability.trace_helper import get_trace_attributes
 from agent_builder_sdk.orchestrator_strands.tools.example_tools import research_topic
 from agent_builder_sdk.server.agent_runtime_server import AgentRuntimeServer
+from agent_builder_sdk.streaming.config import StreamingConfig
 from agent_builder_sdk.task.example_task_manager import ExampleAlwaysCreateTaskManager
 from agent_builder_sdk.task.in_memory_task_store import InMemoryTaskStore
 from agent_builder_sdk.utils import get_prompt_with_name
@@ -81,6 +82,26 @@ def create_parser() -> argparse.ArgumentParser:
         help="Enable built-in system prompt guardrails, guarding against behaviors such as job/artifacts deletion, prompt inejection etc.",
     )
 
+    parser.add_argument(
+        "--concurrent-streaming",
+        action="store_true",
+        help="Opt into streaming (per-user agents over a shared MCP client).",
+    )
+    parser.add_argument(
+        "--emit-reasoning",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Emit reasoning/thinking on the stream (default: on). Only used with "
+        "--concurrent-streaming.",
+    )
+    parser.add_argument(
+        "--emit-tool-calls",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Emit tool-call events on the stream (default: on). Only used with "
+        "--concurrent-streaming.",
+    )
+
     return parser
 
 
@@ -91,8 +112,12 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
 
-    # Create agent factory with default configuration
-    def agent_factory(mcp_client, storage_dir):
+    # Create agent factory with default configuration.
+    # **kwargs forwards server-provided params (conversation_repository AND memory_manager,
+    # which the server injects when streaming is enabled so the shared singleton agent and
+    # per-user streaming agents share one history + memory store). BOTH must be forwarded —
+    # dropping either makes the streaming agents diverge from the singleton.
+    def agent_factory(mcp_client, storage_dir, **kwargs):
         # Get trace attributes for this session
         trace_attributes = get_trace_attributes()
         metric_config = MetricsConfig(enabled=True, namespace="DynamicShowcaseAgent")
@@ -112,6 +137,8 @@ def main():
             with_base_guardrails=args.base_guardrail,
             metrics_config=metric_config,
             # excluded_mcp_tool_names=excluded_mcp_tool_names,
+            conversation_repository=kwargs.get("conversation_repository"),
+            memory_manager=kwargs.get("memory_manager"),
         )
 
     logger.info("Starting Agent Runtime Server...")
@@ -145,6 +172,16 @@ def main():
         NotificationType.AGENT_STATUS_CHANGE: SubagentStatusChangeProcessor()
     }
 
+    # Passing a StreamingConfig opts into streaming; None (no --concurrent-streaming) leaves it off.
+    streaming_config = (
+        StreamingConfig(
+            emit_reasoning=args.emit_reasoning,
+            emit_tool_calls=args.emit_tool_calls,
+        )
+        if args.concurrent_streaming
+        else None
+    )
+
     server = AgentRuntimeServer(
         agent_factory=agent_factory,
         host=args.host,
@@ -157,6 +194,7 @@ def main():
         # task_manager_factory=task_manager_factory,  # Uncomment to enable task creation
         notification_processors=custom_notification_processors,
         tracing=args.tracing,
+        streaming_config=streaming_config,
     )
 
     # This will set up everything and run the server

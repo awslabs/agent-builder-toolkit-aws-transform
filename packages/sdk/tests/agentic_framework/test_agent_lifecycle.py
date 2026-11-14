@@ -12,6 +12,7 @@ from agent_builder_sdk.agentic_framework.agent_lifecycle import (
     get_agent_instance_manager_with_context,
     get_agent_status,
     get_subagent_instances,
+    idle_base_orchestrator_agent_instance,
     initialize_agent_instance,
     initialize_base_orchestrator_agent_instance,
     set_agent_running,
@@ -146,6 +147,30 @@ class TestAgentInstanceManager:
         assert call_args["agentInstanceStatus"] == "FAILED"
         assert call_args["agentInstanceStatusReason"] == "Processing error"
 
+    def test_set_idle(self, agent_instance_manager):
+        """Test set_idle method."""
+        expected_response = {"agentInstanceId": "test-agent", "status": "IDLE"}
+        agent_instance_manager.client.update_agent_instance.return_value = expected_response
+
+        result = agent_instance_manager.set_idle("test-agent", "Awaiting user input")
+
+        assert result == expected_response
+        call_args = agent_instance_manager.client.update_agent_instance.call_args[1]
+        assert call_args["agentInstanceStatus"] == "IDLE"
+        assert call_args["agentInstanceStatusReason"] == "Awaiting user input"
+
+    def test_set_idle_without_reason(self, agent_instance_manager):
+        """Test set_idle method without reason."""
+        expected_response = {"agentInstanceId": "test-agent", "status": "IDLE"}
+        agent_instance_manager.client.update_agent_instance.return_value = expected_response
+
+        result = agent_instance_manager.set_idle("test-agent")
+
+        assert result == expected_response
+        call_args = agent_instance_manager.client.update_agent_instance.call_args[1]
+        assert call_args["agentInstanceStatus"] == "IDLE"
+        assert "agentInstanceStatusReason" not in call_args
+
     def test_list_agent_instances_no_filter(self, agent_instance_manager):
         """Test list_agent_instances without filter."""
         expected_response = {
@@ -267,6 +292,52 @@ class TestAgentLifecycleFunctions:
 
         mock_get_manager.assert_called_once()
         mock_manager.set_stopped.assert_called_once_with(mock_manager.agent_instance_id, None)
+
+    @mock.patch(
+        "agent_builder_sdk.agentic_framework.agent_lifecycle.get_agent_instance_manager"
+    )
+    def test_idle_base_orchestrator_agent_instance(self, mock_get_manager):
+        """Test idle_base_orchestrator_agent_instance function."""
+        mock_manager = mock.Mock()
+        mock_manager.agent_instance_id = "test-agent"
+        mock_get_manager.return_value = mock_manager
+
+        result = idle_base_orchestrator_agent_instance("Awaiting user input")
+
+        assert result is True
+        mock_get_manager.assert_called_once()
+        mock_manager.set_idle.assert_called_once_with(
+            mock_manager.agent_instance_id, "Awaiting user input"
+        )
+
+    @mock.patch(
+        "agent_builder_sdk.agentic_framework.agent_lifecycle.get_agent_instance_manager"
+    )
+    def test_idle_base_orchestrator_agent_instance_no_reason(self, mock_get_manager):
+        """Test idle without reason."""
+        mock_manager = mock.Mock()
+        mock_manager.agent_instance_id = "test-agent"
+        mock_get_manager.return_value = mock_manager
+
+        result = idle_base_orchestrator_agent_instance()
+
+        assert result is True
+        mock_get_manager.assert_called_once()
+        mock_manager.set_idle.assert_called_once_with(mock_manager.agent_instance_id, None)
+
+    @mock.patch(
+        "agent_builder_sdk.agentic_framework.agent_lifecycle.get_agent_instance_manager"
+    )
+    def test_idle_base_orchestrator_agent_instance_failure(self, mock_get_manager):
+        """Test idle returns False on failure."""
+        mock_manager = mock.Mock()
+        mock_manager.agent_instance_id = "test-agent"
+        mock_manager.set_idle.side_effect = Exception("API error")
+        mock_get_manager.return_value = mock_manager
+
+        result = idle_base_orchestrator_agent_instance("test reason")
+
+        assert result is False
 
     @mock.patch(
         "agent_builder_sdk.agentic_framework.agent_lifecycle.get_agent_instance_manager"

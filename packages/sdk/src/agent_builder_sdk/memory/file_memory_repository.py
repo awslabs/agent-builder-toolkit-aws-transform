@@ -205,29 +205,35 @@ class FileSystemRepository(MemoryRepository):
     def _retrieve_by_id(self, memory_id: str) -> List[Dict[str, Any]]:
         """Retrieve a specific memory by ID."""
         try:
-            # Check index
-            if memory_id not in self._memory_index:
-                return []
+            # Guard the read-modify-write of _memory_index with the same lock the store/clear
+            # paths hold. When one FileSystemRepository is shared across concurrent turns (a sync
+            # orchestrator runs turns in worker threads), an unlocked "memory_id in index" check
+            # followed by "index[memory_id]" can race a concurrent clear() that pops the id in
+            # between, raising KeyError (a spurious empty read).
+            with self._lock:
+                # Check index
+                if memory_id not in self._memory_index:
+                    return []
 
-            memory_date = self._memory_index[memory_id]
-            partition_file = self._get_partition_file(memory_date)
+                memory_date = self._memory_index[memory_id]
+                partition_file = self._get_partition_file(memory_date)
 
-            if not partition_file.exists():
-                # Index is stale, remove entry
+                if not partition_file.exists():
+                    # Index is stale, remove entry
+                    self._memory_index.pop(memory_id, None)
+                    return []
+
+                partition_data = self._load_partition(partition_file)
+                memories = partition_data.get("memories", [])
+
+                # Find the specific memory
+                for memory in memories:
+                    if memory.get("memory_id") == memory_id:
+                        return [memory]
+
+                # Memory not found, index is stale
                 self._memory_index.pop(memory_id, None)
                 return []
-
-            partition_data = self._load_partition(partition_file)
-            memories = partition_data.get("memories", [])
-
-            # Find the specific memory
-            for memory in memories:
-                if memory.get("memory_id") == memory_id:
-                    return [memory]
-
-            # Memory not found, index is stale
-            self._memory_index.pop(memory_id, None)
-            return []
 
         except Exception as e:
             logger.error(f"Failed to retrieve memory {memory_id}: {e}")
@@ -341,19 +347,23 @@ class FileSystemRepository(MemoryRepository):
     def _clear_by_id(self, memory_id: str) -> int:
         """Clear a specific memory by ID."""
         try:
-            # Check index
-            if memory_id not in self._memory_index:
-                return 0
-
-            memory_date = self._memory_index[memory_id]
-            partition_file = self._get_partition_file(memory_date)
-
-            if not partition_file.exists():
-                # Index is stale, remove entry
-                self._memory_index.pop(memory_id, None)
-                return 0
-
+            # Guard the whole check-then-act under the lock (like _retrieve_by_id). When one
+            # FileSystemRepository is shared across concurrent turns (sync orchestrator runs
+            # turns in worker threads), an unlocked "memory_id in index" check + later index
+            # read/pop can race a concurrent clear/store, orphaning or double-removing entries.
             with self._lock:
+                # Check index
+                if memory_id not in self._memory_index:
+                    return 0
+
+                memory_date = self._memory_index[memory_id]
+                partition_file = self._get_partition_file(memory_date)
+
+                if not partition_file.exists():
+                    # Index is stale, remove entry
+                    self._memory_index.pop(memory_id, None)
+                    return 0
+
                 # Load partition
                 partition_data = self._load_partition(partition_file)
                 memories = partition_data.get("memories", [])
