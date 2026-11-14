@@ -60,6 +60,7 @@ class StatelessAgentRuntimeServer(BaseServer):
         storage_dir: str = "/tmp/orchestrator_agent",
         auto_transition_job_to_executing: bool = True,
         tracing: Optional[str] = None,
+        close_connections: bool = False,
     ):
         """
         Initialize the Stateless Agent Runtime Server.
@@ -72,11 +73,17 @@ class StatelessAgentRuntimeServer(BaseServer):
             storage_dir: Directory for agent data storage
             auto_transition_job_to_executing: Automatically transition job from ASSESSING to EXECUTING on agent initialization
             tracing: Type of tracing to use (optional)
+            close_connections: Send ``Connection: close`` on every response, so each request uses
+                a new connection and a proxy in front of the server cannot reuse a keep-alive
+                connection that the server has already closed. Turn it on when the first request
+                after an idle period fails with a connection error. False (default) keeps
+                connections alive.
         """
         self.stop_requested = False
         self.agent_factory = agent_factory
         self.host = host
         self.port = port
+        self.close_connections = close_connections
         self.binary_location = binary_location
         self.storage_dir = storage_dir
         self.auto_transition_job_to_executing = auto_transition_job_to_executing
@@ -270,5 +277,9 @@ class StatelessAgentRuntimeServer(BaseServer):
         """
         logger.info(f"Starting Stateless AgentCore server on {self.host}:{self.port}")
 
-        # Start HTTP server
-        uvicorn.run(self.app, host=self.host, port=self.port)
+        uvicorn.run(
+            self.app,
+            host=self.host,
+            port=self.port,
+            headers=[("Connection", "close")] if self.close_connections else None,
+        )

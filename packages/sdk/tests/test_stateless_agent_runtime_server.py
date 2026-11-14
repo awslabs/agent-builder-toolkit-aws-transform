@@ -7,6 +7,7 @@ Tests the StatelessAgentRuntimeServer class which provides compatibility with mu
 agent execution environments through JSON-RPC endpoints.
 """
 
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -357,6 +358,22 @@ class TestStatelessAgentRuntimeServer:
         ) as mock_uvicorn:
             stateless_agent_runtime_server.start()
             mock_uvicorn.run.assert_called_once()
+            assert mock_uvicorn.run.call_args.kwargs["headers"] is None
+
+    def test_start_sends_connection_close_when_opted_in(self, mock_subagent_factory: Any) -> None:
+        with mock.patch("agent_builder_sdk.server.stateless_agent_runtime_server.MessageHandler"):
+            server = StatelessAgentRuntimeServer(
+                agent_factory=mock_subagent_factory,
+                binary_location="/tmp/test_binary",
+                storage_dir="/tmp/test_storage",
+                close_connections=True,
+            )
+
+        with mock.patch(
+            "agent_builder_sdk.server.stateless_agent_runtime_server.uvicorn.run"
+        ) as run:
+            server.start()
+            assert run.call_args.kwargs["headers"] == [("Connection", "close")]
 
     @pytest.mark.asyncio
     async def test_extract_and_initialize_job_metadata_format(self, stateless_agent_runtime_server):

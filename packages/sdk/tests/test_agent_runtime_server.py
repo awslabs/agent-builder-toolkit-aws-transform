@@ -10,6 +10,7 @@ agent execution environments through JSON-RPC endpoints.
 import asyncio
 import logging
 from multiprocessing import Event as MPEvent
+from typing import Any
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec, patch
 
@@ -111,6 +112,22 @@ def test_start_sends_connection_close_when_streaming(mock_agent_factory):
     with mock.patch("agent_builder_sdk.server.agent_runtime_server.uvicorn.run") as run:
         non_streaming.start()
         assert run.call_args.kwargs["headers"] is None
+
+
+def test_start_sends_connection_close_when_opted_in(mock_agent_factory: Any) -> None:
+    with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+            opted_in = AgentRuntimeServer(agent_factory=mock_agent_factory, close_connections=True)
+            streaming = AgentRuntimeServer(
+                agent_factory=mock_agent_factory,
+                streaming_config=StreamingConfig(),
+                close_connections=False,
+            )
+
+    for server in (opted_in, streaming):
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.uvicorn.run") as run:
+            server.start()
+            assert run.call_args.kwargs["headers"] == [("Connection", "close")]
 
 
 class TestAgentRuntimeServer:
