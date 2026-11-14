@@ -24,6 +24,7 @@ from agent_builder_sdk.checkpoint.checkpoint_repository import (
     CheckpointRepository,
     create_checkpoint_repository,
 )
+from agent_builder_sdk.env_var import MAX_ALLOWED_CHECKPOINTS
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 
 
@@ -969,3 +970,30 @@ class TestMultiCheckpoint:
 
         assert [c["artifactId"] for c in result] == ["n1", "n2"]
         assert mock_artifact_store.list_artifacts.call_count == 2
+
+    def test_list_checkpoint_requests_pages_of_at_most_100(
+        self, multi_checkpoint_repository, mock_artifact_store
+    ):
+        # ListArtifacts accepts maxResults up to 100, so a larger limit is filled across pages.
+        mock_artifact_store.list_artifacts.side_effect = [
+            {"artifacts": [_ts(f"p{page}-{i}", 1) for i in range(100)], "nextToken": "more"}
+            for page in range(3)
+        ]
+
+        result = multi_checkpoint_repository.list_checkpoint(limit=250)
+
+        assert len(result) == 250
+        page_sizes = [
+            call.kwargs["max_results"] for call in mock_artifact_store.list_artifacts.call_args_list
+        ]
+        assert page_sizes == [100, 100, 100]
+
+    def test_max_checkpoints_above_cap_is_clamped(self, mock_artifact_store):
+        with patch(
+            "agent_builder_sdk.checkpoint.checkpoint_repository.ArtifactStore",
+            return_value=mock_artifact_store,
+        ):
+            repo = CheckpointRepository("ws1", "job1", "agent1", max_checkpoints=500)
+
+        assert repo.max_checkpoints == MAX_ALLOWED_CHECKPOINTS
+        assert repo.multi_checkpoint_enabled is True

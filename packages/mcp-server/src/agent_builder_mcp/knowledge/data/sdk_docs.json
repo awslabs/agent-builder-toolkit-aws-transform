@@ -956,7 +956,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
-    "docstring": "STATE checkpoint artifacts for this agent, newest first.\n\nA page may hold fewer items than requested even when more exist, so this\nkeeps paging until limit is met or there is no nextToken.",
+    "docstring": "STATE checkpoint artifacts for this agent, newest first.\n\nA page may hold fewer items than requested even when more exist, so this\nkeeps paging until limit is met or there is no nextToken. Each page asks for\nat most 100 items, so a larger limit takes more than one request.",
     "signature": "list_checkpoint(limit: Optional[int] = None) -> list[ArtifactTypeDef]"
   },
   {

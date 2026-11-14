@@ -21,7 +21,11 @@ from agent_builder_sdk.agentic_framework.api_model import CategoryType
 from agent_builder_sdk.agentic_framework.artifact_store import ArtifactStore
 from agent_builder_sdk.agentic_framework.client_factory import get_agentic_api_client
 from agent_builder_sdk.agentic_framework.common import calculate_digest
-from agent_builder_sdk.env_var import get_agent_context_from_env, get_max_checkpoints
+from agent_builder_sdk.env_var import (
+    MAX_ALLOWED_CHECKPOINTS,
+    get_agent_context_from_env,
+    get_max_checkpoints,
+)
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 from agent_builder_types.type_defs import ArtifactTypeDef
 
@@ -29,6 +33,9 @@ logger = logging.getLogger(__name__)
 
 # Absolute bound on pagination; 100 pages x 100 per page is a generous ceiling.
 _MAX_LIST_CHECKPOINT_PAGES = 100
+
+# ListArtifacts accepts maxResults from 1 to 100.
+_MAX_LIST_PAGE_SIZE = 100
 
 # Multi-checkpoint artifacts carry their write time (ns) in the label, so checkpoints
 # that share an artifactCreatedTimestamp still order by recency.
@@ -62,6 +69,12 @@ class CheckpointRepository:
         self.agent_instance_id = agent_instance_id
         self.checkpoint_location = checkpoint_location or self._get_default_location()
         self.auto_check_state_object = auto_check_state_object
+        if max_checkpoints is not None and max_checkpoints > MAX_ALLOWED_CHECKPOINTS:
+            logger.warning(
+                f"max_checkpoints={max_checkpoints} exceeds the maximum of "
+                f"{MAX_ALLOWED_CHECKPOINTS}; clamping to {MAX_ALLOWED_CHECKPOINTS}"
+            )
+            max_checkpoints = MAX_ALLOWED_CHECKPOINTS
         self.max_checkpoints = max_checkpoints
         # Opt-in: retain up to N checkpoints instead of overwriting a single one.
         self.multi_checkpoint_enabled = max_checkpoints is not None and max_checkpoints > 1
@@ -281,9 +294,11 @@ class CheckpointRepository:
         """STATE checkpoint artifacts for this agent, newest first.
 
         A page may hold fewer items than requested even when more exist, so this
-        keeps paging until limit is met or there is no nextToken.
+        keeps paging until limit is met or there is no nextToken. Each page asks for
+        at most 100 items, so a larger limit takes more than one request.
         """
         try:
+            page_size = None if limit is None else min(limit, _MAX_LIST_PAGE_SIZE)
             artifacts: list[ArtifactTypeDef] = []
             next_token: Optional[str] = None
             for _ in range(_MAX_LIST_CHECKPOINT_PAGES):
@@ -291,7 +306,7 @@ class CheckpointRepository:
                     self.agent_instance_id,
                     CategoryType.STATE,
                     next_token=next_token,
-                    max_results=limit,
+                    max_results=page_size,
                 )
                 artifacts.extend(response.get("artifacts", []))
                 next_token = response.get("nextToken")
