@@ -542,9 +542,14 @@ class _CallableFactory:
         return None
 
 
-def _wrapped(wrapper: Callable[..., Any]) -> Callable[..., Any]:
-    """``wrapper`` as a ``functools.wraps`` wrapper of a factory that names ``locale``."""
-    return functools.wraps(lambda mcp_client, storage_dir, locale=None: None)(wrapper)
+def _wrapped(*wrappers: Callable[..., Any]) -> Callable[..., Any]:
+    """``wrappers``, outermost first, as ``functools.wraps`` wrappers of a factory that names
+    ``locale``."""
+    return functools.reduce(
+        lambda factory, wrapper: functools.wraps(factory)(wrapper),
+        reversed(wrappers),
+        lambda mcp_client, storage_dir, locale=None: None,
+    )
 
 
 @pytest.mark.parametrize(
@@ -557,6 +562,13 @@ def _wrapped(wrapper: Callable[..., Any]) -> Callable[..., Any]:
         (_wrapped(lambda *args, **kwargs: None), {"locale": "ja"}),
         (_wrapped(lambda mcp_client, storage_dir: None), {}),
         (functools.partial(_wrapped(lambda mcp_client, storage_dir: None)), {}),
+        (_wrapped(lambda *args, **kwargs: None, lambda mcp_client, storage_dir: None), {}),
+        (
+            functools.partial(
+                _wrapped(lambda *args, **kwargs: None, lambda mcp_client, storage_dir: None)
+            ),
+            {},
+        ),
         (functools.lru_cache(lambda mcp_client, storage_dir, locale=None: None), {}),
         (lambda mcp_client, storage_dir, locale=None, /: None, {}),
         (lambda mcp_client, storage_dir, *locale: None, {}),
@@ -572,6 +584,8 @@ def _wrapped(wrapper: Callable[..., Any]) -> Callable[..., Any]:
         "wrapper_with_kwargs",
         "wrapper_with_fixed_signature",
         "partial_of_wrapper_with_fixed_signature",
+        "wrapper_with_kwargs_around_wrapper_with_fixed_signature",
+        "partial_of_wrapper_with_kwargs_around_wrapper_with_fixed_signature",
         "wrapper_without_a_readable_signature",
         "positional_only",
         "var_positional",

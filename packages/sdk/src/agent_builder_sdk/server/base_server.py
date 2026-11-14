@@ -4,6 +4,7 @@
 Abstract base server interface.
 """
 
+import functools
 import inspect
 import json
 import logging
@@ -64,9 +65,10 @@ def _locale_kwargs(factory: Callable[..., Any], locale: Optional[str]) -> Dict[s
     parameter that takes a keyword. An unset locale is left out so the factory's own default
     applies. The request value is not type-checked before it gets here, so a value that is
     not a string is left out too. A bare ``**kwargs`` does not count, because such factories
-    often forward it to a callable with a fixed signature. A ``functools.wraps`` wrapper must
-    itself take the keyword, by name or through ``**kwargs``. A wrapper whose own signature
-    Python cannot read (for example ``functools.lru_cache``) gets no locale.
+    often forward it to a callable with a fixed signature. Every wrapper around the factory
+    (``functools.wraps`` or ``functools.partial``) must itself take the keyword, by name or
+    through ``**kwargs``. A wrapper whose own signature Python cannot read (for example
+    ``functools.lru_cache``) gets no locale.
     """
     if not locale or not isinstance(locale, str):
         return {}
@@ -78,10 +80,17 @@ def _locale_kwargs(factory: Callable[..., Any], locale: Optional[str]) -> Dict[s
         return {}
     try:
         # The signature read above follows functools.wraps to the wrapped callable, but the
-        # server calls the wrapper.
-        inspect.signature(factory, follow_wrapped=False).bind_partial(locale=locale)
+        # server calls the outermost wrapper, and the keyword must pass through each one.
+        wrapper: Any = factory
+        while wrapper is not None:
+            inspect.signature(wrapper, follow_wrapped=False).bind_partial(locale=locale)
+            wrapper = (
+                wrapper.func
+                if isinstance(wrapper, functools.partial)
+                else getattr(wrapper, "__wrapped__", None)
+            )
     except (TypeError, ValueError):
-        # ValueError: the wrapper has no readable signature.
+        # ValueError: a wrapper has no readable signature.
         return {}
     return {"locale": locale}
 
@@ -93,7 +102,8 @@ def _log_locale_not_passed(locale: Optional[str], factory_kwargs: Mapping[str, A
         logger.info(
             "Locale %r is set but the agent factory is called without a 'locale' argument. "
             "The server adds one only for a string locale and a factory that names a 'locale' "
-            "keyword parameter",
+            "keyword parameter, and only when every wrapper around the factory has a signature "
+            "that takes it too",
             locale,
         )
 
