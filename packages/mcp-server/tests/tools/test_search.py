@@ -43,3 +43,13 @@ class TestSearchBySource:
         listed = re.search(r"Valid sources: ([^.]+)\.", description)
         assert listed is not None
         assert sorted(listed.group(1).split(", ")) == sorted(SOURCE_NAMES)
+
+
+class TestHitlGenerationPrompt:
+    """Tests for get_hitl_generation_prompt function."""
+
+    def test_prompt_holds_the_test_steps(self) -> None:
+        """The prompt gives the test steps itself: a search preview can cut them off."""
+        prompt = _lite.get_hitl_generation_prompt()
+        assert 'uxComponentId: "DynamicHITLRenderEngine"' in prompt
+        assert "open the task in the web app" in prompt
