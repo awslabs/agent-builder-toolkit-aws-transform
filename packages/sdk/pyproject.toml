@@ -45,13 +45,12 @@ full = [
     "agent-builder-agentic-mcp-aws-transform>=1.0",
     "agent-builder-mcp-aws-transform>=1.0",
 ]
-# Experimental AgentCore code-interpreter tools (enable_code_interpreter). 0.8.0 is
-# the first strands-agents-tools release with binary file staging (FileContent.blob).
-code-interpreter = ["strands-agents-tools[agent-core-code-interpreter]>=0.8.0"]
+# Experimental AgentCore code-interpreter tools (enable_code_interpreter).
+code-interpreter = ["bedrock-agentcore>=1.1.0"]
 test = [
     "pytest",
     "pytest-asyncio",
-    "strands-agents-tools[agent-core-code-interpreter]>=0.8.0",
+    "bedrock-agentcore>=1.1.0",
 ]
 
 [project.scripts]
