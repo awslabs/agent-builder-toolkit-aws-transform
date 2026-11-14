@@ -6,8 +6,9 @@ import json
 import logging
 import os
 import tempfile
+import threading
 from pathlib import Path
-from typing import IO, Any, Optional
+from typing import IO, Any, List, Optional
 
 import pytest
 
@@ -459,11 +460,36 @@ class TestFileTaskStore:
         # "task-1-retry.json" sorts before "task-1.json" as a file name, after it as an ID.
         for task in (make_task("task-1-retry"), sample_task, make_task("task-1")):
             await store.store_task(task)
+        # A complete temporary file, as a writer stopped before its rename leaves behind.
+        leftover = store.storage_dir / "task-1.json.deadbeef.tmp"
+        leftover.write_text(json.dumps(make_task("task-1", TaskState.WORKING).to_dict()))
 
         tasks = await FileTaskStore(storage_dir=temp_storage_dir).list_tasks()
 
         assert [task.id for task in tasks] == ["task-1", "task-1-retry", sample_task.id]
+        assert tasks[0].status.state == TaskState.SUBMITTED
         assert tasks[2].to_dict() == sample_task.to_dict()
+
+    @pytest.mark.asyncio
+    async def test_list_tasks_reads_files_in_worker_thread(
+        self, temp_storage_dir: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The file reads run off the event loop thread."""
+        store = FileTaskStore(storage_dir=temp_storage_dir)
+        await store.store_task(make_task("task-a"))
+        read_all_tasks = store._read_all_tasks
+        reader_threads: List[int] = []
+
+        def record_thread() -> List[A2ATask]:
+            reader_threads.append(threading.get_ident())
+            return read_all_tasks()
+
+        monkeypatch.setattr(store, "_read_all_tasks", record_thread)
+        tasks = await store.list_tasks()
+
+        assert [task.id for task in tasks] == ["task-a"]
+        assert len(reader_threads) == 1
+        assert reader_threads[0] != threading.get_ident()
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
@@ -484,5 +510,6 @@ class TestFileTaskStore:
             tasks = await store.list_tasks()
 
         assert [task.id for task in tasks] == ["task-a", "task-c"]
-        assert [record.levelname for record in caplog.records] == ["WARNING"]
-        assert "broken.json" in caplog.text
+        warnings = [record for record in caplog.records if record.levelno >= logging.WARNING]
+        assert len(warnings) == 1
+        assert "broken.json" in warnings[0].getMessage()
