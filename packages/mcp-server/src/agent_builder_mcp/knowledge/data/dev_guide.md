@@ -83,6 +83,7 @@
     - [Building Orchestrator Agents](#building-orchestrator-agents)
       - [Create Your Orchestrator Class](#create-your-orchestrator-class)
       - [Create Custom Tools (Optional)](#create-custom-tools-optional)
+      - [Offload Large Tool Results (Optional)](#offload-large-tool-results-optional)
       - [Create Your Entry Point - Old CLI Approach](#create-your-entry-point---old-cli-approach)
       - [Local Testing](#local-testing)
     - [Building Subagents](#building-subagents)
@@ -2556,6 +2557,54 @@ def another_tool(value: int) -> bool:
 ```
 
 See Strands Tools Documentation for more details.
+
+#### Offload Large Tool Results (Optional)
+
+A tool result stays in the conversation, so the model receives it again on every later call. `ToolOutputOffloader` is a Strands plugin that writes a large result to a file and leaves a short preview in the conversation. The model reads the rest on demand with the `retrieve_offloaded_content` tool, which the plugin adds to the agent.
+
+```
+tool result (text / JSON over the limit)
+        |
+        v
+ToolOutputOffloader --> <storage_dir>/offloaded/...   full result, one file per block
+        |
+        v
+conversation: preview + references --> model --> retrieve_offloaded_content(reference, line_range | pattern)
+```
+
+Pass the plugin to the orchestrator constructor, inside your agent factory, so that each agent has its own instance:
+
+```python
+from agent_builder_sdk.orchestrator_strands.base_orchestrator import AsyncBaseOrchestrator
+from agent_builder_sdk.orchestrator_strands.tool_output_offloader import ToolOutputOffloader
+
+def agent_factory(mcp_client, storage_dir):
+    return AsyncBaseOrchestrator(
+        system_prompt="You are a specialized orchestrator for...",
+        mcp_clients=[mcp_client],
+        plugins=[ToolOutputOffloader(storage_dir=storage_dir)],
+    )
+```
+
+The `create_*` factory functions do not take plugins; use the constructor of `AsyncBaseOrchestrator`, `BaseOrchestrator` or your own subclass.
+
+| Parameter | Default | Meaning |
+| --- | --- | --- |
+| `storage_dir` | required | The agent's storage directory. Files go to its `offloaded` subdirectory. |
+| `max_result_tokens` | 12,500 | A result is offloaded when its text and JSON blocks exceed this estimate. |
+| `preview_tokens` | 1,000 | Size of the preview that stays in the conversation. |
+| `keep_in_context_tools` | `DEFAULT_KEEP_IN_CONTEXT_TOOLS` | Tools whose results are never offloaded: by default `skills`, `memory`, `discover_subagents` and the tools that send a message to a subagent. To add a tool, pass `DEFAULT_KEEP_IN_CONTEXT_TOOLS \| {"my_tool"}`. |
+
+What to expect:
+
+- Only text and JSON blocks are offloaded. Image, document and other blocks stay in the result.
+- The token count is the estimate of the agent's model (`count_tokens`), not a billing figure.
+- File names are generated. They hold no part of the tool name, the tool-use id or the tool output.
+- The offloader never deletes a file, so a reference stays valid for the whole job, also after a checkpoint restore. The files are part of the agent's storage directory: checkpoints include them and grow with them.
+- Offloaders that use the same `storage_dir` can read each other's references.
+- When the token count or the file write fails, the full result stays in the conversation and a warning is logged.
+- A result of `retrieve_offloaded_content` is never offloaded. A retrieval without `line_range` or `pattern` puts the whole stored block back into the conversation.
+- Requires `strands-agents>=1.51.0`, which is the minimum version of the SDK.
 
 ```
 #### Create Your Entry Point - Bedrock AgentCore (Recommended)
