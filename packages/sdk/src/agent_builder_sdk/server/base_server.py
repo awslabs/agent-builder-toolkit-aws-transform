@@ -4,13 +4,14 @@
 Abstract base server interface.
 """
 
+import inspect
 import json
 import logging
 import os
 import uuid
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -54,6 +55,25 @@ if TYPE_CHECKING:
     from agent_builder_sdk.streaming.config import StreamingConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _locale_kwargs(factory: Callable[..., Any], locale: Optional[str]) -> Dict[str, str]:
+    """Return ``{"locale": locale}`` for an agent factory that should receive it, else ``{}``.
+
+    The locale is passed only when it is set and ``factory`` names a ``locale`` parameter that
+    takes a keyword. An unset locale is left out so the factory's own default applies. A bare
+    ``**kwargs`` does not count, because such factories often forward it to a callable with a
+    fixed signature.
+    """
+    if not locale:
+        return {}
+    parameter = inspect.signature(factory).parameters.get("locale")
+    if parameter is None or parameter.kind not in (
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        inspect.Parameter.KEYWORD_ONLY,
+    ):
+        return {}
+    return {"locale": locale}
 
 
 class BaseServer(ABC):
@@ -186,7 +206,7 @@ class BaseServer(ABC):
                 init_request.get("agentInstanceId"),
             ]
         ):
-            # Extract locale from invocationContext.userMetadata (injected by Compute AgentCoreMapper)
+            # Only invoke and restore carry invocationContext; other methods leave the locale unset.
             invocation_context = params.get("invocationContext", {})
             user_metadata = invocation_context.get("userMetadata", {})
             locale = user_metadata.get("invocationUserCurrentLocale")

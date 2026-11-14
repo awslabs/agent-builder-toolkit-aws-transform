@@ -85,7 +85,7 @@ from agent_builder_sdk.orchestrator_strands.conversation.file_repository import 
     FileMultiSourceConversationRepository,
 )
 from agent_builder_sdk.request_handler import QueueRequestHandler
-from agent_builder_sdk.server.base_server import BaseServer
+from agent_builder_sdk.server.base_server import BaseServer, _locale_kwargs
 from agent_builder_sdk.server.request_context import RequestContextMiddleware
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 from agent_builder_sdk.server.streaming_agent_pool import StreamingAgentPool
@@ -142,7 +142,9 @@ class AgentRuntimeServer(BaseServer):
         Initialize the Agent Runtime Server.
 
         Args:
-            agent_factory: Factory function for creating custom agents (required)
+            agent_factory: Factory function for creating custom agents (required). A factory
+                that names a ``locale`` parameter receives the user's locale as a keyword
+                argument when one is known at the time the agent is built.
             host: Server host address
             port: Server port
             storage_dir: Base directory for all agent runtime data
@@ -774,7 +776,14 @@ class AgentRuntimeServer(BaseServer):
                 )
             else:
                 sync_factory_no_kwargs = cast(SyncAgentFactoryNoKwargs, self.agent_factory)
-                build = functools.partial(sync_factory_no_kwargs, mcp_client, storage_dir)
+                # Read from agent_params, not the context: a subclass may override
+                # _get_agent_params.
+                build = functools.partial(
+                    sync_factory_no_kwargs,
+                    mcp_client,
+                    storage_dir,
+                    **_locale_kwargs(self.agent_factory, agent_params.get("locale")),
+                )
             if not off_loop:
                 return build()
             # Run in a copy of the caller's context, as asyncio.to_thread does, so ContextVars the
@@ -804,6 +813,7 @@ class AgentRuntimeServer(BaseServer):
         # built one, so the shared singleton agent and per-user streaming agents share memory.
         if self._shared_memory_manager is not None:
             params["memory_manager"] = self._shared_memory_manager
+        params.update(_locale_kwargs(self.agent_factory, self.context.locale))
         return params
 
     @staticmethod

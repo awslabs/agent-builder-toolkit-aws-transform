@@ -7,11 +7,13 @@ Tests the StatelessAgentRuntimeServer class which provides compatibility with mu
 agent execution environments through JSON-RPC endpoints.
 """
 
+from typing import Any, Optional
 from unittest import mock
 
 import pytest
 
 from agent_builder_sdk.custom_types.common_types import A2AMessage
+from agent_builder_sdk.server.server_models import AgentRuntimeContext
 from agent_builder_sdk.server.stateless_agent_runtime_server import StatelessAgentRuntimeServer
 
 
@@ -753,3 +755,86 @@ class TestStatelessAgentRuntimeServer:
                             # Verify set_agent_running was NOT called for RUNNING status
                             mock_set_running.assert_not_called()
                             assert stateless_agent_runtime_server.initialized is True
+
+
+def named_locale_factory(
+    mcp_client: Any, storage_dir: str, locale: Optional[str] = "de"
+) -> dict[str, Any]:
+    return {"locale": locale}
+
+
+def named_locale_and_kwargs_factory(
+    mcp_client: Any, storage_dir: str, *, locale: Optional[str] = "de", **kwargs: Any
+) -> dict[str, Any]:
+    return {"locale": locale}
+
+
+def kwargs_only_factory(mcp_client: Any, storage_dir: str, **kwargs: Any) -> dict[str, Any]:
+    return kwargs
+
+
+def fixed_signature_factory(
+    mcp_client: Any, storage_dir: str, workspace_id: str, job_id: str, agent_instance_id: str
+) -> dict[str, Any]:
+    return {}
+
+
+def forwarding_factory(mcp_client: Any, storage_dir: str, **kwargs: Any) -> dict[str, Any]:
+    return fixed_signature_factory(mcp_client, storage_dir, **kwargs)
+
+
+def legacy_factory(mcp_client: Any, storage_dir: str) -> dict[str, Any]:
+    return {}
+
+
+NAMED_LOCALE_FACTORIES = [named_locale_factory, named_locale_and_kwargs_factory]
+
+
+class TestLocaleDelivery:
+    """The server passes the context locale to agent factories that name a ``locale`` parameter."""
+
+    @staticmethod
+    async def _build_agent(factory: Any, locale: Optional[str]) -> Any:
+        module = "agent_builder_sdk.server.stateless_agent_runtime_server"
+        with (
+            mock.patch(f"{module}.MessageHandler"),
+            mock.patch(f"{module}.build_agentic_api_endpoint_from_env"),
+            mock.patch(f"{module}.MCPClientFactory.setup_ab_mcp_client"),
+        ):
+            server = StatelessAgentRuntimeServer(
+                agent_factory=factory,
+                storage_dir="/tmp/test_storage",
+                auto_transition_job_to_executing=False,
+            )
+            server.context = AgentRuntimeContext(
+                workspace_id="test-workspace",
+                job_id="test-job",
+                agent_instance_id="test-agent",
+                locale=locale,
+            )
+            await server._finalize_agent_setup("STOPPED")
+        assert server.initialized is True
+        return server.agent
+
+    @pytest.mark.parametrize("factory", NAMED_LOCALE_FACTORIES)
+    async def test_factory_that_names_locale_receives_it(self, factory: Any) -> None:
+        assert await self._build_agent(factory, "ja") == {"locale": "ja"}
+
+    @pytest.mark.parametrize("factory", NAMED_LOCALE_FACTORIES)
+    @pytest.mark.parametrize("locale", [None, ""])
+    async def test_factory_default_applies_when_no_locale_is_set(
+        self, factory: Any, locale: Optional[str]
+    ) -> None:
+        assert await self._build_agent(factory, locale) == {"locale": "de"}
+
+    async def test_kwargs_only_factory_gets_no_locale_key(self) -> None:
+        agent = await self._build_agent(kwargs_only_factory, "ja")
+
+        assert agent["workspace_id"] == "test-workspace"
+        assert "locale" not in agent
+
+    @pytest.mark.parametrize("factory", [forwarding_factory, legacy_factory])
+    async def test_factory_without_locale_parameter_is_called_as_before(
+        self, factory: Any
+    ) -> None:
+        assert await self._build_agent(factory, "ja") == {}

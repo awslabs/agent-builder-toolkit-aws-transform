@@ -6,11 +6,12 @@ Unit tests for Base Server implementation.
 Tests the BaseServer abstract class functionality including setup_tracing.
 """
 
+from typing import Any, Callable, Optional
 from unittest import mock
 
 import pytest
 
-from agent_builder_sdk.server.base_server import BaseServer
+from agent_builder_sdk.server.base_server import BaseServer, _locale_kwargs
 
 
 class ConcreteBaseServer(BaseServer):
@@ -528,3 +529,44 @@ class TestHandleStreamingTerminalGuarantee:
         body = "".join([c async for c in resp.body_iterator])
         frames = self._parse_frames(body)
         assert frames[-1]["status"]["state"] == "completed"  # stream completed, no crash
+
+
+class _CallableFactory:
+    def __call__(self, mcp_client: Any, storage_dir: str, locale: Optional[str] = None) -> None:
+        return None
+
+
+@pytest.mark.parametrize(
+    "factory, expected",
+    [
+        (lambda mcp_client, storage_dir, locale=None: None, {"locale": "ja"}),
+        (lambda mcp_client, storage_dir, *, locale=None: None, {"locale": "ja"}),
+        (lambda mcp_client, storage_dir, locale=None, **kwargs: None, {"locale": "ja"}),
+        (_CallableFactory(), {"locale": "ja"}),
+        (lambda mcp_client, storage_dir, locale=None, /: None, {}),
+        (lambda mcp_client, storage_dir, *locale: None, {}),
+        (lambda mcp_client, storage_dir, **locale: None, {}),
+        (lambda mcp_client, storage_dir, **kwargs: None, {}),
+        (lambda mcp_client, storage_dir: None, {}),
+    ],
+    ids=[
+        "named",
+        "keyword_only",
+        "named_and_kwargs",
+        "callable_object",
+        "positional_only",
+        "var_positional",
+        "var_keyword_named_locale",
+        "kwargs_only",
+        "no_locale",
+    ],
+)
+def test_locale_kwargs_needs_a_locale_parameter_that_takes_a_keyword(
+    factory: Callable[..., Any], expected: dict[str, str]
+) -> None:
+    assert _locale_kwargs(factory, "ja") == expected
+
+
+@pytest.mark.parametrize("locale", [None, ""])
+def test_locale_kwargs_leaves_out_an_unset_locale(locale: Optional[str]) -> None:
+    assert _locale_kwargs(lambda mcp_client, storage_dir, locale="de": None, locale) == {}

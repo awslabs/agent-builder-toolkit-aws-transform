@@ -34,7 +34,7 @@ from agent_builder_sdk.interfaces import AnyBaseAgent
 from agent_builder_sdk.mcp_client_factory import MCPClientFactory
 from agent_builder_sdk.messages.message_handler import MessageHandler
 from agent_builder_sdk.orchestrator_strands.conversation.constants import MessageSourceType
-from agent_builder_sdk.server.base_server import BaseServer
+from agent_builder_sdk.server.base_server import BaseServer, _locale_kwargs
 from agent_builder_sdk.server.request_context import RequestContextMiddleware
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 from agent_builder_sdk.task_handler import TaskHandler
@@ -65,7 +65,9 @@ class StatelessAgentRuntimeServer(BaseServer):
         Initialize the Stateless Agent Runtime Server.
 
         Args:
-            agent_factory: Factory function for creating custom agents (required)
+            agent_factory: Factory function for creating custom agents (required). A factory
+                that names a ``locale`` parameter receives the user's locale as a keyword
+                argument when one is known at the time the agent is built.
             host: Server host address
             port: Server port
             binary_location: Path to the MCP binary for tool integration
@@ -199,12 +201,16 @@ class StatelessAgentRuntimeServer(BaseServer):
                 "agent_instance_id": self.context.agent_instance_id,
             }
 
+            locale_kwargs = _locale_kwargs(self.agent_factory, self.context.locale)
+
             if accepts_kwargs(self.agent_factory):
                 # If agent_factory has **kwargs, pass all parameters
-                self.agent = self.agent_factory(mcp_client, self.storage_dir, **agent_params)
+                self.agent = self.agent_factory(
+                    mcp_client, self.storage_dir, **agent_params, **locale_kwargs
+                )
             else:
                 # Fall back to original signature for backward compatibility
-                self.agent = self.agent_factory(mcp_client, self.storage_dir)
+                self.agent = self.agent_factory(mcp_client, self.storage_dir, **locale_kwargs)
 
             # Auto-transition job from ASSESSING to EXECUTING if enabled
             if self.auto_transition_job_to_executing:
