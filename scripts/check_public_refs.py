@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
-"""Fail when a tracked file holds a non-public reference or an AWS access key ID.
+"""Fail when a tracked file, or its path, holds a non-public reference or an AWS access key ID.
 
 Usage:
     python scripts/check_public_refs.py              # scan every tracked file
     python scripts/check_public_refs.py --self-test  # run the rules over known samples
 
 Exit status is 0 when clean and 1 on a hit or a failed sample. A git or read
-error raises, so the check cannot pass on a scan that did not run.
+error raises, and a tracked file that is missing from the working tree is a
+read error, so the check cannot pass on a scan that did not run.
 """
 
 import argparse
@@ -103,18 +104,25 @@ def find_refs(text: str) -> Iterator[tuple[int, str, str]]:
 
 
 def scan_tracked_files() -> list[str]:
-    """Return one "path:line: rule: match" entry per hit in the tracked files of the current repository.
+    """Return one entry per hit in the tracked files of the current repository.
 
-    Covers the whole repository from any directory in it. Binary files are scanned as text.
+    An entry is "path:line: rule: match" for a hit in the content of a file and
+    "path: path: rule: match" for a hit in its path. Covers the whole repository from any
+    directory in it. Binary files are scanned as text, a symbolic link as the path it holds.
+    Only the path of a submodule is scanned. A tracked file that is missing from the working
+    tree (a sparse checkout, for example) raises FileNotFoundError.
     """
-    listing = subprocess.run(["git", "ls-files", "-z", ":/"], check=True, stdout=subprocess.PIPE).stdout
+    listing = subprocess.run(["git", "ls-files", "-s", "-z", ":/"], check=True, stdout=subprocess.PIPE).stdout
     hits: list[str] = []
-    for name in filter(None, os.fsdecode(listing).split("\0")):
+    for entry in filter(None, os.fsdecode(listing).split("\0")):
+        stage_info, name = entry.split("\t", 1)
+        hits += [f"{name}: path: {rule}: {ref}" for _, rule, ref in find_refs(name)]
+        # Mode 160000 is a submodule. Its content is tracked in another repository.
+        if stage_info.startswith("160000 "):
+            continue
         path = Path(name)
-        # A submodule, or a file deleted from the working tree, has no content here.
-        if path.is_file():
-            text = path.read_text(encoding="utf-8", errors="replace")
-            hits += [f"{name}:{line}: {rule}: {ref}" for line, rule, ref in find_refs(text)]
+        text = os.readlink(path) if path.is_symlink() else path.read_text(encoding="utf-8", errors="replace")
+        hits += [f"{name}:{line}: {rule}: {ref}" for line, rule, ref in find_refs(text)]
     return hits
 
 

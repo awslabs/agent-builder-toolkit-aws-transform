@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for scripts/check_public_refs.py."""
 
+import os
 import re
 import subprocess
 import time
@@ -15,8 +16,19 @@ EMAIL = "first.last@ama|zon.com".replace("|", "")
 
 
 @pytest.fixture
+def foreign_index(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point GIT_INDEX_FILE at a path outside the test repository, as git does for a hook."""
+    index = tmp_path_factory.mktemp("caller") / "index"
+    monkeypatch.setenv("GIT_INDEX_FILE", str(index))
+    return index
+
+
+@pytest.fixture
 def repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """An empty git repository that is also the current directory."""
+    # git sets GIT_INDEX_FILE and GIT_DIR for hooks. With them, `git add` here would write to the caller's repository.
+    for name in [name for name in os.environ if name.startswith("GIT_")]:
+        monkeypatch.delenv(name)
     subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
     monkeypatch.chdir(tmp_path)
     return tmp_path
@@ -114,13 +126,40 @@ class TestScan:
             f"inner.md:1: email: {EMAIL}",
         ]
 
-    def test_skips_a_tracked_file_deleted_from_the_working_tree(
+    def test_tracked_file_missing_from_the_working_tree_raises_instead_of_passing(
         self, check_public_refs: ModuleType, repo: Path
     ) -> None:
         _track(repo, "gone.md", EMAIL.encode())
         (repo / "gone.md").unlink()
 
-        assert check_public_refs.scan_tracked_files() == []
+        with pytest.raises(FileNotFoundError):
+            check_public_refs.main([])
+
+    def test_reports_a_hit_in_a_path(self, check_public_refs: ModuleType, repo: Path) -> None:
+        _track(repo, f"{EMAIL}/notes.md", b"clean\n")
+
+        assert check_public_refs.scan_tracked_files() == [f"{EMAIL}/notes.md: path: email: {EMAIL}"]
+
+    def test_scans_a_symbolic_link_as_the_path_it_holds(self, check_public_refs: ModuleType, repo: Path) -> None:
+        (repo / "link").symlink_to(f"missing/{EMAIL}")
+        (repo / "to-folder").symlink_to(".")
+        subprocess.run(["git", "add", "link", "to-folder"], cwd=repo, check=True)
+
+        assert check_public_refs.scan_tracked_files() == [f"link:1: email: {EMAIL}"]
+
+    def test_scans_only_the_path_of_a_submodule(self, check_public_refs: ModuleType, repo: Path) -> None:
+        for name in ("vendor/lib", f"vendor/{EMAIL}"):
+            subprocess.run(["git", "update-index", "--add", "--cacheinfo", f"160000,{'1' * 40},{name}"], check=True)
+
+        assert check_public_refs.scan_tracked_files() == [f"vendor/{EMAIL}: path: email: {EMAIL}"]
+
+    def test_repo_fixture_leaves_an_index_named_by_the_environment_alone(
+        self, check_public_refs: ModuleType, foreign_index: Path, repo: Path
+    ) -> None:
+        _track(repo, "notes.md", EMAIL.encode())
+
+        assert not foreign_index.exists()
+        assert check_public_refs.scan_tracked_files() == [f"notes.md:1: email: {EMAIL}"]
 
     def test_git_failure_raises_instead_of_passing(
         self, check_public_refs: ModuleType, repo: Path, monkeypatch: pytest.MonkeyPatch
