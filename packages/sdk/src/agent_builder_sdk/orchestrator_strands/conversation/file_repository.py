@@ -242,9 +242,10 @@ class FileMultiSourceConversationRepository(ConversationRepository):
         """
         Replace the oldest stored messages of the agent's source with ``replacement``.
 
-        A stored message is folded when it is one of the ``folded`` objects, when its first
-        content block is the first content block of one (the copy the load repair makes of a
-        tool result answered in part), or when it has the ``tracking_id`` of one. Messages in
+        A stored message is folded when it is one of the ``folded`` objects, when it has the
+        ``tracking_id`` of one, or when its first content block is the first content block of one
+        that is not a stored object itself (the copy the load repair makes of a tool result
+        answered in part). Stored messages that only share a block object are kept. Messages in
         ``folded`` that the source does not store (notifications in a user's view, placeholders
         the load repair inserted) are ignored. On a Strands release whose ``Message`` has no
         ``tracking_id``, stored messages get no id, so a deep copy of a message is not matched.
@@ -272,12 +273,22 @@ class FileMultiSourceConversationRepository(ConversationRepository):
             return False
 
         identities = {id(message) for message in folded}
-        first_blocks = {_first_block_identity(message) for message in folded} - {None}
         tracking_ids = {_tracking_id(message) for message in folded} - {None}
 
         with self._lock:
             source_dict = self.conversations[source_type.value]
             stored = source_dict.get(source_id, [])
+            notifications = self.conversations[MessageSourceType.NOTIFICATION.value][
+                DEFAULT_SOURCE_ID
+            ]
+            # A stored object stands only for itself: callers may put one block object first in
+            # many messages, and its first block would then match stored messages not folded.
+            stored_objects = {id(entry.message) for entry in (*stored, *notifications)}
+            first_blocks = {
+                _first_block_identity(message)
+                for message in folded
+                if id(message) not in stored_objects
+            } - {None}
             oldest: Optional[ConversationMessage] = None
             kept: List[ConversationMessage] = []
             for entry in stored:

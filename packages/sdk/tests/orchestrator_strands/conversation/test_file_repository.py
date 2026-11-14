@@ -734,7 +734,7 @@ def test_fold_matches_by_object_identity_messages_that_have_no_tracking_id(
         _text("user", "m0"),
         Message(role="assistant", content=[]),  # no content block to match by either
         _text("user", "m2"),
-        _text("assistant", "m3"),
+        Message(role="assistant", content=[]),
     ):
         repository.add_message_for_agent(message, mock_agent)
     view = repository.get_conversation_history_for_agent(mock_agent)
@@ -742,8 +742,14 @@ def test_fold_matches_by_object_identity_messages_that_have_no_tracking_id(
 
     assert repository.fold_history_for_agent(view[:2], [_text("user", "summary")], mock_agent)
 
-    assert _stored_texts(repository, MessageSourceType.USER, "u1") == ["summary", "m2", "m3"]
-    assert _persisted_texts(repository, MessageSourceType.USER, "u1") == ["summary", "m2", "m3"]
+    reloaded = FileMultiSourceConversationRepository(storage_dir=repository.storage_dir)
+    for source in (repository, reloaded):
+        entries = source.conversations[MessageSourceType.USER.value]["u1"]
+        assert [entry.message["content"] for entry in entries] == [
+            [{"text": "summary"}],
+            [{"text": "m2"}],
+            [],
+        ]
 
 
 def test_fold_does_not_match_messages_by_a_shared_block_that_is_not_a_dict(
@@ -755,10 +761,50 @@ def test_fold_does_not_match_messages_by_a_shared_block_that_is_not_a_dict(
     repository.add_message_for_agent(first, mock_agent)
     repository.add_message_for_agent(second, mock_agent)
 
-    assert repository.fold_history_for_agent([first], [], mock_agent)
+    not_stored = Message(role="user", content=[block])
+
+    assert repository.fold_history_for_agent([first, not_stored], [], mock_agent)
 
     stored = repository.conversations[MessageSourceType.USER.value]["u1"]
     assert len(stored) == 1 and stored[0].message is second
+
+
+@pytest.mark.parametrize(
+    "folded_at, expected",
+    [([0, 1], ["summary", "m2", "m3"]), ([0, 4], ["summary", "m1", "m2", "m3"])],
+    ids=["stored_for_the_source", "stored_as_a_notification"],
+)
+def test_fold_keeps_messages_that_share_their_first_block_with_a_stored_folded_one(
+    repository: FileMultiSourceConversationRepository,
+    mock_agent: Mock,
+    folded_at: List[int],
+    expected: List[str],
+) -> None:
+    reminder = ContentBlock(text="one dict object, first in every message")
+
+    def with_reminder(role: Role, text: str) -> Message:
+        return Message(role=role, content=[reminder, ContentBlock(text=text)])
+
+    def last_texts(source: FileMultiSourceConversationRepository) -> List[str]:
+        entries = source.conversations[MessageSourceType.USER.value]["u1"]
+        return [entry.message["content"][-1]["text"] for entry in entries]
+
+    _as_source(MessageSourceType.NOTIFICATION, DEFAULT_SOURCE_ID)
+    repository.add_message_for_agent(with_reminder("user", "event"), mock_agent)
+    _as_source(MessageSourceType.USER, "u1")
+    for i in range(4):
+        role: Role = "user" if i % 2 == 0 else "assistant"
+        repository.add_message_for_agent(with_reminder(role, f"m{i}"), mock_agent)
+    view = repository.get_conversation_history_for_agent(mock_agent)
+    assert view[4]["content"][-1]["text"] == "event"
+
+    assert repository.fold_history_for_agent(
+        [view[i] for i in folded_at], [_text("user", "summary")], mock_agent
+    )
+
+    assert last_texts(repository) == expected
+    reloaded = FileMultiSourceConversationRepository(storage_dir=repository.storage_dir)
+    assert last_texts(reloaded) == expected
 
 
 @pytest.mark.parametrize("strands_owns_the_key", [True, False])

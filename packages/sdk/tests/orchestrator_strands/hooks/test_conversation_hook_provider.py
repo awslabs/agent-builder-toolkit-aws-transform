@@ -207,3 +207,61 @@ def test_force_stopped_turn_is_stored_with_its_answer(tmp_path):
     assert [m["role"] for m in second_input] == ["user", "assistant", "user", "assistant", "user"]
     assert second_input[3]["content"] == [{"text": "FORCED ANSWER"}]
     assert INTERRUPTED_TURN_TEXT not in str(second_input)
+
+
+async def test_a_fold_by_the_conversation_manager_shortens_the_next_turns(tmp_path) -> None:
+    """The messages a manager reads from ``agent.messages`` are the stored ones, so the fold it
+    asks for is found in the store and the next turn starts from the summary."""
+    from strands.agent.conversation_manager import ConversationManager
+
+    from agent_builder_sdk.orchestrator_strands.base_orchestrator import AsyncBaseOrchestrator
+    from agent_builder_sdk.orchestrator_strands.conversation.constants import MessageSourceType
+    from agent_builder_sdk.orchestrator_strands.conversation.file_repository import (
+        FileMultiSourceConversationRepository,
+    )
+
+    repository = FileMultiSourceConversationRepository(storage_dir=str(tmp_path))
+    folds: list[bool] = []
+    read_the_stored_objects: list[bool] = []
+
+    class KeepLastTwo(ConversationManager):
+        def apply_management(self, agent: Agent, **kwargs: object) -> None:
+            folded = agent.messages[:-2]
+            if not folded:
+                return
+            replacement: list[Message] = [
+                {"role": "user", "content": [{"text": "SUMMARY"}]},
+                {"role": "assistant", "content": [{"text": "Understood."}]},
+            ]
+            agent.messages[:-2] = replacement
+            stored = repository.conversations[MessageSourceType.USER.value]["u1"]
+            stored_objects = {id(entry.message) for entry in stored}
+            read_the_stored_objects.append(all(id(m) in stored_objects for m in folded))
+            folds.append(repository.fold_history_for_agent(folded, replacement, agent))
+
+        def reduce_context(
+            self, agent: Agent, e: Exception | None = None, **kwargs: object
+        ) -> None:
+            raise NotImplementedError
+
+    model = _ScriptedModel([_text_turn(f"a{i}") for i in range(4)])
+    orchestrator = AsyncBaseOrchestrator(
+        system_prompt="s",
+        model=model,
+        hooks=[ConversationHookProvider(repository=repository)],
+        conversation_manager=KeepLastTwo(),
+        callback_handler=None,
+    )
+
+    for i in range(4):
+        await orchestrator.invoke_with_source_async(f"q{i}", "u1", MessageSourceType.USER)
+
+    def texts(messages: list[Message]) -> list[str]:
+        return [message["content"][0]["text"] for message in messages]
+
+    # Without a ``tracking_id`` (older Strands) only the same object is found in the store.
+    assert read_the_stored_objects == [True, True, True]
+    assert folds == [True, True, True]
+    assert texts(model.seen[-1]) == ["SUMMARY", "Understood.", "q2", "a2", "q3"]
+    stored = repository.conversations[MessageSourceType.USER.value]["u1"]
+    assert texts([entry.message for entry in stored]) == ["SUMMARY", "Understood.", "q3", "a3"]
