@@ -43,8 +43,8 @@ platform retires that marker, and the task stays in the user's pending list inde
 
 Not on a poll timeout, not while "cleaning up", not before a retry. The human's submit is only
 accepted while the task is open; once you move it to a closed state, a submit already in flight
-fails validation and **their work is discarded**. If a task is taking too long, prompt again in
-chat and keep polling.
+fails validation and **their work is discarded**. If a task is taking too long, ask again in
+your final message and leave it open.
 
 Close only after you have read the output, or when you have genuinely decided to abandon the ask.
 

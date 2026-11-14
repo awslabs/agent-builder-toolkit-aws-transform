@@ -21,9 +21,9 @@ and a plan you create once and never touch is a static list that makes a working
 A step id is **not** a bare UUID: it is `<4-digit plan version>-<uuid>`. That prefix matters —
 see "Changing the plan".
 
-`put_job_plan` returns `mappings` from each `stepLabel` to its step id. Save them, and choose
-labels unique across the whole job: the label is your only stable handle for re-deriving ids
-later, and the platform only rejects duplicates within a single request.
+`put_job_plan` returns `mappings`, a list that pairs each `stepLabel` with its step id. Save
+them, and choose labels unique across the whole job: the label is your only stable handle for
+re-deriving ids later, and the platform only rejects duplicates within a single request.
 
 ## Creating the plan
 
@@ -35,7 +35,7 @@ put_job_plan(
     ]},
     mode={"override": {}},
 )
-# returns {"status": ..., "mappings": {"gather-reqs": "0001-<uuid>", ...}}
+# returns {"status": ..., "mappings": [{"stepLabel": "gather-reqs", "stepId": "0001-<uuid>"}, ...]}
 ```
 
 - Use `mode={"override": {}}` for the **first** plan of a run — and only then. Append before any
@@ -46,8 +46,8 @@ put_job_plan(
 - Limits, enforced: `stepLabel`/`stepName` max 100 chars, `description` **max 350**, at most **80
   nodes per call** (sub-steps count).
 - Write 2–6 top-level steps in the user's language. A one-step plan renders as a lone stub card.
-- Verify success from the returned `mappings`, not the status — an empty `nodes` list is accepted
-  as a no-op with zero mappings.
+- Verify success from the returned `mappings`, not the status: find the step id of each
+  `stepLabel` you sent. An empty `nodes` list is rejected — a plan call needs at least one node.
 
 ## Changing the plan mid-job
 
@@ -77,10 +77,12 @@ Each step gets exactly one forward path, and each transition is paired with a wo
 user sees progress:
 
 ```
-begin a step   -> update_job_plan_step(stepId, status="IN_PROGRESS", startTime=<now>)
-                  + create_worklog(plan_step_id=stepId, description="what you're starting")
-finish a step  -> create_worklog(plan_step_id=stepId, description="what you found/did")
-                  + update_job_plan_step(stepId, status="SUCCEEDED"|"FAILED", endTime=<now>)
+begin a step   -> update_job_plan_step(plan_step={"stepId": <step id>, "status": "IN_PROGRESS",
+                                                  "startTime": <now>})
+                  + create_worklog(plan_step_id=<step id>, description="what you're starting")
+finish a step  -> create_worklog(plan_step_id=<step id>, description="what you found/did")
+                  + update_job_plan_step(plan_step={"stepId": <step id>, "status": "SUCCEEDED",
+                                                    "endTime": <now>})      # or "FAILED"
 ```
 
 - `NOT_STARTED` is the platform's initial value — don't set it. `SUCCEEDED` and `FAILED` are
