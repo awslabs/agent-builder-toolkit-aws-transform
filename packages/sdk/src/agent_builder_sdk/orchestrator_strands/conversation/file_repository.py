@@ -191,10 +191,14 @@ class FileMultiSourceConversationRepository(ConversationRepository):
                         DEFAULT_SOURCE_ID
                     ]
                 ]
-                # Closed on their own, so an aborted notification turn does not end the history
-                # unanswered and a notification reply never counts as the user's missing reply.
+                # Repaired on their own, so a notification turn that stopped or is still inside a
+                # tool does not end the history unanswered or with an open toolUse, and a
+                # notification reply never counts as the user's missing reply. The notification
+                # conversation itself is not written: its own turn may still store the real result.
                 history.extend(
-                    reconcile_unanswered_user_turns(notifications) if repair else notifications
+                    reconcile_unanswered_user_turns(reconcile_dangling_tool_uses(notifications))
+                    if repair
+                    else notifications
                 )
 
             return history
