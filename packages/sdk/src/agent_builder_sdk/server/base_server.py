@@ -60,12 +60,13 @@ logger = logging.getLogger(__name__)
 def _locale_kwargs(factory: Callable[..., Any], locale: Optional[str]) -> Dict[str, str]:
     """Return ``{"locale": locale}`` for an agent factory that should receive it, else ``{}``.
 
-    The locale is passed only when it is set and ``factory`` names a ``locale`` parameter that
-    takes a keyword. An unset locale is left out so the factory's own default applies. A bare
-    ``**kwargs`` does not count, because such factories often forward it to a callable with a
-    fixed signature.
+    The locale is passed only when it is a non-empty string and ``factory`` names a ``locale``
+    parameter that takes a keyword. An unset locale is left out so the factory's own default
+    applies. The request value is not type-checked before it gets here, so a value that is
+    not a string is left out too. A bare ``**kwargs`` does not count, because such factories
+    often forward it to a callable with a fixed signature.
     """
-    if not locale:
+    if not locale or not isinstance(locale, str):
         return {}
     parameter = inspect.signature(factory).parameters.get("locale")
     if parameter is None or parameter.kind not in (
@@ -82,7 +83,8 @@ def _log_locale_not_passed(locale: Optional[str], factory_kwargs: Mapping[str, A
     if locale and "locale" not in factory_kwargs:
         logger.info(
             "Locale %r is set but the agent factory is called without a 'locale' argument. "
-            "The server adds one only for a factory that names a 'locale' keyword parameter",
+            "The server adds one only for a string locale and a factory that names a 'locale' "
+            "keyword parameter",
             locale,
         )
 

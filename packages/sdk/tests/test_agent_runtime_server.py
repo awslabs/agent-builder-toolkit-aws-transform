@@ -2896,7 +2896,8 @@ NAMED_LOCALE_FACTORIES = [
 
 LOCALE_NOT_PASSED_LINE = (
     "Locale 'ja' is set but the agent factory is called without a 'locale' argument. "
-    "The server adds one only for a factory that names a 'locale' keyword parameter"
+    "The server adds one only for a string locale and a factory that names a 'locale' "
+    "keyword parameter"
 )
 
 

@@ -6,6 +6,7 @@ Unit tests for Base Server implementation.
 Tests the BaseServer abstract class functionality including setup_tracing.
 """
 
+import functools
 import logging
 from typing import Any, Callable, Optional
 from unittest import mock
@@ -575,6 +576,18 @@ def test_locale_kwargs_needs_a_locale_parameter_that_takes_a_keyword(
 @pytest.mark.parametrize("locale", [None, ""])
 def test_locale_kwargs_leaves_out_an_unset_locale(locale: Optional[str]) -> None:
     assert _locale_kwargs(lambda mcp_client, storage_dir, locale="de": None, locale) == {}
+
+
+@pytest.mark.parametrize("locale", [123, {"a": 1}], ids=repr)
+def test_locale_kwargs_leaves_out_a_locale_that_is_not_a_string(locale: Any) -> None:
+    assert _locale_kwargs(lambda mcp_client, storage_dir, locale="de": None, locale) == {}
+
+
+def test_locale_kwargs_replaces_a_locale_that_the_factory_pins() -> None:
+    def factory(mcp_client: Any, storage_dir: str, locale: Optional[str] = None) -> None:
+        return None
+
+    assert _locale_kwargs(functools.partial(factory, locale="de"), "ja") == {"locale": "ja"}
 
 
 @pytest.mark.parametrize(

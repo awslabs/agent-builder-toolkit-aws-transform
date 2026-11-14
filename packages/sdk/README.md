@@ -119,6 +119,8 @@ Limits:
 - With streaming on, every per-user agent gets the locale that the server had when it was set up, not the locale of its own user.
 - Codes match exactly against `LOCALE_TO_LANGUAGE` in `agent_builder_sdk.locale_utils`: `ja` matches, `ja-JP` and `JA` do not. Any other value leaves the system prompt unchanged, and a non-English code that is not listed is logged as a warning.
 - A factory that takes only `**kwargs` does not receive `locale`; the server logs this at INFO. Name the parameter.
+- A set user locale replaces the `locale` that the factory pins, either as its default (`locale="de"`) or with `functools.partial(factory, locale="de")`. To pin a language, do not name a `locale` parameter, and pass the fixed code to the orchestrator factory inside the agent factory. The INFO line above is then expected.
+- A locale in the request that is not a string is not passed.
 - The `INVOCATION_USER_CURRENT_LOCALE` environment variable is read only when the server starts with `WORKSPACE_ID`, `JOB_ID`, `AGENT_INSTANCE_ID` and `AUTHORIZATION_TOKEN` set and so initializes from the environment. On a Bedrock AgentCore runtime it has no effect.
 
 To build a prompt by hand, call `get_locale_instruction(locale)` from `agent_builder_sdk.locale_utils`.
