@@ -27,6 +27,11 @@ DEFAULT_SUBAGENT_EXCLUDED_TOOLS = [
 # final turn — the block message streams and persists as the final response, no special handling.
 GUARDRAIL_STOP_REASONS = ("guardrail_intervened", "content_filtered")
 
+# ClientError codes that indicate a permanent failure — do not retry.
+NON_RETRYABLE_ERROR_CODES = frozenset(
+    {"ValidationException", "AccessDeniedException", "ResourceNotFoundException"}
+)
+
 # Timeouts for an A2A message/send (MessageHandler.send_message). Streaming and notifications do not
 # use them.
 #

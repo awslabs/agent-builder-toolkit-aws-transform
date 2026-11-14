@@ -59,6 +59,7 @@ from agent_builder_sdk.checkpoint.checkpoint_triggers import CheckpointStrategy
 from agent_builder_sdk.constants import (
     DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS,
     DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS,
+    NON_RETRYABLE_ERROR_CODES,
 )
 from agent_builder_sdk.custom_types.notification_types import NotificationType
 from agent_builder_sdk.env_var import has_mde_environment, set_runtime_env_vars
@@ -99,11 +100,6 @@ from agent_builder_sdk.utils import build_agentic_api_endpoint_from_env, mcp_ses
 
 if TYPE_CHECKING:
     from multiprocessing.synchronize import Event as EventType
-
-# ClientError codes that indicate a permanent failure — do not retry.
-_NON_RETRYABLE_ERROR_CODES = frozenset(
-    {"ValidationException", "AccessDeniedException", "ResourceNotFoundException"}
-)
 
 logger = logging.getLogger(__name__)
 
@@ -414,7 +410,7 @@ class AgentRuntimeServer(BaseServer):
 
         Retries connection timeouts and endpoint connectivity failures with exponential
         backoff (attempt count and timing set by the @retry decorator below); permanent
-        client errors in _NON_RETRYABLE_ERROR_CODES are not retried.
+        client errors in NON_RETRYABLE_ERROR_CODES are not retried.
 
         Runs in a thread executor so the backoff sleeps do not block the asyncio event
         loop (health checks must keep responding).
@@ -429,7 +425,7 @@ class AgentRuntimeServer(BaseServer):
             """Retry all exceptions except permanent client errors."""
             if isinstance(exception, ClientError):
                 error_code = exception.response.get("Error", {}).get("Code", "")
-                if error_code in _NON_RETRYABLE_ERROR_CODES:
+                if error_code in NON_RETRYABLE_ERROR_CODES:
                     return False
             return True
 
@@ -448,7 +444,7 @@ class AgentRuntimeServer(BaseServer):
             return await loop.run_in_executor(None, _get_status)
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "")
-            if error_code in _NON_RETRYABLE_ERROR_CODES:
+            if error_code in NON_RETRYABLE_ERROR_CODES:
                 logger.error(f"Non-retryable error during agent initialization: {error_code} - {e}")
             else:
                 logger.error(f"Failed to get agent status after retries: {error_code} - {e}")
