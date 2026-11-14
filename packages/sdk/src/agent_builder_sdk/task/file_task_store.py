@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import threading
 import uuid
 from pathlib import Path
 from typing import List, Optional
@@ -32,7 +33,9 @@ class FileTaskStore(TaskStore):
 
     For checkpointing: Use the same storage_dir as AgentRuntimeServer
     to ensure tasks are included in checkpoint artifacts and restored
-    on agent restart or failover.
+    on agent restart or failover. A checkpoint taken while a task is written
+    can lack that task on filesystems where a directory scan can miss an entry
+    that is renamed (tmpfs).
     """
 
     def __init__(self, storage_dir: str):
@@ -44,6 +47,9 @@ class FileTaskStore(TaskStore):
         """
         self.storage_dir = Path(storage_dir) / "tasks"
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+        # On some filesystems (tmpfs) a directory scan that runs while an entry is
+        # renamed can return neither the old entry nor the new one.
+        self._dir_lock = threading.Lock()
         logger.info(f"Initialized FileTaskStore at {self.storage_dir}")
 
     def _get_task_path(self, task_id: str) -> Path:
@@ -104,13 +110,22 @@ class FileTaskStore(TaskStore):
         The files are read in a worker thread, so a large store does not block the
         event loop. A file that cannot be read or parsed as a task is skipped with a
         warning and the other tasks are still returned; ``get_task`` raises for it.
+
+        A task that this store instance writes during the listing is always listed:
+        ``store_task`` and ``update_task`` wait for the directory scan (not for the
+        file reads) before they rename. A task that another process, or another
+        store instance on the same directory, writes during the scan can be absent
+        from the result on filesystems where a directory scan can miss an entry
+        that is renamed (tmpfs).
         """
         return await asyncio.to_thread(self._read_all_tasks)
 
     def _read_all_tasks(self) -> List[A2ATask]:
         """Load every readable task file, ordered by the task ID in the file name."""
         tasks: List[A2ATask] = []
-        for task_path in sorted(self.storage_dir.glob("*.json"), key=lambda path: path.stem):
+        with self._dir_lock:
+            task_paths = sorted(self.storage_dir.glob("*.json"), key=lambda path: path.stem)
+        for task_path in task_paths:
             try:
                 with open(task_path, "r") as f:
                     tasks.append(self._dict_to_task(json.load(f)))
@@ -124,11 +139,14 @@ class FileTaskStore(TaskStore):
         A reader in another thread or process sees the previous file or the new one,
         never a partial write, and a failed write leaves the previous file in place.
         """
-        tmp_path = task_path.with_name(f"{task_path.name}.{uuid.uuid4().hex}.tmp")
+        # Not derived from the task file name: that name can already be at the
+        # file-name length limit of the filesystem.
+        tmp_path = task_path.with_name(f".{uuid.uuid4().hex}.tmp")
         try:
             with open(tmp_path, "w") as f:
                 json.dump(task.to_dict(), f, indent=2)
-            os.replace(tmp_path, task_path)
+            with self._dir_lock:
+                os.replace(tmp_path, task_path)
         finally:
             tmp_path.unlink(missing_ok=True)
 

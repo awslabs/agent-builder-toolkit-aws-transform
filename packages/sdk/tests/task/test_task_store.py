@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Unit tests for TaskStore implementations."""
 
+import asyncio
 import json
 import logging
 import os
@@ -461,7 +462,7 @@ class TestFileTaskStore:
         for task in (make_task("task-1-retry"), sample_task, make_task("task-1")):
             await store.store_task(task)
         # A complete temporary file, as a writer stopped before its rename leaves behind.
-        leftover = store.storage_dir / "task-1.json.deadbeef.tmp"
+        leftover = store.storage_dir / ".deadbeef.tmp"
         leftover.write_text(json.dumps(make_task("task-1", TaskState.WORKING).to_dict()))
 
         tasks = await FileTaskStore(storage_dir=temp_storage_dir).list_tasks()
@@ -493,14 +494,19 @@ class TestFileTaskStore:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "content",
-        ['{"id": "broken", "contextId"', "[]", '{"id": "broken"}', ""],
+        ("content", "cause"),
+        [
+            ('{"id": "broken", "contextId"', "JSONDecodeError"),
+            ("[]", "TypeError"),
+            ('{"id": "broken"}', "KeyError"),
+            ("", "JSONDecodeError"),
+        ],
         ids=["truncated", "not-an-object", "missing-fields", "empty"],
     )
     async def test_list_tasks_skips_unreadable_file_with_warning(
-        self, content: str, temp_storage_dir: str, caplog: pytest.LogCaptureFixture
+        self, content: str, cause: str, temp_storage_dir: str, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """One bad task file is logged and skipped; the listing still returns the rest."""
+        """One bad task file is skipped with a warning that names the file and the cause."""
         store = FileTaskStore(storage_dir=temp_storage_dir)
         await store.store_task(make_task("task-a"))
         await store.store_task(make_task("task-c"))
@@ -513,3 +519,52 @@ class TestFileTaskStore:
         warnings = [record for record in caplog.records if record.levelno >= logging.WARNING]
         assert len(warnings) == 1
         assert "broken.json" in warnings[0].getMessage()
+        assert cause in warnings[0].getMessage()
+
+    @pytest.mark.asyncio
+    async def test_update_during_listing_renames_after_directory_scan(
+        self, temp_storage_dir: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An update that arrives while list_tasks scans the directory renames after the scan."""
+        store = FileTaskStore(storage_dir=temp_storage_dir)
+        task = make_task("task-a")
+        await store.store_task(task)
+        scan_started = threading.Event()
+        renamed = threading.Event()
+        renamed_during_scan: List[bool] = []
+        real_glob = Path.glob
+        real_replace = os.replace
+
+        def scan_then_wait_for_rename(self: Path, pattern: str) -> List[Path]:
+            paths = list(real_glob(self, pattern))
+            scan_started.set()
+            renamed_during_scan.append(renamed.wait(timeout=0.2))
+            return paths
+
+        def replace_and_signal(src: Path, dst: Path) -> None:
+            real_replace(src, dst)
+            renamed.set()
+
+        monkeypatch.setattr(Path, "glob", scan_then_wait_for_rename)
+        monkeypatch.setattr(os, "replace", replace_and_signal)
+        listing = asyncio.create_task(store.list_tasks())
+        assert await asyncio.to_thread(scan_started.wait, 5)
+        task.status.state = TaskState.COMPLETED
+        await store.update_task(task)
+
+        assert [listed.id for listed in await listing] == ["task-a"]
+        assert renamed_during_scan == [False]
+        assert renamed.is_set()
+
+    @pytest.mark.asyncio
+    async def test_task_id_at_file_name_length_limit_stores_and_updates(
+        self, temp_storage_dir: str
+    ) -> None:
+        """A 250-character ID, whose file name is at the 255-byte limit, stores and updates."""
+        store = FileTaskStore(storage_dir=temp_storage_dir)
+        task = make_task("x" * 250)
+        await store.store_task(task)
+        task.status.state = TaskState.COMPLETED
+        await store.update_task(task)
+
+        assert [listed.status.state for listed in await store.list_tasks()] == [TaskState.COMPLETED]

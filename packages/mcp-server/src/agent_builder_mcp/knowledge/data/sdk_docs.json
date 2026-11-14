@@ -4464,7 +4464,7 @@
     "kind": "class",
     "file": "agent_builder_sdk/task/file_task_store.py",
     "module": "agent_builder_sdk.task.file_task_store",
-    "docstring": "File-based task storage using JSON files.\n\nPersistent storage suitable for:\n- Single-instance deployments needing persistence across restarts\n- Development and testing with state preservation\n- Checkpointing task state for recovery\n\nEach task is stored as a separate JSON file named {task_id}.json\nin the configured storage directory.\n\nFor checkpointing: Use the same storage_dir as AgentRuntimeServer\nto ensure tasks are included in checkpoint artifacts and restored\non agent restart or failover.",
+    "docstring": "File-based task storage using JSON files.\n\nPersistent storage suitable for:\n- Single-instance deployments needing persistence across restarts\n- Development and testing with state preservation\n- Checkpointing task state for recovery\n\nEach task is stored as a separate JSON file named {task_id}.json\nin the configured storage directory.\n\nFor checkpointing: Use the same storage_dir as AgentRuntimeServer\nto ensure tasks are included in checkpoint artifacts and restored\non agent restart or failover. A checkpoint taken while a task is written\ncan lack that task on filesystems where a directory scan can miss an entry\nthat is renamed (tmpfs).",
     "signature": "FileTaskStore(storage_dir: str)",
     "description": "Extends: TaskStore\n\nParameters:\n  storage_dir: str (required) - Directory path where task files will be stored\n\nMethods:\n  async store_task(task: A2ATask) -> None\n  async get_task(task_id: str) -> Optional[A2ATask]\n  async update_task(task: A2ATask) -> None\n  async list_tasks() -> List[A2ATask]"
   },
@@ -4481,7 +4481,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/task/file_task_store.py",
     "module": "agent_builder_sdk.task.file_task_store",
-    "docstring": "List every task file in the storage directory, ordered by task ID.\n\nThe files are read in a worker thread, so a large store does not block the\nevent loop. A file that cannot be read or parsed as a task is skipped with a\nwarning and the other tasks are still returned; ``get_task`` raises for it.",
+    "docstring": "List every task file in the storage directory, ordered by task ID.\n\nThe files are read in a worker thread, so a large store does not block the\nevent loop. A file that cannot be read or parsed as a task is skipped with a\nwarning and the other tasks are still returned; ``get_task`` raises for it.\n\nA task that this store instance writes during the listing is always listed:\n``store_task`` and ``update_task`` wait for the directory scan (not for the\nfile reads) before they rename. A task that another process, or another\nstore instance on the same directory, writes during the scan can be absent\nfrom the result on filesystems where a directory scan can miss an entry\nthat is renamed (tmpfs).",
     "signature": "async list_tasks() -> List[A2ATask]"
   },
   {
