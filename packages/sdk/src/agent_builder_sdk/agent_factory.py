@@ -423,19 +423,25 @@ def create_default_async_orchestrator_with_subagent(
             timeout and a sanitized environment with no ambient AWS credentials: credential
             env vars (AWS_PROFILE, container and web-identity credentials) are dropped and
             the shared credential/config files and instance metadata are switched off, so
-            scripts must use connector-vended temporary credentials. Leave this off unless
+            scripts must use connector-vended temporary credentials. The allowlist is
+            defense in depth, not a sandbox: awk, sed and python can start other programs
+            by design, so the container is the security boundary. Leave this off unless
             you need in-container script execution.
         enable_code_interpreter: Enable the experimental AgentCore Code Interpreter sandbox
             tools (code_interpreter + stage_file_to_sandbox). Off by default. Runs
             computation in a managed Python sandbox with pyarrow/pandas/numpy
             preinstalled; data moves in via stage_file_to_sandbox. The default interpreter
             (aws.codeinterpreter.v1) is network-isolated. Setting ATX_CODE_INTERPRETER_ID
-            selects a custom interpreter instead, which may have internet access (e.g.
-            PUBLIC network mode); the tool then tells the model it can pip install. Each
-            sandbox session ends ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS (default
-            900, max 28800) after it starts, regardless of activity, and takes its files
-            with it; the next call starts a new session. Requires the code-interpreter
-            extra: pip install 'agent-builder-sdk-aws-transform[code-interpreter]'.
+            selects a custom interpreter instead; its network access depends on its network
+            mode, and the tool tells the model not to assume either way. Each sandbox
+            session ends ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS (default 900, max
+            28800; a non-numeric value raises ValueError) after it starts, regardless of
+            activity, and takes its files with it; the next call starts a new session and
+            says so in its result. Sessions are stopped at a normal interpreter exit; when
+            a signal ends the process they run until that timeout unless your shutdown
+            path calls agent_builder_sdk.experimental.code_interpreter.stop_all_sessions.
+            Requires the code-interpreter extra:
+            pip install 'agent-builder-sdk-aws-transform[code-interpreter]'.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools

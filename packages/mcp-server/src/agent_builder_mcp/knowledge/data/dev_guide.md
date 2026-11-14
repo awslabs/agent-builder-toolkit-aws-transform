@@ -102,6 +102,7 @@
       - [Optional Environment Variables](#optional-environment-variables)
       - [Bedrock Guardrails](#bedrock-guardrails)
       - [Available Tools & Integrations](#available-tools-integrations)
+      - [Experimental Tools: Shell and Code Interpreter](#experimental-tools-shell-and-code-interpreter)
   - [AWS Transform Agentic API Specification](#aws-transform-agentic-api-specification)
     - [Common Error Responses](#common-error-responses)
     - [Data Types and Constraints](#data-types-and-constraints)
@@ -2844,6 +2845,52 @@ Bedrock guardrails provide content filtering and safety controls for your agent 
 #### Available Tools & Integrations
 
 Your agent automatically has access to AWS Transform tools via MCP integration (AWS Transform MCP).
+
+#### Experimental Tools: Shell and Code Interpreter
+
+The default orchestrator has two opt-in tool sets. Both are experimental: the API can change, and the import emits a `FutureWarning`.
+
+```python
+from agent_builder_sdk.agent_factory import create_default_async_orchestrator_with_subagent
+
+agent = create_default_async_orchestrator_with_subagent(
+    system_prompt="...",
+    enable_shell=True,             # execute_shell
+    enable_code_interpreter=True,  # code_interpreter + stage_file_to_sandbox
+)
+```
+
+| Flag | Tools | Where the code runs | Install |
+|---|---|---|---|
+| `enable_shell` | `execute_shell` | The agent container | No extra |
+| `enable_code_interpreter` | `code_interpreter`, `stage_file_to_sandbox` | A Bedrock AgentCore Code Interpreter session | `pip install 'agent-builder-sdk-aws-transform[code-interpreter]'` (adds `bedrock-agentcore`) |
+
+| Environment variable | Default | Effect |
+|---|---|---|
+| `ATX_SHELL_ALLOW_PYTHON` | `true` | `false` removes `python` and `python3` from the shell allowlist. |
+| `ATX_CODE_INTERPRETER_ID` | `aws.codeinterpreter.v1` | Identifier of your own interpreter. The default interpreter has no network access. The network access of your own interpreter depends on its network mode. |
+| `ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS` | `900` | Lifetime of a sandbox session in seconds, 1 to 28800. A value that is not a whole number raises `ValueError` when the agent is built. |
+
+`execute_shell`:
+
+- Runs allowlisted commands (file inspection, text processing, archives, `rm`/`mkdir`, `python`) joined by pipes. It rejects `;`, `&&`, `||`, `&`, command and process substitution, an unquoted `#`, `$'...'` quoting, a variable assignment or a redirection before the command name, and the options of `find`, `tar`, `sort` and `rg` that run another program.
+- Limits: 30 seconds per command by default (120 maximum), 20 KB of stdout and 10 KB of stderr returned.
+- The subprocess gets no AWS credentials: credential environment variables are removed, and the shared credential files and the instance metadata lookup are switched off. Scripts that call AWS must use temporary credentials from a connector.
+
+Security limits of `execute_shell`. The allowlist is defense in depth. It is not a sandbox:
+
+- `awk`, `sed` and `python` can start other programs from their own scripts. `ATX_SHELL_ALLOW_PYTHON=false` removes `python` only.
+- A command given with a path is matched by its base name.
+- The validator is a set of rules, not a shell parser, so do not rely on it to contain a hostile prompt.
+- A command can read and delete every file that the container user can.
+- Treat the tool as able to run any program in the container. The container and its execution role are the security boundary.
+
+Code interpreter:
+
+- The agent's execution role needs `bedrock-agentcore:StartCodeInterpreterSession`, `InvokeCodeInterpreter`, `GetCodeInterpreterSession` and `StopCodeInterpreterSession`. Sessions start in `AWS_REGION` (`us-west-2` when unset).
+- `stage_file_to_sandbox` copies one file of at most 5 MiB from the agent container into the sandbox.
+- A session starts on first use and ends when its lifetime is over, also when it is in use. The next call starts a new, empty session and its result tells the model so.
+- A session is billed until it ends. `agent_builder_sdk.experimental.code_interpreter.stop_all_sessions()` stops the sessions of the process. It runs by itself when the Python interpreter exits normally. It does not run when a signal ends the process, for example the SIGTERM of a container runtime: the sessions then run until their lifetime is over, unless your shutdown code calls it.
 
 ## AWS Transform Agentic API Specification
 
