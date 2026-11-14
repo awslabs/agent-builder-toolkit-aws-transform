@@ -12,7 +12,7 @@ done.
 
 ```
 retrieve_from_knowledge_base(retrieval_query="...", retrieval_scope="AWS" | "PRODUCT")
-  -> {"retrieved_content": ["passage", ...]}
+  -> {"retrieved_content": [{"text": "passage"}, ...]}
 ```
 
 ## Pick the scope

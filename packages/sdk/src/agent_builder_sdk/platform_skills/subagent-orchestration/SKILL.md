@@ -19,7 +19,7 @@ from the user or a source you trust, not from a fabricated card.
 
 ```
 invoke_agent(agent_id=..., agent_input={"serializedPayload": "<your input as one string>"})
-  -> agent_instance_id
+  -> {"agentInstanceId": "<agent_instance_id>"}
 ```
 
 - `agent_input` must be a dict with the single key `serializedPayload` whose value is your

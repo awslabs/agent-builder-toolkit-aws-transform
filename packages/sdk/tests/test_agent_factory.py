@@ -1201,6 +1201,20 @@ class TestPlatformKnowledge:
         assert set(do_by_status) == set(_agentic_service_shapes()["HitlTaskStatus"]["enum"])
         assert "keep waiting" in do_by_status["AWAITING_APPROVAL"]
 
+    @pytest.mark.parametrize(
+        ("skill_name", "response_shape"),
+        [
+            ("knowledge-base", "RetrievalResultContent"),
+            ("subagent-orchestration", "InvokeAgentResponse"),
+        ],
+    )
+    def test_skill_shows_a_tool_result_with_the_member_names_of_the_service_model(
+        self, skill_name: str, response_shape: str
+    ) -> None:
+        taught = (_PLATFORM_SKILLS_DIR / skill_name / "SKILL.md").read_text(encoding="utf-8")
+        members = _agentic_service_shapes()[response_shape]["members"]
+        assert [m for m in members if f'{{"{m}": ' not in taught] == []
+
     def test_packaged_platform_skills_load_strictly(self) -> None:
         names = {Skill.from_file(p, strict=True).name for p in _PLATFORM_SKILLS_DIR.glob("*/SKILL.md")}
         assert names == {
