@@ -6,7 +6,9 @@ from unittest import mock
 from unittest.mock import AsyncMock, Mock, create_autospec, patch
 
 import pytest
+from botocore.config import Config as BotocoreConfig
 from strands.models import CacheConfig
+from strands.models.bedrock import DEFAULT_READ_TIMEOUT
 from strands.tools.mcp import MCPAgentTool, MCPClient
 from strands.types import PaginatedList
 
@@ -994,6 +996,25 @@ def test_initialize_bedrock_model_default_credentials(mock_factory, mock_model):
         boto_client_config=None,
     )
     assert orchestrator.model == mock_model
+
+
+def test_boto_client_config_keeps_strands_default_read_timeout(
+    patch_create_with_shared_capacity_role: Mock,
+) -> None:
+    """A caller Config that leaves read_timeout unset keeps the Strands default, not botocore's."""
+
+    def forwarded_config() -> BotocoreConfig:
+        return patch_create_with_shared_capacity_role.call_args.kwargs["boto_client_config"]
+
+    retries_only = BotocoreConfig(retries={"mode": "adaptive"})
+    BaseOrchestrator(system_prompt="Test prompt", boto_client_config=retries_only)
+    assert forwarded_config().read_timeout == DEFAULT_READ_TIMEOUT
+    assert forwarded_config().retries == {"mode": "adaptive"}
+
+    BaseOrchestrator(
+        system_prompt="Test prompt", boto_client_config=BotocoreConfig(read_timeout=300)
+    )
+    assert forwarded_config().read_timeout == 300
 
 
 class TestBaseOrchestratorIntegration:

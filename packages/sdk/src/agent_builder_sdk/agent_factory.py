@@ -201,6 +201,9 @@ def create_default_orchestrator(
         model_id: Optional model ID for Bedrock inference
         model: Optional Strands Model instance or model ID string (takes precedence over model_id)
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        boto_client_config: Optional botocore Config for the Bedrock Runtime client (ignored if
+            model is provided), for example Config(retries={"mode": "adaptive"}). A config that
+            does not set read_timeout keeps the Strands default (120 seconds), not botocore's 60.
 
     Returns:
         Configured BaseOrchestrator instance with memory, hooks, and tools
@@ -257,6 +260,9 @@ def create_default_async_orchestrator(
         model_id: Optional model ID for Bedrock inference
         model: Optional Strands Model instance or model ID string (takes precedence over model_id)
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        boto_client_config: Optional botocore Config for the Bedrock Runtime client (ignored if
+            model is provided), for example Config(retries={"mode": "adaptive"}). A config that
+            does not set read_timeout keeps the Strands default (120 seconds), not botocore's 60.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
@@ -316,6 +322,9 @@ def create_default_orchestrator_with_subagent(
         model_id: Optional model ID for Bedrock inference
         model: Optional Strands Model instance or model ID string (takes precedence over model_id)
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        boto_client_config: Optional botocore Config for the Bedrock Runtime client (ignored if
+            model is provided), for example Config(retries={"mode": "adaptive"}). A config that
+            does not set read_timeout keeps the Strands default (120 seconds), not botocore's 60.
 
     Returns:
         Configured BaseOrchestrator instance with memory, hooks, and tools
@@ -397,6 +406,9 @@ def create_default_async_orchestrator_with_subagent(
             empty right after tool results (see BlankReplyHookProvider).
         enable_prompt_caching: Turn on Bedrock prompt caching for the orchestrator's model (see
             AsyncBaseOrchestrator). Off by default.
+        boto_client_config: Optional botocore Config for the Bedrock Runtime client (ignored if
+            model is provided), for example Config(retries={"mode": "adaptive"}). A config that
+            does not set read_timeout keeps the Strands default (120 seconds), not botocore's 60.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
