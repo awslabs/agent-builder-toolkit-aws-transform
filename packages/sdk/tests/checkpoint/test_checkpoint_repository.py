@@ -485,6 +485,47 @@ class TestCreateCheckpointRepository:
         kept = list(dest.glob(".checkpoint-restore-*/backup/live.txt"))
         assert [p.read_text() for p in kept] == ["live"]
         assert str(kept[0].parent) in mock_logger.error.call_args[0][0]
+        # the extracted copy can be downloaded again, so only the backup is kept
+        assert os.listdir(kept[0].parent.parent) == ["backup"]
+
+    def test_completed_restore_removes_backup_kept_by_failed_restore(
+        self, checkpoint_repository, tmp_path
+    ):
+        """A restore that replaces the directory supersedes what an earlier one stranded."""
+        dest = tmp_path / "dest"
+        stranded = dest / ".checkpoint-restore-earlier" / "backup" / "stranded.txt"
+        stranded.parent.mkdir(parents=True)
+        stranded.write_text("stranded")
+        (dest / "live.txt").write_text("live")
+        zip_path = tmp_path / "cp.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("new.txt", "new")
+
+        checkpoint_repository._extract_zip_to_path(str(zip_path), str(dest))
+
+        assert os.listdir(dest) == ["new.txt"]
+
+    def test_in_place_restore_keeps_backup_kept_by_failed_restore(
+        self, checkpoint_repository, tmp_path
+    ):
+        """Extracting over existing files replaces nothing, so a stranded file is still needed."""
+        dest = tmp_path / "dest"
+        stranded = dest / ".checkpoint-restore-earlier" / "backup" / "stranded.txt"
+        stranded.parent.mkdir(parents=True)
+        stranded.write_text("stranded")
+        (dest / "live.txt").write_text("live")
+        zip_path = tmp_path / "cp.zip"
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            zf.writestr("new.txt", "new")
+
+        with patch(
+            "agent_builder_sdk.checkpoint.checkpoint_repository.os.replace",
+            side_effect=OSError(errno.EXDEV, "Invalid cross-device link"),
+        ):
+            checkpoint_repository._extract_zip_to_path(str(zip_path), str(dest))
+
+        assert stranded.read_text() == "stranded"
+        assert sorted(os.listdir(dest)) == [".checkpoint-restore-earlier", "live.txt", "new.txt"]
 
     def test_create_zip_skips_restore_scratch_dir(self, checkpoint_repository, tmp_path):
         """A backup kept by a failed restore is never uploaded as agent state."""

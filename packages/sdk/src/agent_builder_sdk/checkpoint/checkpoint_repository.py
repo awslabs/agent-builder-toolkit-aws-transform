@@ -419,10 +419,15 @@ class CheckpointRepository:
         or entries can't be renamed at all (cross-device, permission, mount point), the
         ZIP is extracted over the existing files instead, which leaves files absent from
         the checkpoint in place.
+
+        Entries that cannot be put back stay in a backup directory inside the destination.
+        The next restore that completes the swap removes it; one that fails or extracts
+        in place does not. Restores into one destination must not run concurrently.
         """
         destination = Path(destination_path)
         destination.mkdir(parents=True, exist_ok=True)
         work_dir: Optional[Path] = None
+        scratch: list[Path] = []
         backed_up: list[str] = []
         placed: list[str] = []
         try:
@@ -435,7 +440,9 @@ class CheckpointRepository:
             with zipfile.ZipFile(zip_file_path, "r") as zip_file:
                 zip_file.extractall(staged)
             for entry in list(destination.iterdir()):
-                if not entry.name.startswith(_RESTORE_WORK_PREFIX):
+                if entry.name.startswith(_RESTORE_WORK_PREFIX):
+                    scratch.append(entry)
+                else:
                     os.replace(entry, backup / entry.name)
                     backed_up.append(entry.name)
             # os.replace raises on a non-empty name collision instead of nesting into it
@@ -446,6 +453,8 @@ class CheckpointRepository:
             if work_dir is not None:
                 backup = work_dir / "backup"
                 if not self._undo_restore_swap(destination, backup, backed_up, placed):
+                    # Only the backup holds files that exist nowhere else.
+                    shutil.rmtree(work_dir / "staged", ignore_errors=True)
                     logger.error(f"Restore failed and could not put back all files; kept in {backup}")
                     raise
                 shutil.rmtree(work_dir, ignore_errors=True)
@@ -455,7 +464,10 @@ class CheckpointRepository:
             with zipfile.ZipFile(zip_file_path, "r") as zip_file:
                 zip_file.extractall(destination)
             return
-        shutil.rmtree(work_dir, ignore_errors=True)
+        # The swap replaced every entry, so this work dir and the backups kept by earlier
+        # failed restores hold only superseded files.
+        for path in scratch:
+            shutil.rmtree(path, ignore_errors=True)
 
     def _undo_restore_swap(
         self, destination: Path, backup: Path, backed_up: list[str], placed: list[str]
