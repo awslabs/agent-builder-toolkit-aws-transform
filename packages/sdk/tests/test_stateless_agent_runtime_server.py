@@ -794,6 +794,8 @@ def fixed_wrapper_factory(mcp_client: Any, storage_dir: str) -> dict[str, Any]:
     return {}
 
 
+cached_factory = functools.lru_cache(named_locale_factory)
+
 NAMED_LOCALE_FACTORIES = [named_locale_factory, named_locale_and_kwargs_factory]
 
 LOCALE_NOT_PASSED_LINE = (
@@ -860,6 +862,7 @@ class TestLocaleDelivery:
             (kwargs_only_factory, [LOCALE_NOT_PASSED_LINE]),
             (legacy_factory, [LOCALE_NOT_PASSED_LINE]),
             (fixed_wrapper_factory, [LOCALE_NOT_PASSED_LINE]),
+            pytest.param(cached_factory, [LOCALE_NOT_PASSED_LINE], id="cached_factory"),
             (named_locale_factory, []),
         ],
     )

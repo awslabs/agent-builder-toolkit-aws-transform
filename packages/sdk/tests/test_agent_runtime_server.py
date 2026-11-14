@@ -2894,6 +2894,8 @@ def fixed_wrapper_factory(mcp_client: Any, storage_dir: str) -> dict[str, Any]:
     return {}
 
 
+cached_factory = functools.lru_cache(named_locale_factory)
+
 NAMED_LOCALE_FACTORIES = [
     named_locale_factory,
     keyword_only_locale_factory,
@@ -2982,7 +2984,13 @@ class TestLocaleDelivery:
 
     @pytest.mark.parametrize(
         "factory",
-        [kwargs_only_factory, async_kwargs_only_factory, legacy_factory, fixed_wrapper_factory],
+        [
+            kwargs_only_factory,
+            async_kwargs_only_factory,
+            legacy_factory,
+            fixed_wrapper_factory,
+            pytest.param(cached_factory, id="cached_factory"),
+        ],
     )
     async def test_locale_that_is_not_passed_is_logged_once_per_build(
         self, factory: Any, caplog: pytest.LogCaptureFixture
