@@ -31,14 +31,14 @@ class Rule(NamedTuple):
 # then repeat, so a match can start only at the start of a run of them. That
 # keeps the scan linear on files with very long runs (minified or encoded data).
 RULES = (
-    # Hosts under amazon.com, amazon.dev and aws.dev, except the public
+    # Hosts under amazon.com, amazon.dev, aws.dev, a2z.com and a2z.org, except the public
     # aws.amazon.com sites and the product API endpoints. "}" and ">" catch a host whose
     # leading label is a template placeholder.
     Rule(
         "host",
         re.compile(
             r"(?<![a-z0-9.-])[a-z0-9.-]*[a-z0-9}>]"
-            r"(?:[.-]amazon\.(?:com|dev)|\.aws\.dev)",
+            r"(?:[.-]amazon\.(?:com|dev)|\.aws\.dev|\.a2z\.(?:com|org))",
             re.IGNORECASE,
         ),
         re.compile(r"(?:^|\.)(?:[a-z0-9-]+\.)*(?:aws\.amazon\.com|elastic-gumby\.ai\.aws\.dev)$", re.IGNORECASE),
@@ -64,6 +64,8 @@ FLAGGED_SAMPLES = tuple(
         "made-up.aw|s.dev",
         "{stage}.aw|s.dev",
         "<host>.ama|zon.com",
+        "made-up.a2|z.com",
+        "made-up.a2|z.org",
         "first.last@ama|zon.com",
         "first.last+tag@ama|zon.dev",
         "sla|ck.com/archives/C0000000000",
