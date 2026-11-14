@@ -97,6 +97,7 @@
         - [When to Use Each Strategy](#when-to-use-each-strategy)
         - [Components](#components)
         - [Usage](#usage)
+        - [Keeping More Than One Checkpoint](#keeping-more-than-one-checkpoint)
     - [Configuration](#configuration)
       - [Required Environment Variables](#required-environment-variables)
       - [Optional Environment Variables](#optional-environment-variables)
@@ -2808,6 +2809,20 @@ server = AgentRuntimeServer(
         storage_dir="/tmp/my_agent"
 )
 ```
+
+##### Keeping More Than One Checkpoint
+
+By default the agent keeps one checkpoint and overwrites it. Set the runtime environment variable `ATX_MAX_CHECKPOINTS` to keep more than one.
+
+| `ATX_MAX_CHECKPOINTS` | Behavior |
+|---|---|
+| Unset, not an integer, or 1 or less | Single mode. One checkpoint artifact, overwritten at each checkpoint. |
+| 2 to 100 | Multi mode. Each checkpoint is uploaded as a new artifact. `CheckpointRepository.list_restorable_checkpoints()` returns the newest N, newest first, and the agent restores the newest one at startup. |
+| Above 100 | Used as 100, the maximum. |
+
+- Multi mode deletes nothing. Checkpoints older than the newest N are no longer listed, but every artifact stays in the job until it expires, so storage grows with each checkpoint.
+- A restore replaces the contents of `storage_dir` with the checkpoint, so files that are not in the checkpoint are removed. If `storage_dir` is read-only, or an entry in it cannot be moved (for example a mounted subdirectory), the checkpoint is extracted over the existing files and those files stay.
+- `CheckpointManager.restore_checkpoint(artifact_id)` rolls `storage_dir` back to one of the listed checkpoints. It replaces the files only. It does not rebuild a running agent, its request queue or its response store.
 
 ### Configuration
 
