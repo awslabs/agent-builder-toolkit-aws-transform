@@ -22,6 +22,7 @@ from ..custom_types.orchestrator_agent_types import (
 )
 from ..interfaces import AnyBaseAgent
 from ..message_queue import QueueRequest, QueueResponse, RequestQueue, RequestStatus, ResponseStore
+from ..orchestrator_strands.base_orchestrator import BaseOrchestrator
 from ..orchestrator_strands.conversation.repository import conversation_persist
 from ..utils import describe_agent_result, extract_text_from_strands_agent_response
 from .context import RequestContext
@@ -248,7 +249,13 @@ class QueueRequestHandler(RequestHandler):
                         # Set on this task: process_message_async runs on it, and asyncio.to_thread
                         # copies its context. A sync agent that hands the turn to a thread of its
                         # own (BaseOrchestrator does) loses the value there.
-                        persist_token = conversation_persist.set(message_data.get("persist", True))
+                        persist = message_data.get("persist", True)
+                        if not persist and isinstance(agent, BaseOrchestrator):
+                            logger.warning(
+                                "persist=False has no effect with a sync BaseOrchestrator: "
+                                "its conversation hooks store the turn"
+                            )
+                        persist_token = conversation_persist.set(persist)
                         try:
                             if hasattr(agent, "process_message_async"):
                                 result = await agent.process_message_async(request)

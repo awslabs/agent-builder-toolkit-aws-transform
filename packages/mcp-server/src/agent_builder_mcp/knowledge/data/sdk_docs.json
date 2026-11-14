@@ -2816,7 +2816,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/message_queue/service.py",
     "module": "agent_builder_sdk.message_queue.service",
-    "docstring": "Submit a new request to the queue.\n\nArgs:\n    message: The message/request content\n    user_id: User identifier\n    sender: Sender identifier\n    priority: Request priority\n    persist: Whether the turn's messages are written to conversation history. False runs\n        the turn and stores nothing; it takes effect only with an async orchestrator\n        whose history is written by ConversationHookProvider.\n\nReturns:\n    Request ID of the submitted request",
+    "docstring": "Submit a new request to the queue.\n\nArgs:\n    message: The message/request content\n    user_id: User identifier\n    sender: Sender identifier\n    priority: Request priority\n    persist: Whether the turn's messages are written to conversation history. False keeps\n        them out of history only: the request and its response are still written to the\n        queue's storage (files, with the default queue). It takes effect only with an\n        async orchestrator whose history is written by ConversationHookProvider; a sync\n        BaseOrchestrator ignores the flag and the request handler logs a warning.\n\nReturns:\n    Request ID of the submitted request",
     "signature": "async submit_request(message: str, user_id: Optional[str] = None, sender: Optional[str] = None, context_id: Optional[str] = None, task_id: Optional[str] = None, priority: RequestPriority = RequestPriority.NORMAL, agent_instance_id: str | None = None, persist: bool = True) -> str"
   },
   {

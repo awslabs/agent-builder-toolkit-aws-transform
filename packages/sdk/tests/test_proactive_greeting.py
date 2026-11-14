@@ -12,6 +12,7 @@ import contextlib
 import copy
 import functools
 import logging
+import uuid
 from pathlib import Path
 from typing import Any, AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Optional
 from unittest import mock
@@ -152,7 +153,7 @@ async def _user_turn(server: AgentRuntimeServer, message: str) -> None:
 
 
 async def test_first_boot_posts_one_greeting_and_stores_no_turn(
-    tmp_path: Path, send: mock.AsyncMock
+    tmp_path: Path, send: mock.AsyncMock, caplog: pytest.LogCaptureFixture
 ) -> None:
     repository = FileMultiSourceConversationRepository(storage_dir=str(tmp_path / "history"))
     orchestrator = AsyncBaseOrchestrator("", hooks=[ConversationHookProvider(repository)])
@@ -173,11 +174,14 @@ async def test_first_boot_posts_one_greeting_and_stores_no_turn(
     orchestrator.model.stream.side_effect = stream
 
     async with _running_server(orchestrator, tmp_path) as server:
-        await _initialize(server)
+        with caplog.at_level(logging.INFO, logger=SERVER):
+            await _initialize(server)
 
         send.assert_awaited_once()
         assert send.await_args.kwargs["message"] == GREETING
         assert send.await_args.kwargs["target_agent_instance_id"] == "ATX_CHAT"
+        uuid.UUID(send.await_args.kwargs["context_id"])
+        assert "Proactive greeting sent to chat" in caplog.text
         assert model_inputs == [[{"role": "user", "content": [{"text": PROMPT}]}]]
         assert not any(
             messages
@@ -348,12 +352,15 @@ async def test_greeting_is_not_sent_when_its_turn_gives_no_reply(
 ) -> None:
     agent = _AsyncAgent(turn)
     async with _running_server(agent, tmp_path) as server:
+        wait = mock.AsyncMock(wraps=server.queue.wait_for_response)
         with (
             mock.patch(f"{SERVER}._GREETING_TIMEOUT_SECONDS", 0.2),
+            mock.patch.object(server.queue, "wait_for_response", wait),
             caplog.at_level(logging.WARNING, logger=SERVER),
         ):
             await _initialize(server)
 
+    wait.assert_awaited_once_with(request_id=mock.ANY, timeout=0.2)
     assert agent.messages == [PROMPT]
     send.assert_not_awaited()
     assert log in caplog.text

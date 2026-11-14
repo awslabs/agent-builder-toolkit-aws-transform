@@ -100,9 +100,11 @@ class QueueService:
             user_id: User identifier
             sender: Sender identifier
             priority: Request priority
-            persist: Whether the turn's messages are written to conversation history. False runs
-                the turn and stores nothing; it takes effect only with an async orchestrator
-                whose history is written by ConversationHookProvider.
+            persist: Whether the turn's messages are written to conversation history. False keeps
+                them out of history only: the request and its response are still written to the
+                queue's storage (files, with the default queue). It takes effect only with an
+                async orchestrator whose history is written by ConversationHookProvider; a sync
+                BaseOrchestrator ignores the flag and the request handler logs a warning.
 
         Returns:
             Request ID of the submitted request

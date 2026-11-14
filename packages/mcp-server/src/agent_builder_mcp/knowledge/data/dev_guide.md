@@ -2110,7 +2110,7 @@ server = AgentRuntimeServer(
 - A greeting that fails does not stop the agent.
 - A message that arrives while the greeting turn runs waits for that turn to end. Keep the prompt short and tell the model not to use tools.
 
-To run a turn of your own without storing it, call `QueueService.submit_request(..., persist=False)`. This has an effect only with an async orchestrator that stores history with `ConversationHookProvider`.
+To keep a turn of your own out of conversation history, call `QueueService.submit_request(..., persist=False)`. The request and its response are still written to the queue's files in the storage directory. The flag has an effect only with an async orchestrator that stores history with `ConversationHookProvider`. A sync `BaseOrchestrator` ignores the flag and the agent log has a warning.
 
 ## HITL (Human-in-the-Loop) Task FAQs
 

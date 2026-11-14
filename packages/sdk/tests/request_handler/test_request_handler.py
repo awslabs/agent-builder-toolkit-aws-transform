@@ -3,6 +3,7 @@
 """Tests for message processing module."""
 
 import asyncio
+import logging
 import unittest
 from typing import Any, List, Optional
 from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
@@ -19,6 +20,7 @@ from agent_builder_sdk.message_queue import (
     RequestStatus,
     ResponseStore,
 )
+from agent_builder_sdk.orchestrator_strands.base_orchestrator import BaseOrchestrator
 from agent_builder_sdk.orchestrator_strands.conversation.repository import conversation_persist
 from agent_builder_sdk.request_handler import RequestHandler
 from agent_builder_sdk.request_handler.context import RequestContext
@@ -286,6 +288,32 @@ async def test_conversation_persist_is_reset_when_the_turn_fails(
 
     mock_agent.process_message_async.assert_awaited_once()
     assert conversation_persist.get() is True
+
+
+@pytest.mark.parametrize(
+    ("agent_class", "persist", "warned"),
+    [(BaseOrchestrator, False, True), (BaseOrchestrator, True, False), (BaseAgent, False, False)],
+)
+async def test_persist_false_on_a_sync_base_orchestrator_logs_a_warning(
+    queue_request_handler: QueueRequestHandler,
+    agent_result: AgentResult,
+    caplog: pytest.LogCaptureFixture,
+    agent_class: type,
+    persist: bool,
+    warned: bool,
+) -> None:
+    queue_request_handler.request_queue.dequeue.side_effect = [
+        QueueRequest(context={"persist": persist}),
+        asyncio.CancelledError(),
+    ]
+    mock_agent = create_autospec(agent_class, spec_set=True, instance=True)
+    mock_agent.process_message.return_value = agent_result
+
+    with caplog.at_level(logging.WARNING, logger="agent_builder_sdk.request_handler"):
+        await queue_request_handler.start_processing(AsyncMock(return_value=mock_agent))
+
+    mock_agent.process_message.assert_called_once()
+    assert ("persist=False has no effect with a sync BaseOrchestrator" in caplog.text) is warned
 
 
 async def test_only_stored_turns_count_as_started(

@@ -613,7 +613,7 @@ class AgentRuntimeServer(BaseServer):
         self._greeting_task = asyncio.create_task(self._send_proactive_greeting(prompt))
 
     async def _send_proactive_greeting(self, prompt: str) -> None:
-        """Run ``prompt`` as a turn that is not stored and post the reply to the job's chat.
+        """Run ``prompt`` as a turn kept out of conversation history and post the reply to chat.
 
         The turn goes through the queue, so the orchestrator writes the greeting with its own
         system prompt. The reply is not sent when another turn arrived first, when the turn
