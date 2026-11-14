@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 import datetime
 import os
+import signal
+from collections.abc import Iterator
 from multiprocessing import Event as MPEvent
 from pathlib import Path
 from unittest import mock
@@ -81,6 +83,17 @@ def test_auth_token_refresher_shutdown_no_process():
     refresher.shutdown()
 
 
+@pytest.fixture
+def restore_sigterm() -> Iterator[None]:
+    """Put back the SIGTERM handler that _auth_process_main resets in the calling process."""
+    saved = signal.getsignal(signal.SIGTERM)
+    yield
+    # getsignal returns None for a handler that was not installed from Python. Such a
+    # handler cannot be reinstalled, so the default disposition stays.
+    signal.signal(signal.SIGTERM, signal.SIG_DFL if saved is None else saved)
+
+
+@pytest.mark.usefixtures("restore_sigterm")
 def test_auth_process_main_exception(caplog):
     """Test _auth_process_main handles general exceptions with proper logging."""
     refresher = AuthTokenRefresher(
@@ -101,6 +114,20 @@ def test_auth_process_main_exception(caplog):
     # Verify the loop continued after the exception (called twice)
     assert refresher._refresh_token.call_count == 2
     assert "Token refresh process error, retrying:" in caplog.text
+
+
+@pytest.mark.usefixtures("mock_auth_dependencies", "restore_sigterm")
+def test_auth_process_main_resets_inherited_sigterm_handler() -> None:
+    """The child drops the SIGTERM handler it inherits, so terminate() stops it at once."""
+    refresher = AuthTokenRefresher(first_token="test-token")
+    refresher._refresh_token = mock.Mock(side_effect=KeyboardInterrupt)
+    # Stand-in for a server's graceful-shutdown handler that the fork would inherit.
+    signal.signal(signal.SIGTERM, lambda signum, frame: None)
+
+    with mock.patch("agent_builder_sdk._auth_token_refresher.logging.basicConfig"):
+        refresher._auth_process_main()
+
+    assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
 
 
 @pytest.fixture
