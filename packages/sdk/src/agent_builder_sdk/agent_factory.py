@@ -54,6 +54,18 @@ logger = logging.getLogger(__name__)
 
 _PLATFORM_SKILLS_DIR = Path(__file__).parent / "platform_skills"
 _MAX_PLATFORM_SKILL_FILE_BYTES = 64 * 1024
+# The MCP tools that the platform contract tells the model to call on every job.
+_PLATFORM_CONTRACT_TOOL_NAMES = frozenset(
+    {
+        "put_job_plan",
+        "list_job_plan_steps",
+        "update_job_plan_step",
+        "update_job_status",
+        "create_worklog",
+        "create_hitl_task",
+        "start_hitl_task",
+    }
+)
 
 
 @tool
@@ -188,9 +200,21 @@ def _create_default_orchestrator(
         system_prompt += "\n" + guardrail_prompt
 
     # A platform-skills agent must obey the platform contract (plan-first, HITL approval before
-    # mutations, artifacts as the durable sink, connectors for customer resources) whatever its
-    # task prompt says, so it is appended rather than left to the caller's system_prompt.
+    # mutations, artifacts as the durable sink) whatever its task prompt says, so it is appended
+    # rather than left to the caller's system_prompt.
     if enable_platform_skills:
+        excluded = sorted(_PLATFORM_CONTRACT_TOOL_NAMES.intersection(excluded_mcp_tool_names or ()))
+        if mcp_client is None or excluded:
+            reason = (
+                "no mcp_client was given"
+                if mcp_client is None
+                else f"excluded_mcp_tool_names removes {excluded}"
+            )
+            logger.warning(
+                "enable_platform_skills appends a contract that tells the model to call the "
+                f"job plan, job status, worklog and HITL tools, but {reason}. Unless custom_tools "
+                "provide them, the model is told to call tools that this agent does not have."
+            )
         contract_prompt = get_platform_skills_contract_prompt()
         if contract_prompt:
             system_prompt += "\n\n" + contract_prompt
@@ -454,7 +478,10 @@ def create_default_async_orchestrator_with_subagent(
             platform-skills contract to the system prompt. For agents running inside an
             AWS Transform job; off by default.
             USE WITH CAUTION: this also rewrites the system prompt (the contract is appended to
-            whatever system_prompt you pass).
+            whatever system_prompt you pass). The contract tells the model that the job plan,
+            job status, worklog and HITL tools are available, so pass an mcp_client that serves
+            them. With no mcp_client, or with one of those tools in excluded_mcp_tool_names, the
+            contract is still appended and a warning is logged.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools

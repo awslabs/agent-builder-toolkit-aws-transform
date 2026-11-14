@@ -4,13 +4,17 @@
 Unit tests for agent factory functions.
 """
 
+import logging
 import os
+from pathlib import Path
+from typing import Optional
 from unittest import mock
 
 import pytest
 from strands.vended_plugins.skills import Skill
 
 from agent_builder_sdk.agent_factory import (
+    _PLATFORM_CONTRACT_TOOL_NAMES,
     _PLATFORM_SKILLS_DIR,
     create_default_async_orchestrator,
     create_default_async_orchestrator_with_subagent,
@@ -996,6 +1000,59 @@ class TestPlatformKnowledge:
         assert call_kwargs["system_prompt"] == "task prompt"
         assert call_kwargs["plugins"] is None
         assert read_platform_skill_file not in call_kwargs["custom_tools"]
+
+    @pytest.mark.parametrize(
+        ("mcp_client", "excluded", "reason"),
+        [
+            (None, None, "no mcp_client was given"),
+            (mock.Mock(), ["get_job", "start_hitl_task"], "removes ['start_hitl_task']"),
+        ],
+    )
+    def test_platform_skills_without_the_contract_tools_logs_a_warning(
+        self,
+        mcp_client: Optional[mock.Mock],
+        excluded: Optional[list[str]],
+        reason: str,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        with mock.patch(
+            "agent_builder_sdk.agent_factory.AsyncBaseOrchestrator"
+        ) as mock_orchestrator, caplog.at_level(
+            logging.WARNING, logger="agent_builder_sdk.agent_factory"
+        ):
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt",
+                mcp_client=mcp_client,
+                storage_dir=str(tmp_path),
+                excluded_mcp_tool_names=excluded,
+                enable_platform_skills=True,
+            )
+
+        (warning,) = [r for r in caplog.records if r.name == "agent_builder_sdk.agent_factory"]
+        assert warning.levelno == logging.WARNING
+        assert reason in warning.getMessage()
+        assert "# Platform Contract" in mock_orchestrator.call_args.kwargs["system_prompt"]
+
+    def test_platform_skills_with_the_contract_tools_logs_no_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator"), caplog.at_level(
+            logging.WARNING, logger="agent_builder_sdk.agent_factory"
+        ):
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt",
+                mcp_client=mock.Mock(),
+                storage_dir=str(tmp_path),
+                excluded_mcp_tool_names={"get_job"},
+                enable_platform_skills=True,
+            )
+
+        assert [r for r in caplog.records if r.name == "agent_builder_sdk.agent_factory"] == []
+
+    def test_contract_tool_names_are_taught_by_the_packaged_skills(self) -> None:
+        taught = "".join(p.read_text(encoding="utf-8") for p in _PLATFORM_SKILLS_DIR.rglob("*.md"))
+        assert [name for name in sorted(_PLATFORM_CONTRACT_TOOL_NAMES) if name not in taught] == []
 
     def test_packaged_platform_skills_load_strictly(self):
         names = {Skill.from_file(p, strict=True).name for p in _PLATFORM_SKILLS_DIR.glob("*/SKILL.md")}
