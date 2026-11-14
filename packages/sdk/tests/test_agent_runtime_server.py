@@ -8,6 +8,7 @@ agent execution environments through JSON-RPC endpoints.
 """
 
 import asyncio
+import logging
 from multiprocessing import Event as MPEvent
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec, patch
@@ -24,10 +25,12 @@ from agent_builder_sdk.custom_types.common_types import (
 )
 from agent_builder_sdk.custom_types.server_types import JsonRpcMethods
 from agent_builder_sdk.extensions.base_extension_handler import BaseExtensionHandler
-from agent_builder_sdk.interfaces import BaseAgent
+from agent_builder_sdk.interfaces import BaseAgent, StreamingCapable
 from agent_builder_sdk.messages.message_handler import MessageHandler
+from agent_builder_sdk.orchestrator_strands.conversation.constants import MessageSourceType
 from agent_builder_sdk.server.agent_runtime_server import AgentRuntimeServer
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
+from agent_builder_sdk.streaming.config import StreamingConfig
 from agent_builder_sdk.utils import MessageInfo
 
 
@@ -67,6 +70,19 @@ def async_agent_factory(mock_agent):
     return factory
 
 
+class _StreamAgent(StreamingCapable):
+    """Minimal StreamingCapable agent for validation tests."""
+
+    async def process_message_stream(self, request, conversation_id, cfg=None):
+        yield {}
+
+    def get_streaming_hook_providers(self, cfg):
+        return []
+
+    def requires_context_id(self):
+        return False
+
+
 @pytest.fixture
 def agent_runtime_server(mock_agent_factory):
     """Create Agent Runtime Server instance for testing."""
@@ -78,6 +94,23 @@ def agent_runtime_server(mock_agent_factory):
                 storage_dir="/tmp/test_storage",
             )
             return server
+
+
+def test_start_sends_connection_close_when_streaming(mock_agent_factory):
+    with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+            streaming = AgentRuntimeServer(
+                agent_factory=mock_agent_factory, streaming_config=StreamingConfig()
+            )
+            non_streaming = AgentRuntimeServer(agent_factory=mock_agent_factory)
+
+    with mock.patch("agent_builder_sdk.server.agent_runtime_server.uvicorn.run") as run:
+        streaming.start()
+        assert run.call_args.kwargs["headers"] == [("Connection", "close")]
+
+    with mock.patch("agent_builder_sdk.server.agent_runtime_server.uvicorn.run") as run:
+        non_streaming.start()
+        assert run.call_args.kwargs["headers"] is None
 
 
 class TestAgentRuntimeServer:
@@ -157,8 +190,29 @@ class TestAgentRuntimeServer:
                 assert server_default.timeout == 28  # Default timeout
 
                 # Test custom value
-                server_custom = AgentRuntimeServer(agent_factory=mock_agent_factory, timeout=60)
-                assert server_custom.timeout == 60  # Custom timeout
+                server_custom = AgentRuntimeServer(agent_factory=mock_agent_factory, timeout=20)
+                assert server_custom.timeout == 20  # Custom timeout
+
+    def test_timeout_accepts_platform_maximum(self, mock_agent_factory):
+        """28s, the largest timeout whose acknowledgment fits in the platform's 29s attempt, is accepted."""
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                server = AgentRuntimeServer(agent_factory=mock_agent_factory, timeout=28)
+                assert server.timeout == 28
+
+    def test_timeout_above_platform_maximum_is_kept_and_validated_once(
+        self, mock_agent_factory, caplog
+    ):
+        """A timeout above 28s keeps working, and only MessageHandler validates it (one warning, not two)."""
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch(
+                "agent_builder_sdk.server.agent_runtime_server.MessageHandler"
+            ) as handler:
+                with caplog.at_level(logging.WARNING, logger="agent_builder_sdk.constants"):
+                    server = AgentRuntimeServer(agent_factory=mock_agent_factory, timeout=29)
+                assert server.timeout == 29
+                assert handler.call_args.kwargs["timeout"] == 29
+                assert caplog.text == ""
 
     def test_token_refresh_buffer_configuration(self, mock_agent_factory):
         """Test token_refresh_buffer parameter configuration."""
@@ -2072,3 +2126,697 @@ class TestAgentRuntimeServer:
                         call_args = mock_factory.call_args[0][0]
                         assert call_args["binaryLocation"] == "/tmp/test_binary"
                         assert server.initialized is True
+
+    # Retry on transient network errors during initialization
+    @pytest.mark.asyncio
+    async def test_get_agent_status_with_retry_succeeds_after_transient_failure(
+        self, mock_agent_factory
+    ):
+        """Test that _get_agent_status_with_retry retries on ConnectTimeoutError and succeeds."""
+        from botocore.exceptions import ConnectTimeoutError
+
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                server = AgentRuntimeServer(
+                    agent_factory=mock_agent_factory,
+                    binary_location="/tmp/test_binary",
+                    storage_dir="/tmp/test_storage",
+                )
+
+        server.context = AgentRuntimeContext(
+            workspace_id="test-workspace",
+            job_id="test-job",
+            agent_instance_id="test-agent",
+            initial_auth_token="test-token",
+        )
+
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
+            side_effect=[
+                ConnectTimeoutError(endpoint_url="https://test.endpoint"),
+                ConnectTimeoutError(endpoint_url="https://test.endpoint"),
+                "INVOKED",
+            ],
+        ) as mock_get_status:
+            result = await server._get_agent_status_with_retry()
+
+            assert result == "INVOKED"
+            assert mock_get_status.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_get_agent_status_with_retry_exhausts_retries(self, mock_agent_factory):
+        """Test that _get_agent_status_with_retry returns None after exhausting retries."""
+        from botocore.exceptions import ConnectTimeoutError
+
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                server = AgentRuntimeServer(
+                    agent_factory=mock_agent_factory,
+                    binary_location="/tmp/test_binary",
+                    storage_dir="/tmp/test_storage",
+                )
+
+        server.context = AgentRuntimeContext(
+            workspace_id="test-workspace",
+            job_id="test-job",
+            agent_instance_id="test-agent",
+            initial_auth_token="test-token",
+        )
+
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
+            side_effect=ConnectTimeoutError(endpoint_url="https://test.endpoint"),
+        ) as mock_get_status:
+            result = await server._get_agent_status_with_retry()
+
+            assert result is None
+            assert mock_get_status.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_get_agent_status_with_retry_no_retry_on_validation_exception(
+        self, mock_agent_factory
+    ):
+        """Test that _get_agent_status_with_retry does not retry on ValidationException."""
+        from botocore.exceptions import ClientError
+
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                server = AgentRuntimeServer(
+                    agent_factory=mock_agent_factory,
+                    binary_location="/tmp/test_binary",
+                    storage_dir="/tmp/test_storage",
+                )
+
+        server.context = AgentRuntimeContext(
+            workspace_id="test-workspace",
+            job_id="test-job",
+            agent_instance_id="test-agent",
+            initial_auth_token="test-token",
+        )
+
+        validation_error = ClientError(
+            {"Error": {"Code": "ValidationException", "Message": "Invalid input"}},
+            "GetAgentInstance",
+        )
+
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
+            side_effect=validation_error,
+        ) as mock_get_status:
+            result = await server._get_agent_status_with_retry()
+
+            assert result is None
+            # Should NOT retry — permanent client error
+            assert mock_get_status.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_get_agent_status_with_retry_no_retry_on_access_denied(self, mock_agent_factory):
+        """Test that _get_agent_status_with_retry does not retry on AccessDeniedException."""
+        from botocore.exceptions import ClientError
+
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                server = AgentRuntimeServer(
+                    agent_factory=mock_agent_factory,
+                    binary_location="/tmp/test_binary",
+                    storage_dir="/tmp/test_storage",
+                )
+
+        server.context = AgentRuntimeContext(
+            workspace_id="test-workspace",
+            job_id="test-job",
+            agent_instance_id="test-agent",
+            initial_auth_token="test-token",
+        )
+
+        access_denied_error = ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "Not authorized"}},
+            "GetAgentInstance",
+        )
+
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
+            side_effect=access_denied_error,
+        ) as mock_get_status:
+            result = await server._get_agent_status_with_retry()
+
+            assert result is None
+            # Should NOT retry — permanent client error
+            assert mock_get_status.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_initialize_agent_retries_on_connect_timeout(self, mock_agent_factory):
+        """Test full initialize_agent flow retries on ConnectTimeoutError."""
+        from botocore.exceptions import ConnectTimeoutError
+
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                server = AgentRuntimeServer(
+                    agent_factory=mock_agent_factory,
+                    binary_location="/tmp/test_binary",
+                    storage_dir="/tmp/test_storage",
+                )
+
+        server.context = AgentRuntimeContext(
+            workspace_id="test-workspace",
+            job_id="test-job",
+            agent_instance_id="test-agent",
+            initial_auth_token="test-token",
+        )
+
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_agent_status",
+            side_effect=ConnectTimeoutError(endpoint_url="https://test.endpoint"),
+        ) as mock_get_status:
+            with mock.patch(
+                "agent_builder_sdk.server.agent_runtime_server.setup_initial_auth_token"
+            ):
+                await server.initialize_agent(auth_token="test-token")
+
+                # Should have retried 3 times then given up
+                assert mock_get_status.call_count == 3
+                assert server.initialized is False
+                assert server.agent is None
+
+
+class TestConcurrentStreaming:
+    """Tests for the opt-in streaming_config (concurrent streaming) and streaming ingress."""
+
+    def _make_server(self, factory, streaming_config=None):
+        # Streaming is opted in by passing a StreamingConfig; None (default) leaves it off.
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+            with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+                return AgentRuntimeServer(
+                    agent_factory=factory,
+                    binary_location="/tmp/test_binary",
+                    storage_dir="/tmp/test_storage",
+                    streaming_config=streaming_config,
+                )
+
+    def test_default_is_off(self, mock_agent_factory):
+        """Default (opt-out) leaves streaming disabled and builds no pool."""
+        server = self._make_server(mock_agent_factory)
+        assert server.streaming_config is None
+        assert server._streaming_agent_pool is None
+        assert server._shared_conversation_repository is None
+
+    def test_config_stored_when_on(self, mock_agent_factory):
+        cfg = StreamingConfig()
+        server = self._make_server(mock_agent_factory, streaming_config=cfg)
+        assert server.streaming_config is cfg
+
+    def test_get_streaming_config_returns_the_config(self, mock_agent_factory):
+        """The server exposes its config to the streaming ingress (base_server reads it to
+        pass cfg into process_message_stream), so a non-default config reaches the stream."""
+        cfg = StreamingConfig(emit_reasoning=False, emit_tool_calls=False)
+        server = self._make_server(mock_agent_factory, streaming_config=cfg)
+        assert server._get_streaming_config() is cfg
+
+    def test_get_streaming_config_none_when_off(self, mock_agent_factory):
+        server = self._make_server(mock_agent_factory)
+        assert server._get_streaming_config() is None
+
+    async def test_streaming_rejected_when_off(self, mock_agent_factory):
+        """With the flag off, the streaming ingress hook refuses to serve."""
+        server = self._make_server(mock_agent_factory)
+        with pytest.raises(NotImplementedError, match="does not support streaming"):
+            await server._get_agent_for_streaming("user-1", MessageSourceType.USER)
+
+    async def test_streaming_serves_per_source_agent_when_on(self, mock_agent, mock_agent_factory):
+        """With the flag on, the ingress hook waits for readiness and returns the
+        per-source agent from the pool."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        server.agent_ready_event.set()  # pretend init finished
+
+        sentinel = object()
+
+        class _Pool:
+            def __init__(self):
+                self.calls = []
+
+            async def get_agent(self, source_id, source_type):
+                self.calls.append((source_id, source_type))
+                return sentinel
+
+        server._streaming_agent_pool = _Pool()
+
+        got = await server._get_agent_for_streaming("user-1", MessageSourceType.USER)
+        assert got is sentinel
+        assert server._streaming_agent_pool.calls == [("user-1", MessageSourceType.USER)]
+
+    async def test_streaming_errors_when_agent_never_becomes_ready(self, mock_agent_factory):
+        """A failed init never sets agent_ready_event; the stream must error instead of hanging."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        with pytest.raises(RuntimeError, match="not ready to stream"):
+            await server._get_agent_for_streaming("user-1", MessageSourceType.USER)
+
+    async def test_streaming_waits_for_slow_background_init(self, mock_agent_factory):
+        """A background init that is still running is waited for, however long it takes."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        sentinel = object()
+
+        class _Pool:
+            async def get_agent(self, source_id, source_type):
+                return sentinel
+
+        async def init():
+            await asyncio.sleep(0.05)
+            server._streaming_agent_pool = _Pool()
+            server.agent_ready_event.set()
+
+        server._initialization_task = asyncio.create_task(init())
+        got = await server._get_agent_for_streaming("user-1", MessageSourceType.USER)
+        assert got is sentinel
+
+    async def test_streaming_errors_when_background_init_fails(self, mock_agent_factory):
+        """A background init that ends without the agent ready errors the stream."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+
+        async def failed_init():
+            await asyncio.sleep(0.01)
+
+        server._initialization_task = asyncio.create_task(failed_init())
+        with pytest.raises(RuntimeError, match="not ready to stream"):
+            await server._get_agent_for_streaming("user-1", MessageSourceType.USER)
+
+    async def test_sync_factory_runs_off_the_event_loop_only_when_asked(self, mock_agent):
+        """Per-user streaming agents are built in a worker thread so a new user's agent does not
+        block the event loop; other agents keep building on the loop as before."""
+        import threading
+
+        built_on = []
+
+        def factory(mcp_client, storage_dir, **kwargs):
+            built_on.append(threading.get_ident())
+            return mock_agent
+
+        server = self._make_server(factory, streaming_config=StreamingConfig())
+        assert await server._create_agent(mock.Mock()) is mock_agent
+        agent = await server._create_agent_with_storage(
+            mock.Mock(), "/tmp/test_storage/u1", off_loop=True
+        )
+
+        assert agent is mock_agent
+        assert built_on[0] == threading.get_ident()
+        assert built_on[1] != threading.get_ident()
+
+    async def test_off_loop_builds_run_one_at_a_time(self, mock_agent):
+        """Off-loop builds stay serialized, as on the event loop, so a factory need not be
+        thread-safe."""
+        import threading
+        import time
+
+        lock = threading.Lock()
+        running = {"now": 0, "max": 0}
+
+        def factory(mcp_client, storage_dir, **kwargs):
+            with lock:
+                running["now"] += 1
+                running["max"] = max(running["max"], running["now"])
+            time.sleep(0.02)
+            with lock:
+                running["now"] -= 1
+            return mock_agent
+
+        server = self._make_server(factory, streaming_config=StreamingConfig())
+        await asyncio.gather(
+            *(
+                server._create_agent_with_storage(
+                    mock.Mock(), f"/tmp/test_storage/u{i}", off_loop=True
+                )
+                for i in range(3)
+            )
+        )
+        assert running["max"] == 1
+
+    async def test_cancelled_off_loop_build_keeps_the_next_one_waiting(self, mock_agent):
+        """Cancelling a task awaiting an off-loop build does not stop its thread, so the next
+        build must still wait for that factory call to finish."""
+        import threading
+        import time
+
+        lock = threading.Lock()
+        running = {"now": 0, "max": 0}
+
+        def factory(mcp_client, storage_dir, **kwargs):
+            with lock:
+                running["now"] += 1
+                running["max"] = max(running["max"], running["now"])
+            time.sleep(0.1)
+            with lock:
+                running["now"] -= 1
+            return mock_agent
+
+        server = self._make_server(factory, streaming_config=StreamingConfig())
+        first = asyncio.create_task(
+            server._create_agent_with_storage(mock.Mock(), "/tmp/test_storage/a", off_loop=True)
+        )
+        await asyncio.sleep(0.02)
+        first.cancel()
+        await server._create_agent_with_storage(mock.Mock(), "/tmp/test_storage/b", off_loop=True)
+
+        assert running["max"] == 1
+
+    async def test_pool_builds_streaming_agents_off_the_loop(self, mock_agent_factory, mock_agent):
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        server.context = mock.Mock(workspace_id="ws", job_id="job", agent_instance_id="ai")
+        server.mcp_client = mock.Mock()
+        build = mock.AsyncMock(return_value=mock_agent)
+        with mock.patch.object(server, "_create_agent_with_storage", build), mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.mcp_session_active",
+            return_value=True,
+        ):
+            server._setup_concurrent_streaming()
+            await server._streaming_agent_pool._create_agent("/tmp/test_storage/u1")
+
+        assert build.await_args.kwargs["off_loop"] is True
+
+    async def test_off_loop_build_sees_the_callers_context(self, mock_agent):
+        import contextvars
+
+        var: contextvars.ContextVar[str] = contextvars.ContextVar("caller", default="unset")
+        seen = []
+
+        def factory(mcp_client, storage_dir, **kwargs):
+            seen.append(var.get())
+            return mock_agent
+
+        server = self._make_server(factory, streaming_config=StreamingConfig())
+        var.set("request-1")
+        await server._create_agent_with_storage(mock.Mock(), "/tmp/test_storage/u1", off_loop=True)
+
+        assert seen == ["request-1"]
+
+    async def test_cancelled_stream_request_does_not_cancel_init(self, mock_agent_factory):
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        release = asyncio.Event()
+
+        async def init():
+            await release.wait()
+
+        server._initialization_task = asyncio.create_task(init())
+        request = asyncio.create_task(
+            server._get_agent_for_streaming("user-1", MessageSourceType.USER)
+        )
+        await asyncio.sleep(0.01)
+        request.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await request
+
+        assert not server._initialization_task.cancelled()
+        release.set()
+        await server._initialization_task
+
+    async def test_cleanup_shuts_down_the_agent_build_executor(self, mock_agent_factory):
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        await server._cleanup()
+        with pytest.raises(RuntimeError):
+            server._agent_build_executor.submit(lambda: None)
+
+    def test_shared_repo_passed_in_agent_params_only_when_on(self, mock_agent_factory):
+        """conversation_repository is injected into agent params only when a shared repo
+        exists (concurrent streaming); otherwise the params are unchanged."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        server.context = mock.Mock(workspace_id="ws", job_id="job", agent_instance_id="ai")
+
+        # no shared repo yet → not present
+        params = server._get_agent_params()
+        assert "conversation_repository" not in params
+
+        # once the shared repo is built → present and is that instance
+        repo = object()
+        server._shared_conversation_repository = repo
+        params = server._get_agent_params()
+        assert params["conversation_repository"] is repo
+
+    def test_setup_concurrent_streaming_is_idempotent(self, mock_agent_factory):
+        """A retried initialization must not start a second shared MCP client (which
+        would orphan the first's thread or raise 'session already running')."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        server.context = mock.Mock(workspace_id="ws", job_id="job", agent_instance_id="ai")
+
+        # Simulate a client already set up by a prior (failed-then-retried) init.
+        existing_client = mock.Mock()
+        server._shared_mcp_client = existing_client
+        existing_pool = mock.Mock()
+        server._streaming_agent_pool = existing_pool
+
+        with mock.patch.object(server, "_create_agent_with_storage"), mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.MCPClientFactory"
+        ) as mock_factory:
+            server._setup_concurrent_streaming()
+
+        # early-returned: no new client built/started, existing ones untouched
+        mock_factory.setup_ab_mcp_client.assert_not_called()
+        existing_client.start.assert_not_called()
+        assert server._shared_mcp_client is existing_client
+        assert server._streaming_agent_pool is existing_pool
+
+    def test_shared_memory_manager_injected_only_when_on(self, mock_agent_factory):
+        """memory_manager is injected into agent params only when a shared manager exists
+        (concurrent streaming) — mirrors conversation_repository, so buffered and per-user
+        streaming agents share memory for the same user."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        server.context = mock.Mock(workspace_id="ws", job_id="job", agent_instance_id="ai")
+
+        params = server._get_agent_params()
+        assert "memory_manager" not in params
+
+        mgr = object()
+        server._shared_memory_manager = mgr
+        params = server._get_agent_params()
+        assert params["memory_manager"] is mgr
+
+    def test_shared_stores_built_once_across_retried_init(self, mock_agent_factory):
+        """A retried init must NOT rebuild the shared conversation repo / memory manager. The
+        streaming agent pool captures the first instances in a closure and is itself idempotent;
+        rebuilding would leave the pool on the OLD instances and the singleton agent on the NEW
+        ones — two repositories on one storage_dir overwriting each other's saves (silent
+        history/memory divergence for the same user). Calls the REAL _build_shared_streaming_stores
+        twice (first init + retry)."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+
+        server._build_shared_streaming_stores()  # first init
+        first_repo = server._shared_conversation_repository
+        first_mem = server._shared_memory_manager
+        assert first_repo is not None and first_mem is not None
+
+        server._build_shared_streaming_stores()  # retried init
+        assert server._shared_conversation_repository is first_repo  # not rebuilt
+        assert server._shared_memory_manager is first_mem
+
+    def test_shared_stores_not_built_when_streaming_off(self, mock_agent_factory):
+        """No-op when concurrent_streaming is off — default behavior unchanged."""
+        server = self._make_server(mock_agent_factory)
+        server._build_shared_streaming_stores()
+        assert server._shared_conversation_repository is None
+        assert server._shared_memory_manager is None
+
+    def test_validate_rejects_non_streaming_agent(self, mock_agent_factory, mock_agent):
+        """Streaming on (a StreamingConfig) with an agent lacking process_message_stream (e.g.
+        sync BaseOrchestrator) must fail fast at init, not AttributeError mid-stream."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        # mock_agent is a BaseAgent autospec — no process_message_stream attribute
+        server.agent = mock_agent
+        assert not hasattr(server.agent, "process_message_stream")
+        with pytest.raises(RuntimeError, match="does not support streaming"):
+            server._validate_streaming_capability()
+
+    def test_validate_accepts_streaming_agent(self, mock_agent_factory):
+        """A StreamingCapable agent + a kwargs factory passes validation."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        server.agent = _StreamAgent()
+        server._validate_streaming_capability()  # no raise
+
+    def test_validate_rejects_legacy_stream_signature_without_cfg(self, mock_agent_factory):
+        """The ingress forwards cfg=<StreamingConfig> to process_message_stream. A StreamingCapable
+        agent whose method uses the older (request, conversation_id) signature (no cfg, no **kwargs)
+        would TypeError mid-stream after headers flush — reject it at init."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+
+        class LegacyStreamAgent(StreamingCapable):
+            async def process_message_stream(self, request, conversation_id):
+                yield {}
+
+            def get_streaming_hook_providers(self, cfg):
+                return []
+
+            def requires_context_id(self):
+                return False
+
+        server.agent = LegacyStreamAgent()
+        with pytest.raises(RuntimeError, match="accept `cfg`"):
+            server._validate_streaming_capability()
+
+    def test_validate_accepts_stream_signature_with_cfg(self, mock_agent_factory):
+        """An explicit `cfg` param (as AsyncBaseOrchestrator declares) passes validation."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        server.agent = _StreamAgent()
+        server._validate_streaming_capability()  # no raise
+
+    async def test_cleanup_second_pass_does_not_restop_mcp_client(self, mock_agent_factory):
+        """_cleanup runs from BOTH the STOP handler and lifespan shutdown, so it runs up to twice.
+        The shared MCP client (stop() twice raises) must be stopped EXACTLY once — the double-stop
+        guard is scoped to that step (null-after-stop), NOT a whole-method early-return, so the
+        default shutdown steps still re-run on the second pass exactly as before concurrent streaming.
+        """
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        client = mock.Mock()
+        server._shared_mcp_client = client
+
+        await server._cleanup()
+        await server._cleanup()  # duplicate invoke (STOP handler + lifespan)
+
+        client.stop.assert_called_once()  # stopped exactly once
+        assert server._shared_mcp_client is None  # nulled after stop so no re-stop
+
+    async def test_cleanup_does_not_stop_caller_provided_mcp_client(self, mock_agent_factory):
+        """mcp_client is an optional constructor input; when the caller provides it, its
+        lifecycle is the caller's. _cleanup must NOT stop it (parity with the setup path,
+        which won't start/reset a caller-owned client)."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        caller_client = mock.Mock()
+        server._shared_mcp_client = caller_client
+        server._shared_mcp_client_caller_owned = True
+
+        await server._cleanup()
+
+        caller_client.stop.assert_not_called()  # caller owns its lifecycle
+        assert server._shared_mcp_client is caller_client  # ref left intact for the caller
+
+    async def test_cleanup_stops_server_built_mcp_client(self, mock_agent_factory):
+        """The default case: a client WE built (caller_owned=False) is stopped by _cleanup."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        built_client = mock.Mock()
+        server._shared_mcp_client = built_client
+        server._shared_mcp_client_caller_owned = False
+
+        await server._cleanup()
+
+        built_client.stop.assert_called_once()
+        assert server._shared_mcp_client is None
+
+    def test_is_async_factory_detects_async_call_object(self, mock_agent):
+        """A callable OBJECT with `async def __call__` (the AsyncAgentFactory Protocol shape)
+        must be detected as async — plain iscoroutinefunction misses it, leaving an un-awaited
+        coroutine as self.agent."""
+
+        class AsyncCallableFactory:
+            async def __call__(self, mcp_client, storage_dir, **kwargs):
+                return mock_agent
+
+        async def plain_async(mcp_client, storage_dir, **kwargs):
+            return mock_agent
+
+        def plain_sync(mcp_client, storage_dir, **kwargs):
+            return mock_agent
+
+        assert AgentRuntimeServer._is_async_factory(AsyncCallableFactory()) is True
+        assert AgentRuntimeServer._is_async_factory(plain_async) is True
+        assert AgentRuntimeServer._is_async_factory(plain_sync) is False
+
+    def test_validate_rejects_legacy_no_kwargs_factory(self, mock_agent):
+        """Streaming on (a StreamingConfig) with a legacy (mcp_client, storage_dir) factory must
+        fail fast — else the injected shared repos are silently dropped and stores diverge."""
+        legacy_factory = agent_factory_no_kwargs(mock_agent)
+        server = self._make_server(legacy_factory, streaming_config=StreamingConfig())
+        # give it a streaming-capable agent so we isolate the factory-signature check
+        server.agent = _StreamAgent()
+        with pytest.raises(RuntimeError, match="accepts \\*\\*kwargs"):
+            server._validate_streaming_capability()
+
+    def test_validate_is_noop_when_off(self, mock_agent):
+        """Validation never fires when concurrent_streaming is off (legacy factory + non-
+        streaming agent are both fine on the default path)."""
+        legacy_factory = agent_factory_no_kwargs(mock_agent)
+        server = self._make_server(legacy_factory)
+        server.agent = mock_agent
+        server._validate_streaming_capability()  # no raise
+
+    def test_setup_does_not_restart_a_prestarted_client(self, mock_agent_factory):
+        """A caller-provided MCP client that is already active must NOT be re-started
+        (start() would raise 'session currently running'); the field is set before start."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        server.context = mock.Mock(workspace_id="ws", job_id="job", agent_instance_id="ai")
+
+        prestarted = mock.Mock()
+        server.mcp_client = prestarted
+
+        with mock.patch.object(server, "_create_agent_with_storage"), mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.mcp_session_active",
+            return_value=True,
+        ):
+            server._setup_concurrent_streaming()
+
+        prestarted.start.assert_not_called()  # already active → not restarted
+        assert server._shared_mcp_client is prestarted  # field set even without start
+
+    def test_setup_idempotency_keys_on_pool_not_client(self, mock_agent_factory):
+        """Idempotency must key on the pool (terminal artifact), not _shared_mcp_client.
+        A client ref alone (e.g. left by a failed start()) must NOT short-circuit setup, or
+        streaming would be permanently dead after a transient failure."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        server.context = mock.Mock(workspace_id="ws", job_id="job", agent_instance_id="ai")
+        # A caller-provided client so setup skips the env-dependent build branch; the point of
+        # this test is the guard keying on the pool, not client creation.
+        server.mcp_client = mock.Mock()
+        server._shared_mcp_client = mock.Mock()  # client set, but pool is None
+        server._streaming_agent_pool = None
+
+        with mock.patch.object(server, "_create_agent_with_storage"), mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.mcp_session_active",
+            return_value=True,
+        ):
+            server._setup_concurrent_streaming()
+
+        # did NOT early-return: the pool got built this time
+        assert server._streaming_agent_pool is not None
+
+    def test_setup_resets_self_built_client_on_start_failure(self, mock_agent_factory):
+        """If start() fails on a client WE built, drop the ref so a retried init builds a fresh
+        one instead of reusing a half-open client / permanently early-returning."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        server.context = mock.Mock(workspace_id="ws", job_id="job", agent_instance_id="ai")
+        server.mcp_client = None  # force server to build its own client
+
+        failing_client = mock.Mock()
+        failing_client.start.side_effect = RuntimeError("spawn failed")
+
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.MCPClientFactory"
+        ) as mock_factory, mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.mcp_session_active",
+            return_value=False,
+        ), mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.build_agentic_api_endpoint_from_env",
+            return_value="https://endpoint",
+        ), mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.get_default_auth_token_file_path",
+            return_value="/tmp/tok",
+        ):
+            mock_factory.setup_ab_mcp_client.return_value = failing_client
+            with pytest.raises(RuntimeError, match="spawn failed"):
+                server._setup_concurrent_streaming()
+
+        # ref dropped so a retry starts clean; pool never built
+        assert server._shared_mcp_client is None
+        assert server._streaming_agent_pool is None
+
+    def test_setup_keeps_caller_client_ref_on_start_failure(self, mock_agent_factory):
+        """If start() fails on a CALLER-provided client, we must NOT null it — its lifecycle
+        isn't ours to reset."""
+        server = self._make_server(mock_agent_factory, streaming_config=StreamingConfig())
+        server.context = mock.Mock(workspace_id="ws", job_id="job", agent_instance_id="ai")
+
+        caller_client = mock.Mock()
+        caller_client.start.side_effect = RuntimeError("boom")
+        server.mcp_client = caller_client
+
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.mcp_session_active",
+            return_value=False,
+        ):
+            with pytest.raises(RuntimeError, match="boom"):
+                server._setup_concurrent_streaming()
+
+        assert server._shared_mcp_client is caller_client  # caller's ref left intact

@@ -14,6 +14,7 @@ from fastapi import Depends, FastAPI, HTTPException
 from typing_extensions import deprecated
 
 from agent_builder_sdk.base_subagent.base_subagent import BaseSubagent
+from agent_builder_sdk.constants import DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS
 from agent_builder_sdk.custom_types.common_types import (
     A2AError,
     A2AErrorCode,
@@ -34,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="ATX Base Subagent API")
 
-_TIMEOUT = 28
+_TIMEOUT = DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS
 
 
 def get_subagent() -> BaseSubagent:

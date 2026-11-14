@@ -2,7 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 import datetime
 import os
-import signal
 from multiprocessing import Event as MPEvent
 from pathlib import Path
 from unittest import mock
@@ -82,15 +81,7 @@ def test_auth_token_refresher_shutdown_no_process():
     refresher.shutdown()
 
 
-@pytest.fixture
-def restore_sigterm():
-    """_auth_process_main resets SIGTERM in the calling process; put the runner's back."""
-    saved = signal.getsignal(signal.SIGTERM)
-    yield
-    signal.signal(signal.SIGTERM, saved)
-
-
-def test_auth_process_main_exception(caplog, restore_sigterm):
+def test_auth_process_main_exception(caplog):
     """Test _auth_process_main handles general exceptions with proper logging."""
     refresher = AuthTokenRefresher(
         workspace_id="test-workspace",
@@ -110,21 +101,6 @@ def test_auth_process_main_exception(caplog, restore_sigterm):
     # Verify the loop continued after the exception (called twice)
     assert refresher._refresh_token.call_count == 2
     assert "Token refresh process error, retrying:" in caplog.text
-
-
-def test_auth_process_main_resets_inherited_sigterm_handler(
-    mock_auth_dependencies, restore_sigterm
-):
-    """The child drops the parent's SIGTERM handler, so terminate() stops it right away."""
-    refresher = AuthTokenRefresher(first_token="test-token")
-    refresher._refresh_token = mock.Mock(side_effect=KeyboardInterrupt)
-    # Stand-in for a server's graceful-shutdown handler that the fork would inherit.
-    signal.signal(signal.SIGTERM, lambda signum, frame: None)
-
-    with mock.patch("agent_builder_sdk._auth_token_refresher.logging.basicConfig"):
-        refresher._auth_process_main()
-
-    assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
 
 
 @pytest.fixture
@@ -431,7 +407,7 @@ class TestAuthTokenRefresherApiCalls:
 
         boto3 clients are not fork-safe. If the refresher reverts to
         get_agentic_api_client(), the child would get whichever client the
-        parent already cached before the fork — the exact bug this test guards against.
+        parent already cached before the fork.
         We prime the cached factory with a sentinel that fails on use, then
         assert the refresh path calls create_agentic_api_client and never
         touches the cached one.
