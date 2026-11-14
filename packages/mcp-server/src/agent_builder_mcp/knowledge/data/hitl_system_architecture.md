@@ -134,11 +134,10 @@ These have fixed UI layouts with schema-defined input/output:
 
 1. Create domTreeJson following the CloudScape component schema (every input component needs `fieldId`)
 2. Validate JSON against schema
-3. Test in Storybook playground
-4. Wrap JSON in `{"properties": {"domTreeJson": {...}}}` (or use `serialize()` from SDK)
-5. Upload as artifact → get `artifactId`
-6. Create HITL task with `uxComponentId: "DynamicHITLRenderEngine"` and the `artifactId`
-7. Platform renders using the rendering engine, auto-manages submit/save/reject buttons
+3. Wrap JSON in `{"properties": {"domTreeJson": {...}}}` (or use `serialize()` from SDK)
+4. Upload as artifact → get `artifactId`
+5. Create HITL task with `uxComponentId: "DynamicHITLRenderEngine"` and the `artifactId`
+6. Platform renders using the rendering engine, auto-manages submit/save/reject buttons
 
 ### How the Rendering Engine Works
 
@@ -212,16 +211,6 @@ The system enforces purely declarative JSON. The rendering engine:
 - Does not execute function callbacks from LLM output
 - Delegates all business logic and state management to the frontend
 - Validates JSON against schema before rendering
-
-### Source Code References
-
-| Component | Package Path |
-|-----------|-------------|
-| Rendering Engine | `TransformUIComponents/src/DynamicHITLRenderEngine/DynamicHITLRenderEngine.tsx` |
-| HITL Context | `TransformUIComponents/src/DynamicHITLRenderEngine/HITLCallbackContext.tsx` |
-| Wrapped Components (Atoms) | `TransformUIComponents/src/DynamicHITLRenderEngine/Atoms/` |
-| Component Registry | `TransformUIComponents/src/componentRegistry.ts` |
-| Schema Registry | `TransformUIComponents/schemaRegistry/` |
 
 ## CRITICAL Severity Approval Workflow
 

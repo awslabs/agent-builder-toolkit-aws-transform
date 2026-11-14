@@ -57,15 +57,14 @@ CORRECT: { "data": [{ "title": "Healthy", "value": 45 }, { "title": "Warning", "
 ```
 **Why:** Use the exact values the user provides. Don't substitute with generic data.
 
-## Testing in Storybook
+## Testing
 
-1. Copy generated JSON
-2. Open the rendering engine's Storybook playground
-3. Paste into input area → see rendered UI
-4. Test interactions (type in fields, upload files, select options)
-5. Iterate as needed
+1. Validate the generated JSON (see above)
+2. Deploy it as an agent artifact (see below) and open the HITL task in the web app → see rendered UI
+3. Test interactions (type in fields, upload files, select options)
+4. Iterate as needed
 
-The playground has example templates (Simple, Pie Chart, Table, Dashboard) and tabs showing the LLM instruction variants.
+If you have access to a rendering-engine playground, you can paste the JSON there for a faster preview.
 
 ## Deploying as Agent Artifact
 
@@ -90,31 +89,17 @@ The playground has example templates (Simple, Pie Chart, Table, Dashboard) and t
 
 **For Dashboards:** Pass JSON directly as `domTreeJson` — no wrapper needed.
 
-## LLM Prompt Variants
+## LLM Prompt
 
-Three prompt variants exist for generating HITL UI JSON with external LLMs:
-
-| Variant | Size | Best For |
-|---------|------|----------|
-| Base | ~8K tokens | Complex UIs, first-time generation |
-| Optimized | ~5K tokens | Simple UIs, experienced users |
-| Opus4 | ~6K tokens | Claude Opus 4 specifically |
-
-**Source files:**
-```
-TransformUIComponents/src/DynamicHITLRenderEngine/
-├── DynamicHITLRenderEngine.llm-instructions.md           # Base
-├── DynamicHITLRenderEngine.llm-instructions.optimized.md # Optimized
-└── DynamicHITLRenderEngine.llm-instructions.opus4.md     # Opus4
-```
+The `get_hitl_generation_prompt` MCP tool returns the complete rules for generating HITL UI JSON.
 
 ### Using with External LLMs
 
 **Option A: Kiro generates directly** — Just describe what you need.
 
-**Option B: External LLM** — Copy a prompt variant, paste into ChatGPT/Claude/Bedrock, add your request, copy JSON back, ask me to validate.
+**Option B: External LLM** — Call `get_hitl_generation_prompt`, paste the rules into ChatGPT/Claude/Bedrock, add your request, copy JSON back, ask me to validate.
 
-### Key Rules from the Prompts
+### Key Rules from the Prompt
 
 1. NEVER generate submit/cancel/save buttons
 2. NEVER put raw text in layout components
@@ -151,8 +136,8 @@ Use the MCP search tools to find HITL UI information:
 
 ```
 keyword_search("HITL UI JSON schema")
-search_by_source("wrapped components", "hitl-ui-quip")
-search_by_source("rendering engine", "hitl-ui-wiki")
+search_by_source("input capture supported", "hitl-render-limitations")
+search_by_source("rendering engine", "hitl-architecture")
 ```
 
-Available HITL sources for `search_by_source`: `hitl-ui-quip`, `hitl-ui-wiki`, `hitl-getting-started`, `hitl-component-library`, `hitl-common-patterns`, `hitl-validation`
+The `search_by_source` tool description lists every valid source.

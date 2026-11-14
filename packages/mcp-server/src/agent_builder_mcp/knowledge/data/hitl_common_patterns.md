@@ -624,12 +624,11 @@ You can combine multiple patterns for complex UIs:
 
 1. **Start with a pattern** - Find the closest match to your needs
 2. **Customize gradually** - Change one thing at a time
-3. **Test frequently** - Validate and test in Storybook after each change
+3. **Test frequently** - Validate the JSON after each change
 4. **Combine patterns** - Use SpaceBetween to stack multiple patterns
 5. **Keep it simple** - Don't over-complicate the UI
 
 ## Next Steps
 
-- Test patterns in the rendering engine's Storybook playground
 - Validate JSON: Ask me to validate your customized pattern
 - Learn more: See `component-library.md` for all available components
