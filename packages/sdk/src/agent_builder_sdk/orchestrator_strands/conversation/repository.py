@@ -48,6 +48,30 @@ class ConversationRepository(ABC):
         """
         pass
 
+    def fold_history_for_agent(
+        self, folded: List[Message], replacement: List[Message], agent: Agent
+    ) -> bool:
+        """
+        Replace the oldest stored messages of the agent's context with ``replacement``.
+
+        For a conversation manager that summarizes or trims: history is read from the repository
+        again at the start of each turn, so a reduction that is not stored here is lost then.
+
+        Args:
+            folded: The oldest messages of the view ``get_conversation_history_for_agent``
+                returned, which the caller reduced.
+            replacement: What takes their place at the start of the stored history, for example
+                a summary. May be empty to store a trim.
+            agent: The agent providing the conversation context
+
+        Returns:
+            True when the stored history was replaced, False when it is unchanged.
+
+        Raises:
+            NotImplementedError: The repository does not store a folded history (the default).
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not store a folded history")
+
     @abstractmethod
     def save(self) -> None:
         """Persist conversations to storage."""

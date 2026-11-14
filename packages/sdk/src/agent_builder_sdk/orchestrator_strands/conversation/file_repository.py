@@ -7,6 +7,7 @@ import logging
 import os
 import tempfile
 import threading
+import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, TypedDict, cast
 
@@ -51,6 +52,40 @@ def _interrupt_pending(agent: Agent) -> bool:
     this reports no interrupt, which repairs as it did before the guard existed.
     """
     return bool(getattr(getattr(agent, "_interrupt_state", None), "activated", False))
+
+
+def _tracking_id(message: Any) -> Optional[str]:
+    """The Strands tracking id of ``message``, or None; a stored message is any JSON value."""
+    if not isinstance(message, dict):
+        return None
+    return message.get("tracking_id") or None
+
+
+def _first_block_identity(message: Any) -> Optional[int]:
+    """The ``id`` of the first content block of ``message``, or None when it has no dict block.
+
+    The load repair completes a tool result answered in part in a copy that holds the stored
+    message's own blocks, so this finds the stored message from that copy where no id does.
+    """
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, list) and content and isinstance(content[0], dict):
+        return id(content[0])
+    return None
+
+
+# Strands releases that declare the key send only role and content to the model. An older
+# release passes every key of the message on, so the key must not be added there.
+_STRANDS_OWNS_TRACKING_ID = "tracking_id" in Message.__annotations__
+
+
+def _ensure_tracking_id(message: Any) -> None:
+    """Give ``message`` a tracking id when it has none and the Strands release owns the key.
+
+    With the id, a fold finds the stored message from a copy of it that shares no object
+    with it. Strands releases that assign the id themselves keep theirs.
+    """
+    if _STRANDS_OWNS_TRACKING_ID and isinstance(message, dict) and not message.get("tracking_id"):
+        message["tracking_id"] = str(uuid.uuid4())
 
 
 class FileMultiSourceConversationRepository(ConversationRepository):
@@ -138,6 +173,8 @@ class FileMultiSourceConversationRepository(ConversationRepository):
             if source_id not in self.conversations[source_type_str]:
                 self.conversations[source_type_str][source_id] = []
 
+            _ensure_tracking_id(message)
+
             # Convert to our custom message type
             conversation_message = ConversationMessage.from_message(message)
 
@@ -199,6 +236,81 @@ class FileMultiSourceConversationRepository(ConversationRepository):
 
             return history
 
+    def fold_history_for_agent(
+        self, folded: List[Message], replacement: List[Message], agent: Agent
+    ) -> bool:
+        """
+        Replace the oldest stored messages of the agent's source with ``replacement``.
+
+        A stored message is folded when it is one of the ``folded`` objects, when its first
+        content block is the first content block of one (the copy the load repair makes of a
+        tool result answered in part), or when it has the ``tracking_id`` of one. Messages in
+        ``folded`` that the source does not store (notifications in a user's view, placeholders
+        the load repair inserted) are ignored. On a Strands release whose ``Message`` has no
+        ``tracking_id``, stored messages get no id, so a deep copy of a message is not matched.
+
+        ``replacement`` becomes the start of the stored history, with the timestamp of the oldest
+        folded message. Every entry stored ahead of that message is removed with it, so pass in
+        ``replacement`` anything older that must stay. Entries behind it that are not folded keep
+        their order, which includes turns appended after the view was read.
+
+        The file is rewritten atomically, and a failed write restores the history in memory.
+        The NOTIFICATION source is never folded: every user's view shares its history.
+
+        Args:
+            folded: The oldest messages of a view from ``get_conversation_history_for_agent``
+            replacement: The messages to store in their place; may be empty
+            agent: The agent whose state determines the conversation
+
+        Returns:
+            True when the replacement is stored. False, with the stored history unchanged, when
+            no stored message is folded, the source is NOTIFICATION, or the write failed.
+        """
+        source_type, source_id = self._get_source_info(agent)
+        if source_type == MessageSourceType.NOTIFICATION:
+            logger.info("Folded history not stored: the notification history is never folded")
+            return False
+
+        identities = {id(message) for message in folded}
+        first_blocks = {_first_block_identity(message) for message in folded} - {None}
+        tracking_ids = {_tracking_id(message) for message in folded} - {None}
+
+        with self._lock:
+            source_dict = self.conversations[source_type.value]
+            stored = source_dict.get(source_id, [])
+            oldest: Optional[ConversationMessage] = None
+            kept: List[ConversationMessage] = []
+            for entry in stored:
+                if (
+                    id(entry.message) in identities
+                    or _first_block_identity(entry.message) in first_blocks
+                    or _tracking_id(entry.message) in tracking_ids
+                ):
+                    if oldest is None:
+                        oldest = entry
+                elif oldest is not None:
+                    kept.append(entry)
+            if oldest is None:
+                logger.info("Folded history not stored: no folded message is in the store")
+                return False
+
+            for message in replacement:
+                _ensure_tracking_id(message)
+            source_dict[source_id] = [
+                *(
+                    ConversationMessage(message=message, created_at=oldest.created_at)
+                    for message in replacement
+                ),
+                *kept,
+            ]
+            try:
+                self._save()
+            except Exception:
+                source_dict[source_id] = stored
+                logger.exception("Folded history not stored: the write failed")
+                return False
+        return True
+
     def _read_file(self, path: str) -> Dict[str, Any]:
         """Read JSON file."""
         try:
@@ -230,34 +342,38 @@ class FileMultiSourceConversationRepository(ConversationRepository):
     def save(self) -> None:
         """Save the conversations to disk."""
         try:
-            with self._lock:
-                # Create a serializable representation of the conversations
-                serializable_conversations: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
-
-                for source_type_str, source_dict in self.conversations.items():
-                    serializable_conversations[source_type_str] = {}
-
-                    for source_id, messages in source_dict.items():
-                        # Convert each ConversationMessage to a serializable format
-                        serializable_conversations[source_type_str][source_id] = [
-                            msg.to_dict() for msg in messages
-                        ]
-
-                # Save to disk
-                file_path = os.path.join(self.storage_dir, "conversations.json")
-
-                # Save with metadata
-                self._write_file(
-                    file_path,
-                    {
-                        "conversations": serializable_conversations,
-                        "saved_at": datetime.now().isoformat(),
-                    },
-                )
-
-            logger.info(f"Saved conversations to disk at {file_path}")
+            self._save()
         except Exception as e:
             logger.error(f"Failed to save conversations: {e}")
+
+    def _save(self) -> None:
+        """Write the conversations to disk; raises when they cannot be written."""
+        with self._lock:
+            # Create a serializable representation of the conversations
+            serializable_conversations: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
+
+            for source_type_str, source_dict in self.conversations.items():
+                serializable_conversations[source_type_str] = {}
+
+                for source_id, messages in source_dict.items():
+                    # Convert each ConversationMessage to a serializable format
+                    serializable_conversations[source_type_str][source_id] = [
+                        msg.to_dict() for msg in messages
+                    ]
+
+            # Save to disk
+            file_path = os.path.join(self.storage_dir, "conversations.json")
+
+            # Save with metadata
+            self._write_file(
+                file_path,
+                {
+                    "conversations": serializable_conversations,
+                    "saved_at": datetime.now().isoformat(),
+                },
+            )
+
+        logger.info(f"Saved conversations to disk at {file_path}")
 
     def load(self) -> None:
         """Load the conversations from disk."""
@@ -287,9 +403,10 @@ class FileMultiSourceConversationRepository(ConversationRepository):
                         self.conversations[source_type_str] = {}
 
                     for source_id, messages in source_dict.items():
-                        self.conversations[source_type_str][source_id] = [
-                            ConversationMessage.from_dict(msg) for msg in messages
-                        ]
+                        entries = [ConversationMessage.from_dict(msg) for msg in messages]
+                        for entry in entries:
+                            _ensure_tracking_id(entry.message)
+                        self.conversations[source_type_str][source_id] = entries
 
                 # Ensure all required source types exist
                 for source_type in MessageSourceType:
