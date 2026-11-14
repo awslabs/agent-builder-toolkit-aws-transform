@@ -10,6 +10,7 @@ import functools
 import inspect
 import logging
 import os
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import (
@@ -71,7 +72,8 @@ from agent_builder_sdk.mcp_client_factory import MCPClientFactory
 from agent_builder_sdk.memory.episodic_memory import EpisodicMemory
 from agent_builder_sdk.memory.file_memory_repository import FileSystemRepository
 from agent_builder_sdk.memory.memory_manager import MemoryManager
-from agent_builder_sdk.message_queue import QueueService
+from agent_builder_sdk.message_queue import QueueService, RequestStatus
+from agent_builder_sdk.messages.a2a_message_helper import send_message
 from agent_builder_sdk.messages.message_handler import MessageHandler
 from agent_builder_sdk.notification import (
     HitlNotifier,
@@ -106,6 +108,9 @@ _NON_RETRYABLE_ERROR_CODES = frozenset(
 
 logger = logging.getLogger(__name__)
 
+# Seconds the greeting turn may take. A reply that arrives later is not sent.
+_GREETING_TIMEOUT_SECONDS = 60
+
 
 class AgentRuntimeServer(BaseServer):
     """
@@ -137,6 +142,7 @@ class AgentRuntimeServer(BaseServer):
         notification_processors: Optional[Dict[NotificationType, NotificationProcessor]] = None,
         tracing: Optional[str] = None,
         streaming_config: Optional["StreamingConfig"] = None,
+        greeting_prompt: Optional[str] = None,
     ):
         """
         Initialize the Agent Runtime Server.
@@ -183,6 +189,14 @@ class AgentRuntimeServer(BaseServer):
                 ToolContext/invocation_state instead. (The SDK's own SuggestionsManager uses a
                 ContextVar for exactly this reason.) This constraint does NOT apply with streaming
                 off (turns are serialized).
+            greeting_prompt: Opt-in. Prompt for a greeting that the agent posts to the job's chat
+                once, right after its first initialization (agent status INVOKED, no checkpoint
+                restored). The prompt runs as a turn through the orchestrator that is not written
+                to conversation history. The reply is not sent when another turn arrives first,
+                when the turn fails or returns no text, or when it takes longer than 60 seconds.
+                Requires an async orchestrator (one with ``process_message_async``); a sync
+                orchestrator gets no greeting and a warning. None (default) or a blank string
+                sends no greeting.
         """
         self.stop_requested = False
         self.agent_factory = agent_factory
@@ -193,6 +207,8 @@ class AgentRuntimeServer(BaseServer):
         self.task_manager_factory = task_manager_factory
         self.notification_processors = notification_processors
         self.auto_transition_job_to_executing = auto_transition_job_to_executing
+        self.greeting_prompt = greeting_prompt
+        self._greeting_task: Optional[asyncio.Task] = None
 
         handlers = list(extension_handlers) if extension_handlers else []
         if not any(isinstance(h, AcknowledgmentHandler) for h in handlers):
@@ -570,6 +586,78 @@ class AgentRuntimeServer(BaseServer):
         self.agent_ready_event.set()
         logger.info("Agent initialization completed successfully.")
 
+        self._start_greeting(agent_status)
+
+    def _start_greeting(self, agent_status: str) -> None:
+        """Start the greeting task on the first boot of the agent instance.
+
+        RUNNING or IDLE means a container rotation and a restored checkpoint means the job
+        already has a conversation, so neither gets a greeting. Must run after the agent is set
+        to RUNNING: that status is what keeps the next container from greeting again.
+        """
+        prompt = self.greeting_prompt
+        if not prompt or not prompt.strip():
+            return
+        if agent_status != "INVOKED" or self.checkpoint_service.was_restored:
+            return
+        if not hasattr(self.agent, "process_message_async"):
+            logger.warning(
+                "Proactive greeting skipped: greeting_prompt requires an async orchestrator"
+            )
+            return
+        self._greeting_task = asyncio.create_task(self._send_proactive_greeting(prompt))
+
+    async def _send_proactive_greeting(self, prompt: str) -> None:
+        """Run ``prompt`` as a turn that is not stored and post the reply to the job's chat.
+
+        The turn goes through the queue, so the orchestrator writes the greeting with its own
+        system prompt. The reply is not sent when another turn arrived first, when the turn
+        failed or returned no text, or when it took longer than ``_GREETING_TIMEOUT_SECONDS``.
+        A failure is logged and not raised: the agent is already serving requests.
+        """
+        try:
+            if await self._conversation_started():
+                logger.info("Proactive greeting skipped: another turn arrived first")
+                return
+            request_id = await self.queue.submit_request(
+                message=prompt, sender="proactive_greeting", persist=False
+            )
+            response = await self.queue.wait_for_response(
+                request_id=request_id, timeout=_GREETING_TIMEOUT_SECONDS
+            )
+            if response is None or response.status != RequestStatus.COMPLETED:
+                logger.warning(
+                    "Proactive greeting not sent: the turn did not complete (status=%s)",
+                    response.status.value if response else "no reply in time",
+                )
+                return
+            if not response.message.strip():
+                logger.warning("Proactive greeting not sent: the turn returned no text")
+                return
+            if await self._conversation_started():
+                logger.info("Proactive greeting not sent: another turn arrived first")
+                return
+            await send_message(
+                message=response.message,
+                context_id=str(uuid.uuid4()),
+                target_agent_instance_id="ATX_CHAT",
+            )
+            logger.info("Proactive greeting sent to chat")
+        except Exception:
+            logger.exception("Proactive greeting failed; the agent keeps serving requests")
+
+    async def _conversation_started(self) -> bool:
+        """Whether a turn other than the greeting is queued or has started, or a streamed turn
+        (which does not use the queue) has written user history."""
+        if await self.queue.request_queue.size() > 0:
+            return True
+        if self.request_handler.persisted_turns_started > 0:
+            return True
+        repository = self._shared_conversation_repository
+        return repository is not None and any(
+            repository.conversations[MessageSourceType.USER.value].values()
+        )
+
     def _build_shared_streaming_stores(self) -> None:
         """Build the shared conversation repository + memory manager for concurrent streaming,
         EXACTLY ONCE.
@@ -924,6 +1012,13 @@ class AgentRuntimeServer(BaseServer):
                     await self._initialization_task
                 except asyncio.CancelledError:
                     logger.info("Background initialization stopped")
+
+            if self._greeting_task and not self._greeting_task.done():
+                self._greeting_task.cancel()
+                try:
+                    await self._greeting_task
+                except asyncio.CancelledError:
+                    logger.info("Proactive greeting cancelled")
 
             # 3. Stop queue service
             if self.queue:
