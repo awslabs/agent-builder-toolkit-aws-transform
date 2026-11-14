@@ -7,6 +7,7 @@ Tests the StatelessAgentRuntimeServer class which provides compatibility with mu
 agent execution environments through JSON-RPC endpoints.
 """
 
+import asyncio
 from typing import Iterator
 from unittest import mock
 
@@ -838,3 +839,47 @@ async def test_finalize_twice_starts_one_heartbeat(
 
     mock_heartbeat_service.assert_called_once()
     mock_heartbeat_service.return_value.start.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_setup_that_ends_after_stop_starts_no_heartbeat(
+    stateless_agent_runtime_server: StatelessAgentRuntimeServer,
+    mock_heartbeat_service: mock.MagicMock,
+) -> None:
+    """A stop request during the INVOKING wait leaves no heartbeat behind when setup ends."""
+    from agent_builder_sdk.server.server_models import AgentRuntimeContext
+
+    server = stateless_agent_runtime_server
+    server.context = AgentRuntimeContext(
+        workspace_id="test-workspace", job_id="test-job", agent_instance_id="test-agent"
+    )
+    invoking_ended = asyncio.Event()
+
+    async def wait_for_invoking_to_end(*args: str) -> str:
+        await invoking_ended.wait()
+        return "RUNNING"
+
+    with mock.patch.multiple(
+        "agent_builder_sdk.server.stateless_agent_runtime_server",
+        wait_for_agent_non_invoking=wait_for_invoking_to_end,
+        build_agentic_api_endpoint_from_env=mock.DEFAULT,
+        MCPClientFactory=mock.DEFAULT,
+        get_agentic_api_client=mock.DEFAULT,
+        JobManager=mock.DEFAULT,
+    ):
+        setup = asyncio.create_task(server._wait_for_non_invoking_and_initialize())
+        await asyncio.sleep(0)
+        result = await server.handle_jsonrpc(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "atx_agent/stop",
+                "params": {"agentInstanceId": "test-agent"},
+            }
+        )
+        invoking_ended.set()
+        await setup
+
+    assert result["error"] is None
+    assert server.initialized is True
+    mock_heartbeat_service.return_value.start.assert_not_awaited()

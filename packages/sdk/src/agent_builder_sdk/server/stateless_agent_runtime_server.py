@@ -99,6 +99,7 @@ class StatelessAgentRuntimeServer(BaseServer):
 
         # Create FastAPI app with lifespan
         self.heartbeat_service: Optional[HeartbeatService] = None
+        self._cleanup_started = False
         self.app = FastAPI(
             title="ATX AgentCore Compatible Stateless Agent Server", lifespan=self._lifespan
         )
@@ -233,7 +234,9 @@ class StatelessAgentRuntimeServer(BaseServer):
 
             # Start heartbeat service (opt-in based on agent's MonitoringType).
             # Setup can run twice here (INVOKING poller + a later request); start one loop only.
-            if self.heartbeat_service is None:
+            # Setup can also end after _cleanup ran (a stop request during the INVOKING wait);
+            # a heartbeat started then would run until the server shuts down.
+            if self.heartbeat_service is None and not self._cleanup_started:
                 self.heartbeat_service = HeartbeatService(self.context)
                 await self.heartbeat_service.start()
             self.initialized = True
@@ -261,6 +264,7 @@ class StatelessAgentRuntimeServer(BaseServer):
 
     async def _cleanup(self) -> None:
         """Stop the heartbeat. Runs on a stop request and on server shutdown."""
+        self._cleanup_started = True
         if self.heartbeat_service:
             await self.heartbeat_service.stop()
 

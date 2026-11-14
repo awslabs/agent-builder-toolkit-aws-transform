@@ -291,6 +291,7 @@ class AgentRuntimeServer(BaseServer):
         # Create notification handler with queue access
         self.notification_handler = NotificationHandler(queue=self.queue)
         self.heartbeat_service: Optional[HeartbeatService] = None
+        self._cleanup_started = False
 
         # Register default processors
         self.notification_handler.register_processor(
@@ -564,9 +565,12 @@ class AgentRuntimeServer(BaseServer):
             )
             job_manager.transition_to_executing_if_assessing()
 
-        # Start heartbeat service (opt-in based on agent's MonitoringType)
-        self.heartbeat_service = HeartbeatService(self.context)
-        await self.heartbeat_service.start()
+        # Start heartbeat service (opt-in based on agent's MonitoringType). Setup can run again
+        # after _cleanup (a stop request cancels a background setup and the next request re-runs
+        # it); a heartbeat started then would run until the server shuts down.
+        if not self._cleanup_started:
+            self.heartbeat_service = HeartbeatService(self.context)
+            await self.heartbeat_service.start()
 
         self.initialized = True
         self.agent_ready_event.set()
@@ -907,6 +911,7 @@ class AgentRuntimeServer(BaseServer):
         default path it's None and the step is skipped entirely.)
         """
         logger.info("Starting graceful shutdown...")
+        self._cleanup_started = True
 
         try:
             # 1. Cancel message processor task

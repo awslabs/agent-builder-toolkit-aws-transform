@@ -10,7 +10,7 @@ agent execution environments through JSON-RPC endpoints.
 import asyncio
 import logging
 from multiprocessing import Event as MPEvent
-from typing import Iterator
+from typing import Any, Dict, Iterator
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec, patch
 
@@ -1189,6 +1189,50 @@ class TestAgentRuntimeServer:
             await agent_runtime_server._cleanup()
 
         agent_runtime_server.heartbeat_service.stop.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_setup_run_again_after_stop_starts_no_heartbeat(
+        self, agent_runtime_server: AgentRuntimeServer, mock_heartbeat_service: MagicMock
+    ) -> None:
+        """A stop request cancels a background setup; the setup the next request runs starts
+        no heartbeat. Requests go through the route function, so the order is one it allows."""
+        server = agent_runtime_server
+        invocations = next(r.endpoint for r in server.app.routes if r.path == "/invocations")
+        setup_waits = asyncio.Event()
+
+        async def hold_setup(*args: str) -> None:
+            setup_waits.set()
+            await asyncio.Event().wait()
+
+        def rpc(method: str) -> Dict[str, Any]:
+            params = {
+                "jobMetadata": {"workspaceId": "test-workspace", "jobId": "test-job"},
+                "agentInstanceId": "test-agent",
+            }
+            return {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
+
+        with mock.patch.multiple(
+            "agent_builder_sdk.server.agent_runtime_server",
+            get_agent_status=mock.Mock(side_effect=["INVOKING", "STOPPED"]),
+            wait_for_agent_non_invoking=hold_setup,
+            set_runtime_env_vars=mock.DEFAULT,
+            build_agentic_api_endpoint_from_env=mock.DEFAULT,
+            MCPClientFactory=mock.DEFAULT,
+            get_agentic_api_client=mock.DEFAULT,
+            JobManager=mock.DEFAULT,
+            get_subagent_instances=mock.DEFAULT,
+            shutdown_base_orchestrator_agent_instance=mock.DEFAULT,
+        ):
+            await invocations(rpc("atx_agent/healthcheck"))
+            await setup_waits.wait()
+            stop = await invocations(rpc("atx_agent/stop"))
+            initialized_after_stop = server.initialized
+            await invocations(rpc("atx_agent/healthcheck"))
+
+        assert stop["error"] is None
+        assert initialized_after_stop is False
+        assert server.initialized is True
+        mock_heartbeat_service.return_value.start.assert_not_awaited()
 
     def test_setup_routes_creates_endpoints(self, agent_runtime_server):
         """Test that setup_routes creates the expected endpoints."""
