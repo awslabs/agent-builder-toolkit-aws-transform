@@ -1182,7 +1182,7 @@ class TestWriteContentToFile:
             assert os.path.exists(os.path.dirname(file_path))
 
 
-def test_get_platform_skills_contract_prompt_ships():
+def test_get_platform_skills_contract_prompt_ships() -> None:
     # Reads the real prompt file (no mock) through importlib.resources.
     contract = get_platform_skills_contract_prompt()
     assert "Orient, then plan" in contract

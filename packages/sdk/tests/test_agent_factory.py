@@ -11,7 +11,7 @@ from typing import Optional
 from unittest import mock
 
 import pytest
-from strands import Agent
+from strands import Agent, tool
 from strands.vended_plugins.skills import AgentSkills, Skill
 
 from agent_builder_sdk.agent_factory import (
@@ -963,7 +963,7 @@ class TestPlatformKnowledge:
     @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
     @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
     @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
-    def test_platform_skills_on_loads_skills_and_appends_contract(self, *mocks):
+    def test_platform_skills_on_loads_skills_and_appends_contract(self, *mocks: mock.Mock) -> None:
         mock_orchestrator = mocks[-1]
         mock_orchestrator.return_value = mock.Mock()
 
@@ -991,7 +991,7 @@ class TestPlatformKnowledge:
     @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
     @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
     @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
-    def test_platform_skills_off_leaves_prompt_and_plugins_untouched(self, *mocks):
+    def test_platform_skills_off_leaves_prompt_and_plugins_untouched(self, *mocks: mock.Mock) -> None:
         mock_orchestrator = mocks[-1]
         mock_orchestrator.return_value = mock.Mock()
 
@@ -1036,13 +1036,22 @@ class TestPlatformKnowledge:
         ("mcp_client", "excluded", "reason"),
         [
             (None, None, "no mcp_client was given"),
-            (mock.Mock(), ["get_job", "start_hitl_task"], "removes ['start_hitl_task']"),
+            (
+                mock.Mock(),
+                {"list_artifacts", "start_hitl_task"},
+                "no ['start_hitl_task']: excluded_mcp_tool_names removes them",
+            ),
+            (
+                mock.Mock(),
+                {"get_job", "close_hitl_task", "get_artifact_metadata"},
+                "no ['close_hitl_task', 'get_artifact_metadata', 'get_job']: excluded_mcp_tool_names",
+            ),
         ],
     )
     def test_platform_skills_without_the_contract_tools_logs_a_warning(
         self,
         mcp_client: Optional[mock.Mock],
-        excluded: Optional[list[str]],
+        excluded: Optional[set[str]],
         reason: str,
         tmp_path: Path,
         caplog: pytest.LogCaptureFixture,
@@ -1075,17 +1084,49 @@ class TestPlatformKnowledge:
                 system_prompt="task prompt",
                 mcp_client=mock.Mock(),
                 storage_dir=str(tmp_path),
-                excluded_mcp_tool_names={"get_job"},
+                excluded_mcp_tool_names={"list_artifacts"},
                 enable_platform_skills=True,
             )
 
         assert [r for r in caplog.records if r.name == "agent_builder_sdk.agent_factory"] == []
 
+    def test_contract_tools_given_as_custom_tools_are_not_reported_missing(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        @tool
+        def get_job() -> str:
+            """Return the job."""
+            return "job"
+
+        with mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator"), caplog.at_level(
+            logging.WARNING, logger="agent_builder_sdk.agent_factory"
+        ):
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt",
+                mcp_client=mock.Mock(),
+                storage_dir=str(tmp_path),
+                custom_tools=[get_job],
+                excluded_mcp_tool_names={"get_job"},
+                enable_platform_skills=True,
+            )
+            assert [r for r in caplog.records if r.name == "agent_builder_sdk.agent_factory"] == []
+
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt",
+                storage_dir=str(tmp_path),
+                custom_tools=[get_job],
+                enable_platform_skills=True,
+            )
+
+        (warning,) = [r for r in caplog.records if r.name == "agent_builder_sdk.agent_factory"]
+        assert "'get_job'" not in warning.getMessage()
+        assert "'put_job_plan'" in warning.getMessage()
+
     def test_contract_tool_names_are_taught_by_the_packaged_skills(self) -> None:
         taught = "".join(p.read_text(encoding="utf-8") for p in _PLATFORM_SKILLS_DIR.rglob("*.md"))
         assert [name for name in sorted(_PLATFORM_CONTRACT_TOOL_NAMES) if name not in taught] == []
 
-    def test_packaged_platform_skills_load_strictly(self):
+    def test_packaged_platform_skills_load_strictly(self) -> None:
         names = {Skill.from_file(p, strict=True).name for p in _PLATFORM_SKILLS_DIR.glob("*/SKILL.md")}
         assert names == {
             "artifact-io",
@@ -1098,11 +1139,11 @@ class TestPlatformKnowledge:
             "user-chat",
         }
 
-    def test_read_platform_skill_file_reads_a_reference(self):
+    def test_read_platform_skill_file_reads_a_reference(self) -> None:
         text = read_platform_skill_file(skill_name="hitl-loop", path="references/recovery.md")
         assert text.startswith("# HITL Recovery")
 
-    def test_read_platform_skill_file_stays_inside_platform_skills(self):
+    def test_read_platform_skill_file_stays_inside_platform_skills(self) -> None:
         for skill_name, path in [
             ("hitl-loop", "../../agent_factory.py"),
             ("..", "agent_factory.py"),
@@ -1112,7 +1153,9 @@ class TestPlatformKnowledge:
         ]:
             assert read_platform_skill_file(skill_name=skill_name, path=path).startswith("Error:")
 
-    def test_read_platform_skill_file_rejects_symlink_escape_and_oversize(self, tmp_path, monkeypatch):
+    def test_read_platform_skill_file_rejects_symlink_escape_and_oversize(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         skill_dir = tmp_path / "skills" / "demo"
         skill_dir.mkdir(parents=True)
         (tmp_path / "outside.md").write_text("outside")

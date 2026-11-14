@@ -54,16 +54,26 @@ logger = logging.getLogger(__name__)
 
 _PLATFORM_SKILLS_DIR = Path(__file__).parent / "platform_skills"
 _MAX_PLATFORM_SKILL_FILE_BYTES = 64 * 1024
-# The MCP tools that the platform contract tells the model to call on every job.
+# The MCP tools that the platform contract's rules need on every job: orient (rule 1), plan,
+# status and worklogs (rules 2, 3, 7, 9), the approval round trip (rule 4) and a verified
+# customer deliverable (rule 6).
 _PLATFORM_CONTRACT_TOOL_NAMES = frozenset(
     {
-        "put_job_plan",
+        "get_job",
         "list_job_plan_steps",
+        "list_worklogs",
+        "put_job_plan",
         "update_job_plan_step",
         "update_job_status",
         "create_worklog",
         "create_hitl_task",
         "start_hitl_task",
+        "get_hitl_task",
+        "close_hitl_task",
+        "create_artifact_upload_url",
+        "upload_artifact",
+        "complete_artifact_upload",
+        "get_artifact_metadata",
     }
 )
 
@@ -216,17 +226,22 @@ def _create_default_orchestrator(
     # mutations, artifacts as the durable sink) whatever its task prompt says, so it is appended
     # rather than left to the caller's system_prompt.
     if enable_platform_skills:
-        excluded = sorted(_PLATFORM_CONTRACT_TOOL_NAMES.intersection(excluded_mcp_tool_names or ()))
-        if mcp_client is None or excluded:
+        not_from_mcp = (
+            _PLATFORM_CONTRACT_TOOL_NAMES
+            if mcp_client is None
+            else _PLATFORM_CONTRACT_TOOL_NAMES.intersection(excluded_mcp_tool_names or ())
+        )
+        missing = sorted(not_from_mcp - {getattr(t, "tool_name", None) for t in custom_tools})
+        if missing:
             reason = (
                 "no mcp_client was given"
                 if mcp_client is None
-                else f"excluded_mcp_tool_names removes {excluded}"
+                else "excluded_mcp_tool_names removes them"
             )
             logger.warning(
-                "enable_platform_skills appends a contract that tells the model to call the "
-                f"job plan, job status, worklog and HITL tools, but {reason}. Unless custom_tools "
-                "provide them, the model is told to call tools that this agent does not have."
+                "enable_platform_skills appends a contract that tells the model the job plan, "
+                "job status, worklog, HITL and artifact tools are always available, but this "
+                f"agent has no {missing}: {reason} and custom_tools do not provide them."
             )
         contract_prompt = get_platform_skills_contract_prompt()
         if contract_prompt:
@@ -492,9 +507,11 @@ def create_default_async_orchestrator_with_subagent(
             AWS Transform job; off by default.
             USE WITH CAUTION: this also rewrites the system prompt (the contract is appended to
             whatever system_prompt you pass). The contract tells the model that the job plan,
-            job status, worklog and HITL tools are available, so pass an mcp_client that serves
-            them. With no mcp_client, or with one of those tools in excluded_mcp_tool_names, the
-            contract is still appended and a warning is logged.
+            job status, worklog, HITL and artifact tools are available, so pass an mcp_client
+            that serves them. A warning is logged, and the contract is still appended, when a
+            tool that the contract's rules need is in excluded_mcp_tool_names or no mcp_client
+            is given, unless a tool of the same name is in custom_tools. The tools that the
+            mcp_client itself serves are not checked.
             With enable_skills also set, a skill in skills_dir replaces the packaged skill of
             the same name.
 
