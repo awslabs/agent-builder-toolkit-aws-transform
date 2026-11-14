@@ -92,11 +92,18 @@ class TestRules:
     def test_line_number_counts_from_one(self, check_public_refs: ModuleType) -> None:
         assert list(check_public_refs.find_refs(f"{EMAIL}\n\n{EMAIL}\n")) == [(1, "email", EMAIL), (3, "email", EMAIL)]
 
-    @pytest.mark.parametrize("unit", ["a", "a\\"])
-    def test_long_run_of_host_characters_scans_in_linear_time(self, check_public_refs: ModuleType, unit: str) -> None:
+    def test_escaped_dots_keep_the_line_number_and_show_as_plain_dots(self, check_public_refs: ModuleType) -> None:
+        escaped = EMAIL.replace(".", "\\\\.")
+
+        assert list(check_public_refs.find_refs(f"a\\.b\n{escaped}\n")) == [(2, "email", EMAIL)]
+
+    @pytest.mark.parametrize(("unit", "count"), [("a", 30_000), ("\\", 200_000)])
+    def test_long_run_of_one_character_scans_in_linear_time(
+        self, check_public_refs: ModuleType, unit: str, count: int
+    ) -> None:
         # A pattern that retries from every character of the run needs tens of seconds for this input.
         start = time.process_time()
-        assert list(check_public_refs.find_refs(unit * 30_000 + "%" * 30_000)) == []
+        assert list(check_public_refs.find_refs(unit * count + "%" * 30_000)) == []
         assert time.process_time() - start < 2
 
 

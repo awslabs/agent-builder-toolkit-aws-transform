@@ -28,22 +28,22 @@ class Rule(NamedTuple):
     allowed: Optional[re.Pattern[str]] = None
 
 
-# The host and email patterns start with a lookbehind for the characters they
-# then repeat, so a match can start only at the start of a run of them. That
+# The host, email and escaped-dot patterns start with a lookbehind for the
+# characters they then repeat, so a match cannot start inside a run of them. That
 # keeps the scan linear on files with very long runs (minified or encoded data).
 RULES = (
     # Hosts under amazon.com, amazon.dev, aws.dev, a2z.com and a2z.org, except the public
     # aws.amazon.com sites and the product API endpoints. "}" and ">" catch a host whose
-    # leading label is a template placeholder. The backslashes catch a host whose dots are
-    # escaped, as in a regular expression or an escaped string.
+    # leading label is a template placeholder. A backslash ends a host, so an escape sequence
+    # such as "\n" cannot join a flagged host to an allowed one that would hide it.
     Rule(
         "host",
         re.compile(
-            r"(?<![a-z0-9.\\-])[a-z0-9.\\-]*[a-z0-9}>]\\*"
-            r"(?:[.-]amazon\\*\.(?:com|dev)|\.aws\\*\.dev|\.a2z\\*\.(?:com|org))",
+            r"(?<![a-z0-9.-])[a-z0-9.-]*[a-z0-9}>]"
+            r"(?:[.-]amazon\.(?:com|dev)|\.aws\.dev|\.a2z\.(?:com|org))",
             re.IGNORECASE,
         ),
-        re.compile(r"(?:^|\.)(?:aws\\*\.amazon\\*\.com|elastic-gumby\\*\.ai\\*\.aws\\*\.dev)$", re.IGNORECASE),
+        re.compile(r"(?:^|\.)(?:aws\.amazon\.com|elastic-gumby\.ai\.aws\.dev)$", re.IGNORECASE),
     ),
     # Addresses at amazon.com and amazon.dev, except the public code-of-conduct contact.
     Rule(
@@ -51,7 +51,8 @@ RULES = (
         re.compile(r"(?<![a-z0-9._%+-])[a-z0-9._%+-]+@amazon\.(?:com|dev)", re.IGNORECASE),
         re.compile(r"^opensource-codeofconduct@amazon\.com$", re.IGNORECASE),
     ),
-    Rule("chat link", re.compile(r"slack\.com/archives", re.IGNORECASE)),
+    # "[.]" and not an escaped dot, so that this file passes its own check.
+    Rule("chat link", re.compile(r"slack[.]com/archives", re.IGNORECASE)),
     # Long-term (AKIA) and temporary (ASIA) key IDs, except the documented ...EXAMPLE placeholders.
     Rule("access key", re.compile(r"(?:AKIA|ASIA)[0-9A-Z]{16}"), re.compile(r"EXAMPLE$")),
 )
@@ -70,8 +71,10 @@ FLAGGED_SAMPLES = tuple(
         "made-up.a2|z.org",
         r"made-up\.ama|zon\.com",
         r"made-up\\.aw|s\\.dev",
+        r"made-up.ama|zon.com\ndocs.aws.ama|zon.com",
         "first.last@ama|zon.com",
         "first.last+tag@ama|zon.dev",
+        r"first\.last@ama|zon\.com",
         "sla|ck.com/archives/C0000000000",
         "AKI|A0123456789ABCDEF",
         "ASI|A0123456789ABCDEF",
@@ -101,7 +104,12 @@ ALLOWED_SAMPLES = (
 
 
 def find_refs(text: str) -> Iterator[tuple[int, str, str]]:
-    """Yield (1-based line number, rule name, matched text) for each match in `text` that its rule does not allow."""
+    """Yield (1-based line number, rule name, matched text) for each match in `text` that its rule does not allow.
+
+    A dot with backslashes before it, as in a regular expression or an escaped string, is read
+    as a plain dot. The matched text shows the plain dot.
+    """
+    text = re.sub(r"(?<!\\)\\+\.", ".", text)
     for rule in RULES:
         for match in rule.pattern.finditer(text):
             if not (rule.allowed and rule.allowed.search(match[0])):
