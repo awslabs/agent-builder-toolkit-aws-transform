@@ -513,6 +513,12 @@ def create_default_async_orchestrator_with_subagent(
             tool that the contract's rules need is in excluded_mcp_tool_names or no mcp_client
             is given, unless a tool of the same name is in custom_tools. The tools that the
             mcp_client itself serves are not checked.
+            The mcp_client is not enough for uploads: the artifact tools take the path of a
+            local file and the base64 SHA-256 digest of its bytes, and no tool of this agent
+            writes a file or computes a digest. The contract makes an upload mandatory for
+            each result the user receives and for each approval summary, so also set
+            enable_code_execution=True (not sandboxed) or pass a tool in custom_tools that
+            does both. This is not checked and gives no warning.
             With enable_skills also set, a skill in skills_dir replaces the packaged skill of
             the same name. read_platform_skill_file never reads skills_dir: for a replaced
             skill it still returns the packaged skill's reference files, so put the reference

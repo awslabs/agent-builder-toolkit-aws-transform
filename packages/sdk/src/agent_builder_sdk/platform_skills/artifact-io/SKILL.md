@@ -47,6 +47,10 @@ followed by a copy when you already know the file is for the user.
 
 ## Upload: four calls, none optional
 
+Steps 1 and 3 work on a local file, so they need a tool that can write the file and compute its
+digest (a code-execution tool, or one your builder added). If you have no such tool, do not guess
+a digest or a path: make no upload call, and say plainly that the result could not be uploaded.
+
 ```
 1. digest = python3 -c "import hashlib,base64,sys; \
      print(base64.b64encode(hashlib.sha256(open(sys.argv[1],'rb').read()).digest()).decode())" <file>

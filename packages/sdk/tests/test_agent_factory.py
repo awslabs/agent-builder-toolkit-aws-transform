@@ -4,6 +4,7 @@
 Unit tests for agent factory functions.
 """
 
+import json
 import logging
 import os
 from pathlib import Path
@@ -906,6 +907,42 @@ class TestOrchestratorOptions:
         )
         assert mock_orchestrator.call_args.kwargs["enable_prompt_caching"] is True
 
+    @pytest.mark.parametrize(
+        ("skills_dir", "env_dir", "source"),
+        [
+            ("/team/skills", "/env/skills", "/team/skills"),
+            (None, "/env/skills", "/env/skills"),
+            (None, None, "./skills"),
+        ],
+    )
+    def test_enable_skills_alone_reads_skills_dir_then_the_env_variable_then_the_default(
+        self,
+        skills_dir: Optional[str],
+        env_dir: Optional[str],
+        source: str,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        if env_dir is None:
+            monkeypatch.delenv("STRANDS_SKILLS_DIR", raising=False)
+        else:
+            monkeypatch.setenv("STRANDS_SKILLS_DIR", env_dir)
+
+        with mock.patch(
+            "agent_builder_sdk.agent_factory.AsyncBaseOrchestrator"
+        ) as mock_orchestrator, mock.patch(
+            "strands.vended_plugins.skills.AgentSkills"
+        ) as mock_skills:
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt",
+                storage_dir=str(tmp_path),
+                enable_skills=True,
+                skills_dir=skills_dir,
+            )
+
+        mock_skills.assert_called_once_with(skills=[source])
+        assert mock_orchestrator.call_args.kwargs["plugins"] == [mock_skills.return_value]
+
 
 # The released (1.1.0) positional order of each orchestrator factory. New parameters go after these, so a
 # caller passing arguments by position keeps binding them to the same names.
@@ -1130,6 +1167,19 @@ class TestPlatformKnowledge:
     def test_contract_tool_names_are_taught_by_the_packaged_skills(self) -> None:
         taught = "".join(p.read_text(encoding="utf-8") for p in _PLATFORM_SKILLS_DIR.rglob("*.md"))
         assert [name for name in sorted(_PLATFORM_CONTRACT_TOOL_NAMES) if name not in taught] == []
+
+    def test_job_plan_skill_teaches_the_status_info_shape_of_the_service_model(self) -> None:
+        import agent_builder_sdk
+
+        model_path = Path(agent_builder_sdk.__file__).parent.joinpath(
+            "botocore_models", "transformagenticservice", "2018-05-10", "service-2.json"
+        )
+        shapes = json.loads(model_path.read_text(encoding="utf-8"))["shapes"]
+        taught = (_PLATFORM_SKILLS_DIR / "job-plan" / "SKILL.md").read_text(encoding="utf-8")
+
+        needed = [f'"{m}"' for m in shapes["StatusInfo"]["members"]]
+        needed += [f'"{c}"' for c in shapes["FailureCategory"]["enum"]]
+        assert [text for text in needed if text not in taught] == []
 
     def test_packaged_platform_skills_load_strictly(self) -> None:
         names = {Skill.from_file(p, strict=True).name for p in _PLATFORM_SKILLS_DIR.glob("*/SKILL.md")}

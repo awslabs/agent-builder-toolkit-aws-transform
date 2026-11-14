@@ -31,9 +31,9 @@ nothing happened. So every unit of work leaves a trace in the platform, not just
    `list_worklogs` before acting. Then create the plan — every later call needs a step id.
 2. **Set the status to `PLANNING` as your first write**, then `PLANNED` once the user approves,
    `EXECUTING` during the work, `COMPLETED` when the objective is met, or `FAILED` with
-   `status_info`. If the runtime already moved the job to `EXECUTING` before your first turn, stay
-   there: gate the plan with a HITL approval instead of `PLANNED`, and never move the status
-   backwards. Never set `CREATED`, `STARTING`, or `ASSESSING`: they describe the job before you
+   `status_info` (shape in `job-plan`). If the runtime already moved the job to `EXECUTING`
+   before your first turn, stay there: gate the plan with a HITL approval instead of `PLANNED`,
+   and never move the status backwards. Never set `CREATED`, `STARTING`, or `ASSESSING`: they describe the job before you
    were running, and setting one tells the product you have not started, which takes the chat
    away from the user. `AWAITING_HUMAN_INPUT`, `STOPPING`, and `STOPPED` are the platform's —
    read them and respond.

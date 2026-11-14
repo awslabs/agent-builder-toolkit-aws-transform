@@ -77,13 +77,15 @@ Each step gets exactly one forward path, and each transition is paired with a wo
 user sees progress:
 
 ```
-begin a step   -> update_job_plan_step(plan_step={"stepId": <step id>, "status": "IN_PROGRESS",
-                                                  "startTime": <now>})
+begin a step   -> update_job_plan_step(plan_step={"stepId": <step id>, "status": "IN_PROGRESS"})
                   + create_worklog(plan_step_id=<step id>, description="what you're starting")
 finish a step  -> create_worklog(plan_step_id=<step id>, description="what you found/did")
-                  + update_job_plan_step(plan_step={"stepId": <step id>, "status": "SUCCEEDED",
-                                                    "endTime": <now>})      # or "FAILED"
+                  + update_job_plan_step(plan_step={"stepId": <step id>,
+                                                    "status": "SUCCEEDED"})   # or "FAILED"
 ```
+
+- `startTime` and `endTime` (unix epoch seconds) are optional. Pass one only when a tool gave you
+  the current time; otherwise omit it. Never invent a time.
 
 - `NOT_STARTED` is the platform's initial value — don't set it. `SUCCEEDED` and `FAILED` are
   terminal: stop writing to that step afterward.
@@ -114,6 +116,16 @@ the step or job back.
 (only after the user approves) → `EXECUTING` (working) → `COMPLETED`, or `FAILED` with
 `status_info`. If the runtime already moved the job to `EXECUTING` before your first turn, stay
 there and get the plan approved through a HITL approval task instead of `PLANNED`.
+
+With `FAILED`, pass `status_info` in exactly this shape — any other key, or a plain string, is
+rejected:
+
+```
+update_job_status(status="FAILED", status_info={
+    "status": "FAILED",                    # required: repeat the status
+    "failureCategory": "CUSTOMER_ERROR",   # or "SERVICE_ERROR" | "EXPECTED_FAILURE"
+    "failureType": "<short reason>"})      # optional, like failureCategory
+```
 
 `CREATED`, `STARTING`, and `ASSESSING` describe the job *before* you are running. The platform
 owns them and you never set one: the product reads them as "the agent hasn't started" and takes
