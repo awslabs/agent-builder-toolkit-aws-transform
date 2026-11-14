@@ -13,11 +13,13 @@ from strands.agent import AgentResult
 from strands.hooks import (
     AfterModelCallEvent,
     BeforeInvocationEvent,
+    BeforeModelCallEvent,
     HookOrder,
     HookProvider,
     HookRegistry,
 )
 from strands.models import Model
+from strands.types.content import Message
 from strands.types.exceptions import ContextWindowOverflowException
 
 from agent_builder_sdk.custom_types.common_types import (
@@ -275,32 +277,45 @@ _BLANK_TEXT_SENTINEL = "[blank text]"
 
 
 class _StripReplayedThinking(HookProvider):
-    """Drop reasoning blocks from the history an invocation starts with.
+    """Drop reasoning blocks from history before they are replayed behind a changed prefix.
 
     Claude 5.5 models bind each thinking block to the system prompt, the tools and every
     message before it; where that check is enforced, a replayed block whose prefix changed is
     rejected with HTTP 400. The SDK reorders history (notifications are merged into user
     conversations) and trims it (sliding window), so earlier turns' thinking can't be replayed
-    safely. Thinking produced during the invocation stays in place for its own tool loop,
-    unless the context window overflows: Strands then trims or truncates history and retries.
+    safely. The strip runs at three points:
+
+    - every invocation start;
+    - before a model call, when a message that an earlier model call saw is gone or replaced
+      (a per-turn trim or proactive compression by the conversation manager);
+    - after a context-window overflow, before Strands trims or truncates history and retries.
+
+    Thinking produced during an invocation otherwise stays in place for its own tool loop.
 
     A Bedrock model set to manual extended thinking (``thinking`` of type ``enabled`` in
-    ``additional_request_fields``) keeps that thinking through the overflow retry: the mode
-    requires the tool call in progress to start with its thinking block, and the models that
-    accept it (Claude 4.6 and earlier) do not bind thinking to the prefix. This follows the
-    published API rules and was not checked against a live model. A thinking setting in another
-    provider's config is not read, so that retry is stripped.
+    ``additional_request_fields``) is never stripped: the mode requires the tool call in
+    progress to start with its thinking block, also when the invocation resumes that call after
+    an interrupt, and the models that accept it (Claude 4.6 and earlier) do not bind thinking to
+    the prefix. This follows the published API rules and was not checked against a live model.
+    A thinking setting in another provider's config is not read, so that model is stripped.
     """
 
+    def __init__(self) -> None:
+        self._seen: list[Message] = []
+
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
-        # SDK_LAST: run after hooks that swap in the history, such as ConversationHookProvider.
+        # SDK_LAST: run after hooks that swap in or trim the history, such as
+        # ConversationHookProvider and the conversation manager.
         registry.add_callback(BeforeInvocationEvent, self._strip, order=HookOrder.SDK_LAST)
+        registry.add_callback(
+            BeforeModelCallEvent, self._strip_after_history_change, order=HookOrder.SDK_LAST
+        )
         registry.add_callback(AfterModelCallEvent, self._strip_before_overflow_retry)
 
     @staticmethod
-    def _strip(event: BeforeInvocationEvent | AfterModelCallEvent) -> None:
-        # Unconditional: nothing here tells an append-only history from one that the notification
-        # merge or the trimming changed, so reasoning that would still replay safely goes too.
+    def _strip(event: BeforeInvocationEvent | BeforeModelCallEvent | AfterModelCallEvent) -> None:
+        if _uses_manual_thinking(event.agent.model):
+            return
         messages = event.agent.messages
         for i, message in enumerate(messages):
             content = [block for block in message["content"] if "reasoningContent" not in block]
@@ -311,10 +326,18 @@ class _StripReplayedThinking(HookProvider):
                 # placeholder for empty assistant content; Bedrock rejects empty messages.
                 messages[i] = {**message, "content": content or [{"text": _BLANK_TEXT_SENTINEL}]}
 
+    def _strip_after_history_change(self, event: BeforeModelCallEvent) -> None:
+        # Compared by identity: a summary that replaces another summary leaves the message count
+        # and the conversation manager's removed_message_count as they were. Invocation start
+        # strips without this check: a restored session has no earlier call to compare with.
+        messages = event.agent.messages
+        if any(seen is not message for seen, message in zip(self._seen, messages)):
+            self._strip(event)
+        self._seen = list(messages)
+
     @classmethod
     def _strip_before_overflow_retry(cls, event: AfterModelCallEvent) -> None:
-        overflowed = isinstance(event.exception, ContextWindowOverflowException)
-        if overflowed and not _uses_manual_thinking(event.agent.model):
+        if isinstance(event.exception, ContextWindowOverflowException):
             cls._strip(event)
 
 

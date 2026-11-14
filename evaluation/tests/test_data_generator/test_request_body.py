@@ -4,6 +4,7 @@
 
 import io
 import json
+import logging
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -19,12 +20,13 @@ MODEL_ID = "us.anthropic.claude-opus-5-5"
 
 
 def _sent_body(
-    obj: Any, content: Sequence[dict[str, str]] = ({"type": "text", "text": "ok"},)
+    obj: Any,
+    content: Sequence[dict[str, str]] = ({"type": "text", "text": "ok"},),
+    stop_reason: str = "end_turn",
 ) -> dict[str, Any]:
     obj.bedrock = MagicMock()
-    obj.bedrock.invoke_model.return_value = {
-        "body": io.BytesIO(json.dumps({"content": list(content)}).encode())
-    }
+    response = {"content": list(content), "stop_reason": stop_reason}
+    obj.bedrock.invoke_model.return_value = {"body": io.BytesIO(json.dumps(response).encode())}
     assert obj._call_bedrock("prompt") == "ok"
     return json.loads(obj.bedrock.invoke_model.call_args.kwargs["body"])
 
@@ -72,3 +74,19 @@ def test_response_text_skips_leading_thinking_block(cls: type) -> None:
         {"type": "thinking", "thinking": "reasoning", "signature": "sig"},
         {"type": "text", "text": "ok"},
     ))
+
+
+@pytest.mark.parametrize("cls", [IntelligentTestGenerator, DomainAnalyzer])
+@pytest.mark.parametrize(
+    ("stop_reason", "warned"), [("max_tokens", True), ("refusal", True), ("end_turn", False)]
+)
+def test_warns_only_when_the_response_stopped_early(
+    cls: type, stop_reason: str, warned: bool, caplog: pytest.LogCaptureFixture
+) -> None:
+    with patch("boto3.client"):
+        obj = cls(region_name="us-west-2", model_id=MODEL_ID)
+    with caplog.at_level(logging.WARNING):
+        _sent_body(obj, stop_reason=stop_reason)
+    warnings = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    expected = f"Bedrock response stopped early ({stop_reason}); output may be incomplete"
+    assert warnings == ([expected] if warned else [])

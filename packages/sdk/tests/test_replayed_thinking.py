@@ -18,9 +18,10 @@ from unittest.mock import create_autospec
 import pytest
 from strands import tool
 from strands.agent.conversation_manager import SlidingWindowConversationManager
+from strands.hooks import BeforeToolCallEvent
 from strands.models import Model
-from strands.types.content import Messages
-from strands.types.exceptions import ContextWindowOverflowException
+from strands.types.content import Message, Messages
+from strands.types.exceptions import ContextWindowOverflowException, ModelThrottledException
 
 from agent_builder_sdk.base_subagent.base_subagent import AsyncBaseSubagent
 from agent_builder_sdk.custom_types.orchestrator_agent_types import (
@@ -59,9 +60,9 @@ def _prefix_checking_model(
 ) -> Any:
     """Fake model that checks thinking blocks like Bedrock does.
 
-    Prompts in ``thinking_only_replies`` get a content-filtered, thinking-only reply. The model
-    calls ``lookup`` until the history holds ``tool_calls`` tool results, and its call number
-    ``overflow_on_call`` fails with a context-window overflow.
+    Prompts in ``thinking_only_replies`` get a content-filtered, thinking-only reply. The model's
+    first ``tool_calls`` replies call ``lookup``, and its call number ``overflow_on_call`` fails
+    with a context-window overflow.
 
     With ``manual_thinking`` it is configured for extended thinking with a token budget and
     checks what that mode checks: not the prefix, but that the tool call in progress starts
@@ -71,10 +72,12 @@ def _prefix_checking_model(
     model.stateful = False  # a mock attribute is truthy, and Strands clears history for stateful models
     if manual_thinking:
         model.get_config.return_value = {"additional_request_fields": _MANUAL_THINKING}
+    tool_calls_left = tool_calls
 
     async def stream(
         messages: Messages, *args: Any, **kwargs: Any
     ) -> AsyncGenerator[dict[str, Any], None]:
+        nonlocal tool_calls_left
         if model.stream.call_count == overflow_on_call:
             raise ContextWindowOverflowException("Input is too long for requested model")
         if manual_thinking and "toolResult" in messages[-1]["content"][0]:
@@ -99,7 +102,8 @@ def _prefix_checking_model(
         if messages[-1]["content"][-1].get("text") in thinking_only_replies:
             yield {"messageStop": {"stopReason": "content_filtered"}}
             return
-        if sum("toolResult" in block for m in messages for block in m["content"]) < tool_calls:
+        if tool_calls_left:
+            tool_calls_left -= 1
             tool_use = {"toolUseId": f"t{model.stream.call_count}", "name": "lookup"}
             yield {"contentBlockStart": {"start": {"toolUse": tool_use}}}
             yield {"contentBlockDelta": {"delta": {"toolUse": {"input": "{}"}}}}
@@ -176,6 +180,104 @@ async def test_manual_thinking_keeps_the_tool_calls_thinking_through_an_overflow
     assert subagent.model.stream.call_count == 4
 
 
+@pytest.mark.parametrize("manual_thinking", [False, True], ids=["prefix-bound", "manual"])
+async def test_resume_after_a_tool_interrupt_replays_a_valid_tool_call(
+    manual_thinking: bool,
+) -> None:
+    subagent = AsyncBaseSubagent("", custom_tools=[lookup])
+    subagent.callback_handler = lambda *args, **kwargs: None
+    subagent.model = _prefix_checking_model(tool_calls=1, manual_thinking=manual_thinking)
+
+    def ask_first(event: BeforeToolCallEvent) -> None:
+        event.interrupt("approval")
+
+    subagent.hooks.add_callback(BeforeToolCallEvent, ask_first)
+
+    # The interrupt ends the invocation on the tool call; the resume is a new invocation.
+    interrupted = await subagent.invoke_async("go")
+    assert [next(iter(block)) for block in subagent.messages[-1]["content"]] == [
+        "reasoningContent",
+        "toolUse",
+    ]
+    resumed = await subagent.invoke_async(
+        [
+            {"interruptResponse": {"interruptId": interrupt.id, "response": "yes"}}
+            for interrupt in interrupted.interrupts
+        ]
+    )
+
+    assert (interrupted.stop_reason, resumed.stop_reason) == ("interrupt", "end_turn")
+
+
+async def test_subagent_replays_no_stale_thinking_after_a_trim_inside_a_tool_loop() -> None:
+    subagent = AsyncBaseSubagent(
+        "",
+        custom_tools=[lookup],
+        conversation_manager=SlidingWindowConversationManager(window_size=4, per_turn=True),
+    )
+    subagent.callback_handler = lambda *args, **kwargs: None
+    subagent.model = _prefix_checking_model(tool_calls=5)
+
+    await subagent.process_message_async("go")
+
+    assert subagent.model.stream.call_count == 6
+
+
+async def test_tool_loop_keeps_its_thinking_while_history_only_grows() -> None:
+    subagent = AsyncBaseSubagent("", custom_tools=[lookup])
+    subagent.callback_handler = lambda *args, **kwargs: None
+    subagent.model = _prefix_checking_model(tool_calls=2)
+
+    await subagent.process_message_async("go")
+
+    replies = [m["content"] for m in subagent.messages if m["role"] == "assistant"]
+    assert len(replies) == 3 and all("reasoningContent" in reply[0] for reply in replies)
+
+
+def _agent(messages: Messages, config: Any = None) -> SimpleNamespace:
+    model = create_autospec(Model, spec_set=True, instance=True)
+    model.get_config.return_value = config
+    return SimpleNamespace(model=model, messages=messages)
+
+
+def _tool_call() -> Message:
+    return {"role": "assistant", "content": [_THINKING, {"toolUse": {"toolUseId": "t1"}}]}
+
+
+@pytest.mark.parametrize(
+    ("change", "kept"),
+    [
+        (lambda messages: messages.append({"role": "user", "content": [{"text": "more"}]}), True),
+        (lambda messages: messages.pop(0), False),
+        (lambda messages: messages.__setitem__(0, dict(messages[0])), False),
+    ],
+    ids=["appended", "trimmed", "first-message-replaced"],
+)
+def test_model_call_strip_follows_a_changed_prefix(change: Any, kept: bool) -> None:
+    agent = _agent([{"role": "user", "content": [{"text": "u1"}]}, _tool_call()])
+    hook = _StripReplayedThinking()
+    hook._strip_after_history_change(SimpleNamespace(agent=agent))
+    assert _THINKING in agent.messages[1]["content"]
+
+    change(agent.messages)
+    hook._strip_after_history_change(SimpleNamespace(agent=agent))
+
+    assert any(_THINKING in message["content"] for message in agent.messages) is kept
+
+
+@pytest.mark.parametrize(
+    "exception", [None, ModelThrottledException("slow down")], ids=["no-error", "throttled"]
+)
+def test_model_call_without_an_overflow_keeps_thinking(exception: Exception | None) -> None:
+    agent = _agent([_tool_call()])
+
+    _StripReplayedThinking._strip_before_overflow_retry(
+        SimpleNamespace(agent=agent, exception=exception)
+    )
+
+    assert _THINKING in agent.messages[0]["content"]
+
+
 @pytest.mark.parametrize(
     ("config", "kept"),
     [
@@ -188,10 +290,7 @@ async def test_manual_thinking_keeps_the_tool_calls_thinking_through_an_overflow
     ids=["manual", "adaptive", "no-request-fields", "no-thinking-setting", "config-not-a-mapping"],
 )
 def test_overflow_strip_spares_only_manual_thinking(config: Any, kept: bool) -> None:
-    model = create_autospec(Model, spec_set=True, instance=True)
-    model.get_config.return_value = config
-    tool_call = {"role": "assistant", "content": [_THINKING, {"toolUse": {"toolUseId": "t1"}}]}
-    agent = SimpleNamespace(model=model, messages=[tool_call])
+    agent = _agent([_tool_call()], config)
     overflow = ContextWindowOverflowException("Input is too long for requested model")
 
     _StripReplayedThinking._strip_before_overflow_retry(
@@ -209,7 +308,7 @@ def test_strip_rewrites_only_messages_with_thinking_in_place() -> None:
         {"role": "user", "content": [{"text": "u2"}]},
         {"role": "assistant", "content": [_THINKING, {"text": "a2"}]},
     ]
-    agent = SimpleNamespace(messages=messages)
+    agent = _agent(messages)
 
     _StripReplayedThinking._strip(SimpleNamespace(agent=agent))
 
@@ -223,7 +322,7 @@ def test_strip_rewrites_only_messages_with_thinking_in_place() -> None:
 
 
 def test_blank_reply_hook_reads_a_stripped_thinking_only_turn_as_blank() -> None:
-    agent = SimpleNamespace(messages=[{"role": "assistant", "content": [_THINKING]}])
+    agent = _agent([{"role": "assistant", "content": [_THINKING]}])
 
     _StripReplayedThinking._strip(SimpleNamespace(agent=agent))
 
