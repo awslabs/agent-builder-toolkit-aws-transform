@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for scripts/check_public_refs.py."""
 
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -51,6 +52,30 @@ class TestRules:
                 monkeypatch.setattr(check_public_refs, "RULES", changed)
                 failures = check_public_refs.failed_samples()
                 assert any(entry.startswith("flagged: ") for entry in failures), rule.name
+
+    def test_self_test_fails_when_any_pattern_stops_ignoring_case(
+        self, check_public_refs: ModuleType, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        rules = check_public_refs.RULES
+        for rule in rules:
+            if rule.pattern.flags & re.IGNORECASE:
+                exact = rule._replace(pattern=re.compile(rule.pattern.pattern))
+                monkeypatch.setattr(check_public_refs, "RULES", tuple(exact if r is rule else r for r in rules))
+                failures = check_public_refs.failed_samples()
+                assert any(entry.startswith("not flagged: ") for entry in failures), rule.name
+
+    @pytest.mark.parametrize(("name", "anchor"), [("host", "^"), ("host", "$"), ("email", "^"), ("access key", "$")])
+    def test_self_test_fails_when_an_allowlist_loses_an_anchor(
+        self, check_public_refs: ModuleType, monkeypatch: pytest.MonkeyPatch, name: str, anchor: str
+    ) -> None:
+        rules = check_public_refs.RULES
+        rule = next(rule for rule in rules if rule.name == name)
+        assert anchor in rule.allowed.pattern
+        loose = rule._replace(allowed=re.compile(rule.allowed.pattern.replace(anchor, ""), rule.allowed.flags))
+        monkeypatch.setattr(check_public_refs, "RULES", tuple(loose if r is rule else r for r in rules))
+
+        failures = check_public_refs.failed_samples()
+        assert any(entry.startswith("not flagged: ") for entry in failures)
 
     def test_line_number_counts_from_one(self, check_public_refs: ModuleType) -> None:
         assert list(check_public_refs.find_refs(f"{EMAIL}\n\n{EMAIL}\n")) == [(1, "email", EMAIL), (3, "email", EMAIL)]

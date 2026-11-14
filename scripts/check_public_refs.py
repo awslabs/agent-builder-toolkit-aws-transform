@@ -71,6 +71,16 @@ FLAGGED_SAMPLES = tuple(
         "sla|ck.com/archives/C0000000000",
         "AKI|A0123456789ABCDEF",
         "ASI|A0123456789ABCDEF",
+        # Letter case is ignored.
+        "Made-Up.AMA|ZON.Com",
+        "First.Last@Ama|zon.COM",
+        "Sla|ck.COM/Archives/C0000000000",
+        # Near misses of the allowlists: an allowed form with more text before or after it.
+        "x-aws.ama|zon.com",
+        "x-elastic-gumby.ai.aw|s.dev",
+        "aws.ama|zon.com.made-up.a2|z.com",
+        "x.opensource-codeofconduct@ama|zon.com",
+        "AKI|AEXAMPLE012345678",
     )
 )
 ALLOWED_SAMPLES = (
