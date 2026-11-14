@@ -2,12 +2,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """File-based task storage implementation."""
 
+import asyncio
 import json
 import logging
 import os
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from agent_builder_sdk.custom_types.task_types import A2ATask, TaskState, TaskStatus
 
@@ -96,6 +97,26 @@ class FileTaskStore(TaskStore):
         except Exception as e:
             logger.error(f"Failed to update task {task.id}: {e}")
             raise
+
+    async def list_tasks(self) -> List[A2ATask]:
+        """List every task file in the storage directory, ordered by task ID.
+
+        The files are read in a worker thread, so a large store does not block the
+        event loop. A file that cannot be read or parsed as a task is skipped with a
+        warning and the other tasks are still returned; ``get_task`` raises for it.
+        """
+        return await asyncio.to_thread(self._read_all_tasks)
+
+    def _read_all_tasks(self) -> List[A2ATask]:
+        """Load every readable task file, ordered by the task ID in the file name."""
+        tasks: List[A2ATask] = []
+        for task_path in sorted(self.storage_dir.glob("*.json"), key=lambda path: path.stem):
+            try:
+                with open(task_path, "r") as f:
+                    tasks.append(self._dict_to_task(json.load(f)))
+            except Exception as e:
+                logger.warning(f"Skipping unreadable task file {task_path}: {e!r}")
+        return tasks
 
     def _write_task(self, task_path: Path, task: A2ATask) -> None:
         """Write the task file through a temporary file and an atomic rename.

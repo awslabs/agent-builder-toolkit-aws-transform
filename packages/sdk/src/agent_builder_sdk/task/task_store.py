@@ -8,7 +8,7 @@ with different backends (memory, file, database, etc.).
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import List, Optional
 
 from agent_builder_sdk.custom_types.task_types import A2ATask
 from agent_builder_sdk.util.decorators import experimental
@@ -53,3 +53,21 @@ class TaskStore(ABC):
             Exception: If task not found or update fails
         """
         pass
+
+    async def list_tasks(self) -> List[A2ATask]:
+        """List every stored task, ordered by task ID (ascending string order).
+
+        Use it to find tasks without tracking their IDs elsewhere, for example to
+        resume after a restart the tasks whose state is not in
+        ``agent_builder_sdk.custom_types.task_types.TERMINAL_TASK_STATES``.
+
+        Not abstract: a subclass that implements only the abstract methods stays
+        valid. A store that supports listing overrides this method.
+
+        Returns:
+            All stored tasks, or an empty list when the store holds none
+
+        Raises:
+            NotImplementedError: If the store does not override this method
+        """
+        raise NotImplementedError(f"{type(self).__name__} does not implement list_tasks")

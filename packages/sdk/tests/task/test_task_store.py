@@ -3,17 +3,29 @@
 """Unit tests for TaskStore implementations."""
 
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, Optional
 
 import pytest
 
 from agent_builder_sdk.custom_types.common_types import A2AMessage
-from agent_builder_sdk.custom_types.task_types import A2ATask, TaskState, TaskStatus
+from agent_builder_sdk.custom_types.task_types import (
+    TERMINAL_TASK_STATES,
+    A2ATask,
+    TaskState,
+    TaskStatus,
+)
 from agent_builder_sdk.task.file_task_store import FileTaskStore
 from agent_builder_sdk.task.in_memory_task_store import InMemoryTaskStore
+from agent_builder_sdk.task.task_store import TaskStore
+
+
+def make_task(task_id: str, state: TaskState = TaskState.SUBMITTED) -> A2ATask:
+    """Create a minimal task with the given ID and state."""
+    return A2ATask(id=task_id, contextId="ctx-456", status=TaskStatus(state=state))
 
 
 @pytest.fixture
@@ -125,6 +137,55 @@ class TestInMemoryTaskStore:
         store = InMemoryTaskStore()
         result = await store.get_task("nonexistent")
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_list_tasks_empty_store_returns_empty_list(self) -> None:
+        """An empty store lists no tasks and does not raise."""
+        assert await InMemoryTaskStore().list_tasks() == []
+
+    @pytest.mark.asyncio
+    async def test_list_tasks_orders_by_task_id(self) -> None:
+        """Tasks come back ordered by ID, not by insertion."""
+        store = InMemoryTaskStore()
+        for task_id in ("task-b", "task-c", "task-a"):
+            await store.store_task(make_task(task_id))
+
+        assert [task.id for task in await store.list_tasks()] == ["task-a", "task-b", "task-c"]
+
+    @pytest.mark.asyncio
+    async def test_terminal_task_states_select_unfinished_tasks(self) -> None:
+        """Filtering a listing on TERMINAL_TASK_STATES leaves the tasks that can still change."""
+        store = InMemoryTaskStore()
+        for state in TaskState:
+            await store.store_task(make_task(state.value, state))
+
+        unfinished = [
+            task.id
+            for task in await store.list_tasks()
+            if task.status.state not in TERMINAL_TASK_STATES
+        ]
+        assert unfinished == ["auth-required", "input-required", "submitted", "unknown", "working"]
+
+
+class TestTaskStoreListDefault:
+    """Tests for the list_tasks default on the TaskStore interface."""
+
+    @pytest.mark.asyncio
+    async def test_store_without_list_tasks_instantiates_and_raises_on_call(self) -> None:
+        """A store with only the abstract methods stays valid; list_tasks says it is missing."""
+
+        class MinimalStore(TaskStore):
+            async def store_task(self, task: A2ATask) -> None:
+                pass
+
+            async def get_task(self, task_id: str) -> Optional[A2ATask]:
+                return None
+
+            async def update_task(self, task: A2ATask) -> None:
+                pass
+
+        with pytest.raises(NotImplementedError, match="MinimalStore does not implement"):
+            await MinimalStore().list_tasks()
 
 
 class TestFileTaskStore:
@@ -383,3 +444,45 @@ class TestFileTaskStore:
         assert retrieved is not None
         assert retrieved.status.state == TaskState.SUBMITTED
         assert os.listdir(store.storage_dir) == [f"{sample_task.id}.json"]
+
+    @pytest.mark.asyncio
+    async def test_list_tasks_empty_store_returns_empty_list(self, temp_storage_dir: str) -> None:
+        """A store with no task file lists no tasks and does not raise."""
+        assert await FileTaskStore(storage_dir=temp_storage_dir).list_tasks() == []
+
+    @pytest.mark.asyncio
+    async def test_list_tasks_orders_by_task_id_across_instances(
+        self, sample_task: A2ATask, temp_storage_dir: str
+    ) -> None:
+        """A new store on the same directory lists the persisted tasks ordered by ID."""
+        store = FileTaskStore(storage_dir=temp_storage_dir)
+        # "task-1-retry.json" sorts before "task-1.json" as a file name, after it as an ID.
+        for task in (make_task("task-1-retry"), sample_task, make_task("task-1")):
+            await store.store_task(task)
+
+        tasks = await FileTaskStore(storage_dir=temp_storage_dir).list_tasks()
+
+        assert [task.id for task in tasks] == ["task-1", "task-1-retry", sample_task.id]
+        assert tasks[2].to_dict() == sample_task.to_dict()
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "content",
+        ['{"id": "broken", "contextId"', "[]", '{"id": "broken"}', ""],
+        ids=["truncated", "not-an-object", "missing-fields", "empty"],
+    )
+    async def test_list_tasks_skips_unreadable_file_with_warning(
+        self, content: str, temp_storage_dir: str, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """One bad task file is logged and skipped; the listing still returns the rest."""
+        store = FileTaskStore(storage_dir=temp_storage_dir)
+        await store.store_task(make_task("task-a"))
+        await store.store_task(make_task("task-c"))
+        (store.storage_dir / "broken.json").write_text(content)
+
+        with caplog.at_level(logging.WARNING, logger="agent_builder_sdk.task.file_task_store"):
+            tasks = await store.list_tasks()
+
+        assert [task.id for task in tasks] == ["task-a", "task-c"]
+        assert [record.levelname for record in caplog.records] == ["WARNING"]
+        assert "broken.json" in caplog.text

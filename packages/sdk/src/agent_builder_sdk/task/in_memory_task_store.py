@@ -3,7 +3,7 @@
 """In-memory task storage implementation."""
 
 import logging
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from agent_builder_sdk.custom_types.task_types import A2ATask
 
@@ -53,3 +53,7 @@ class InMemoryTaskStore(TaskStore):
 
         self._tasks[task.id] = task
         logger.debug(f"Updated task {task.id}")
+
+    async def list_tasks(self) -> List[A2ATask]:
+        """List every task in memory, ordered by task ID."""
+        return sorted(self._tasks.values(), key=lambda task: task.id)
