@@ -415,7 +415,7 @@ class TestGetInitialAgentRuntimeContextFromEnv:
             assert context.agent_instance_id == "test-agent-instance-id"
             assert context.initial_auth_token == "test-auth-token"
 
-    def test_get_initial_agent_runtime_context_from_env_agent_id(self):
+    def test_get_initial_agent_runtime_context_from_env_agent_id(self) -> None:
         """Test AGENT_ID/AGENT_VERSION populate agent_id/agent_version."""
         env_vars = {
             "JOB_ID": "test-job-id",

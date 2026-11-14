@@ -7,6 +7,7 @@ Tests the StatelessAgentRuntimeServer class which provides compatibility with mu
 agent execution environments through JSON-RPC endpoints.
 """
 
+from typing import Iterator
 from unittest import mock
 
 import pytest
@@ -16,7 +17,7 @@ from agent_builder_sdk.server.stateless_agent_runtime_server import StatelessAge
 
 
 @pytest.fixture(autouse=True)
-def mock_heartbeat_service():
+def mock_heartbeat_service() -> Iterator[mock.MagicMock]:
     """Keep server tests off the heartbeat's API calls; HeartbeatService has its own tests."""
     with mock.patch(
         "agent_builder_sdk.server.stateless_agent_runtime_server.HeartbeatService", autospec=True
@@ -785,7 +786,9 @@ async def test_stop_request_stops_heartbeat(
 
 
 @pytest.mark.asyncio
-async def test_lifespan_stops_heartbeat_on_shutdown(stateless_agent_runtime_server):
+async def test_lifespan_stops_heartbeat_on_shutdown(
+    stateless_agent_runtime_server: StatelessAgentRuntimeServer,
+) -> None:
     """Test that lifespan stops heartbeat service during shutdown."""
     mock_heartbeat = mock.AsyncMock()
     stateless_agent_runtime_server.heartbeat_service = mock_heartbeat
@@ -800,7 +803,9 @@ async def test_lifespan_stops_heartbeat_on_shutdown(stateless_agent_runtime_serv
 
 
 @pytest.mark.asyncio
-async def test_lifespan_no_error_without_heartbeat(stateless_agent_runtime_server):
+async def test_lifespan_no_error_without_heartbeat(
+    stateless_agent_runtime_server: StatelessAgentRuntimeServer,
+) -> None:
     """Test that lifespan shutdown works when heartbeat was never started."""
     with mock.patch.object(
         stateless_agent_runtime_server, "_startup", new_callable=mock.AsyncMock
@@ -811,8 +816,9 @@ async def test_lifespan_no_error_without_heartbeat(stateless_agent_runtime_serve
 
 @pytest.mark.asyncio
 async def test_finalize_twice_starts_one_heartbeat(
-    stateless_agent_runtime_server, mock_heartbeat_service
-):
+    stateless_agent_runtime_server: StatelessAgentRuntimeServer,
+    mock_heartbeat_service: mock.MagicMock,
+) -> None:
     """Setup can run twice (INVOKING poller + a later request); only one heartbeat loop starts."""
     from agent_builder_sdk.server.server_models import AgentRuntimeContext
 

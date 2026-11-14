@@ -56,11 +56,13 @@ class HeartbeatService:
 
     def __init__(
         self, context: AgentRuntimeContext, interval_minutes: int = HEARTBEAT_INTERVAL_MINUTES
-    ):
+    ) -> None:
         self._context = context
         self._interval_seconds = interval_minutes * 60
         self._task: Optional[asyncio.Task] = None
-        # A beat checks _stopped under _write_lock right before its RUNNING write.
+        # Worker threads outlive a cancelled task. They check _stopped under _write_lock (a beat
+        # right before its RUNNING write, the lookup before it reports a start); stop() sets the
+        # flag, then takes the lock.
         self._stopped = threading.Event()
         self._write_lock = threading.Lock()
 
@@ -68,9 +70,11 @@ class HeartbeatService:
         """Start the background task and return at once.
 
         The task reads the monitoring type itself, so the caller does not wait for the
-        registry. It beats only when the type is HEARTBEAT.
+        registry. It beats only when the type is HEARTBEAT. One instance runs one task: a
+        later call does nothing, also after stop().
         """
-        self._task = asyncio.create_task(self._heartbeat_loop())
+        if self._task is None:
+            self._task = asyncio.create_task(self._heartbeat_loop())
 
     async def stop(self) -> None:
         """Stop the heartbeat background task.
@@ -136,8 +140,12 @@ class HeartbeatService:
             monitoring_type = configuration.get("monitoringType")
 
             if monitoring_type == MonitoringType.HEARTBEAT.value:
-                logger.info(f"Heartbeat monitoring enabled for agent {agent_id}")
-                logger.info(f"Heartbeat service started (interval: {self._interval_seconds}s)")
+                with self._write_lock:
+                    if not self._stopped.is_set():
+                        logger.info(f"Heartbeat monitoring enabled for agent {agent_id}")
+                        logger.info(
+                            f"Heartbeat service started (interval: {self._interval_seconds}s)"
+                        )
                 return True
 
             logger.info(f"Heartbeat disabled: monitoringType={monitoring_type}")

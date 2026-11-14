@@ -10,6 +10,7 @@ agent execution environments through JSON-RPC endpoints.
 import asyncio
 import logging
 from multiprocessing import Event as MPEvent
+from typing import Iterator
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec, patch
 
@@ -44,7 +45,7 @@ def context(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def mock_heartbeat_service():
+def mock_heartbeat_service() -> Iterator[MagicMock]:
     """Keep server tests off the heartbeat's API calls; HeartbeatService has its own tests."""
     with patch(
         "agent_builder_sdk.server.agent_runtime_server.HeartbeatService", autospec=True
@@ -1178,7 +1179,9 @@ class TestAgentRuntimeServer:
         assert agent_runtime_server.heartbeat_service is mock_heartbeat_service.return_value
 
     @pytest.mark.asyncio
-    async def test_cleanup_stops_heartbeat_service(self, agent_runtime_server):
+    async def test_cleanup_stops_heartbeat_service(
+        self, agent_runtime_server: AgentRuntimeServer
+    ) -> None:
         """Test _cleanup awaits heartbeat_service.stop()."""
         agent_runtime_server.heartbeat_service = mock.AsyncMock()
 

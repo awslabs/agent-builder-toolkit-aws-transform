@@ -6,7 +6,7 @@ import asyncio
 import logging
 import threading
 import time
-from typing import Callable, Iterator, List, Optional
+from typing import Callable, Dict, Iterator, List, Optional
 from unittest.mock import Mock, patch
 
 import pytest
@@ -199,6 +199,18 @@ class TestStart:
         mock_send.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_second_start_adds_no_task(self, context: AgentRuntimeContext) -> None:
+        """stop() cancels one task, so a second start() must not leave another loop running."""
+        service = HeartbeatService(context)
+        with patch.object(service, "_should_enable", return_value=True):
+            await service.start()
+            first = service._task
+            await service.start()
+            await service.stop()
+
+        assert first is not None and first.done()
+
+    @pytest.mark.asyncio
     async def test_healthy_run_logs(
         self,
         registry: Mock,
@@ -245,6 +257,38 @@ class TestStop:
     async def test_stop_noop_when_no_task(self, context: AgentRuntimeContext) -> None:
         service = HeartbeatService(context)
         await service.stop()  # should not raise
+
+    @pytest.mark.asyncio
+    async def test_stop_mid_lookup_logs_no_start(
+        self, registry: Mock, context: AgentRuntimeContext, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A lookup still in its worker thread when stop() is called must not report a start."""
+        service = HeartbeatService(context)
+        looking_up, release, lookup_done = threading.Event(), threading.Event(), threading.Event()
+        real_lookup = service._should_enable
+
+        def slow_configuration(*_: str) -> Dict[str, str]:
+            looking_up.set()
+            release.wait(5)
+            return {"monitoringType": MonitoringType.HEARTBEAT.value}
+
+        def tracked_lookup() -> Optional[bool]:
+            try:
+                return real_lookup()
+            finally:
+                lookup_done.set()
+
+        registry.get_agent_configuration.side_effect = slow_configuration
+        with patch.object(
+            service, "_should_enable", side_effect=tracked_lookup
+        ), caplog.at_level(logging.INFO, logger=MODULE):
+            await service.start()
+            await _wait_until(looking_up.is_set)
+            await service.stop()
+            release.set()
+            await _wait_until(lookup_done.is_set)
+
+        assert [record.getMessage() for record in _logged(caplog)] == ["Heartbeat service stopped"]
 
     @pytest.mark.asyncio
     async def test_stop_mid_beat_skips_running_write(self, context: AgentRuntimeContext) -> None:
