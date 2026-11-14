@@ -200,7 +200,9 @@ def agent_factory(mcp_client, storage_dir):
     )
 ```
 
-The files are never deleted and are included in checkpoints. The developer guide section "Offload Large Tool Results" lists the parameters and limits.
+With concurrent streaming, give every offloader one directory under the server's `storage_dir` (for example `os.path.join("/tmp/my_agent", "agent")`) and not the factory's `storage_dir` argument: the factory gets a different directory for buffered turns and for each streaming source, the agents share one history, and a reference is readable only by an offloader on the directory that holds the file.
+
+The files are never deleted and are included in checkpoints, unless the agent has a Strands sandbox: then they are written inside the sandbox. The developer guide section "Offload Large Tool Results" lists the parameters and limits.
 
 ## Requirements
 

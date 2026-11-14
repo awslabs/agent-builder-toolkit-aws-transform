@@ -2572,7 +2572,7 @@ ToolOutputOffloader --> <storage_dir>/offloaded/...   full result, one file per 
 conversation: preview + references --> model --> retrieve_offloaded_content(reference, line_range | pattern)
 ```
 
-Pass the plugin to the orchestrator constructor, inside your agent factory, so that each agent has its own instance:
+Pass the plugin to the orchestrator constructor, inside your agent factory:
 
 ```python
 from agent_builder_sdk.orchestrator_strands.base_orchestrator import AsyncBaseOrchestrator
@@ -2588,9 +2588,28 @@ def agent_factory(mcp_client, storage_dir):
 
 The `create_*` factory functions do not take plugins; use the constructor of `AsyncBaseOrchestrator`, `BaseOrchestrator` or your own subclass.
 
+With concurrent streaming (`streaming_config` on `AgentRuntimeServer`), do not use the factory's `storage_dir` argument for the offloader. The server calls the factory once for buffered turns and once per streaming source, each time with a different directory, but these agents share one conversation history. A reference is readable only by an offloader on the directory that holds the file, so give every offloader the same directory under the server's `storage_dir`:
+
+```
+AgentRuntimeServer(storage_dir=BASE)
+  buffered turns     factory(mcp_client, BASE/agent)               --+
+  streaming source   factory(mcp_client, BASE/agent/sources/<id>)  --+--> one shared history
+                                                                     +--> one offload directory: BASE/agent/offloaded
+```
+
+```python
+import os
+
+SERVER_STORAGE_DIR = "/tmp/my_agent"  # the storage_dir that you pass to AgentRuntimeServer
+OFFLOAD_STORAGE_DIR = os.path.join(SERVER_STORAGE_DIR, "agent")
+
+# In the agent factory, in place of ToolOutputOffloader(storage_dir=storage_dir):
+plugins=[ToolOutputOffloader(storage_dir=OFFLOAD_STORAGE_DIR)],
+```
+
 | Parameter | Default | Meaning |
 | --- | --- | --- |
-| `storage_dir` | required | The agent's storage directory. Files go to its `offloaded` subdirectory. |
+| `storage_dir` | required | Directory for the files, which go to its `offloaded` subdirectory. Agents that share a conversation history must use the same one. |
 | `max_result_tokens` | 12,500 | A result is offloaded when its text and JSON blocks exceed this estimate. |
 | `preview_tokens` | 1,000 | Size of the preview that stays in the conversation. |
 | `keep_in_context_tools` | `DEFAULT_KEEP_IN_CONTEXT_TOOLS` | Tools whose results are never offloaded: by default `skills`, `memory`, `discover_subagents` and the tools that send a message to a subagent. To add a tool, pass `DEFAULT_KEEP_IN_CONTEXT_TOOLS \| {"my_tool"}`. |
@@ -2601,8 +2620,9 @@ What to expect:
 - The token count is the estimate of the agent's model (`count_tokens`), not a billing figure.
 - File names are generated. They hold no part of the tool name, the tool-use id or the tool output.
 - The offloader never deletes a file, so a reference stays valid for the whole job, also after a checkpoint restore. The files are part of the agent's storage directory: checkpoints include them and grow with them.
-- Offloaders that use the same `storage_dir` can read each other's references.
-- When the token count or the file write fails, the full result stays in the conversation and a warning is logged.
+- Offloaders that use the same `storage_dir` can read each other's references. An offloader on another directory cannot.
+- When the agent has a Strands sandbox (`sandbox=`), the files are written through it, inside the sandbox. They are then not in the host storage directory and not in its checkpoints, so a reference does not survive a checkpoint restore.
+- When the token count or the file write fails, the full result stays in the conversation and a warning is logged. The warning for a failed write names a generated id, not the tool. A debug-level line of the logger `agent_builder_sdk.orchestrator_strands.tool_output_offloader` maps that id to the tool name and the tool-use id.
 - A result of `retrieve_offloaded_content` is never offloaded. A retrieval without `line_range` or `pattern` puts the whole stored block back into the conversation.
 - Requires `strands-agents>=1.51.0`, which is the minimum version of the SDK.
 

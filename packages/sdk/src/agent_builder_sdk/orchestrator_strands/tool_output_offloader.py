@@ -54,7 +54,13 @@ class ToolOutputOffloader(ContextOffloader):
     another agent whose offloader uses the same ``storage_dir``, and after a checkpoint restore of
     that directory. File names are generated and hold no part of the tool name, the tool-use id or
     the tool output. When the token count or the file write fails, the result stays in context
-    unchanged and a warning is logged.
+    unchanged and a warning is logged. The warning for a failed write names a generated id; a
+    debug-level line of this module maps that id to the tool name and the tool-use id.
+
+    Agents that share a conversation history must use the same ``storage_dir``: a reference is
+    readable only by an offloader on the directory that holds the file. When the agent has a Strands
+    sandbox (``sandbox=``), the files are written through it, inside the sandbox: they are not in the
+    host ``storage_dir`` and not in its checkpoints.
 
     Pass it to the orchestrator through ``plugins``::
 
@@ -64,7 +70,7 @@ class ToolOutputOffloader(ContextOffloader):
         )
 
     Args:
-        storage_dir: The agent's storage directory. Files go to its ``offloaded`` subdirectory.
+        storage_dir: Directory for the files, which go to its ``offloaded`` subdirectory.
         max_result_tokens: Offload when the text and JSON blocks of a result exceed this many
             tokens, as estimated by the agent's model.
         preview_tokens: Tokens of the result to keep in context. Must be less than
@@ -72,11 +78,11 @@ class ToolOutputOffloader(ContextOffloader):
         keep_in_context_tools: Names of the tools whose results are never offloaded. Defaults to
             ``DEFAULT_KEEP_IN_CONTEXT_TOOLS``; to add a tool, pass that set united with your own.
 
-    Attributes:
-        offload_dir: The directory that holds the offloaded files.
-
     Raises:
         ValueError: If ``storage_dir`` is empty or a token limit is out of range.
+
+    Attributes:
+        offload_dir: The directory that holds the offloaded files.
     """
 
     def __init__(
@@ -115,9 +121,17 @@ class ToolOutputOffloader(ContextOffloader):
         # references by position. It gets a copy of the event with a generated id, so the name is
         # unique and free of model-provided text, and only the blocks it stores, so positions match.
         staged_result = _with_content(event.result, offloadable)
+        offload_id = uuid.uuid4().hex
+        # The parent's log lines, such as its warning for a failed write, name only the generated id.
+        logger.debug(
+            "Offload id %s is for tool %r, tool-use id %r",
+            offload_id,
+            event.tool_use.get("name"),
+            event.tool_use["toolUseId"],
+        )
         staged = dataclasses.replace(
             event,
-            tool_use={**event.tool_use, "toolUseId": uuid.uuid4().hex},
+            tool_use={**event.tool_use, "toolUseId": offload_id},
             result=staged_result,
         )
         try:

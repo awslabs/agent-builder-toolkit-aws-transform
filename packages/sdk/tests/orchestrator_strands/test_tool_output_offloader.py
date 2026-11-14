@@ -4,6 +4,7 @@ import asyncio
 import copy
 import json
 import logging
+import re
 from collections.abc import AsyncGenerator, Callable, Sequence
 from pathlib import Path
 from types import SimpleNamespace
@@ -300,17 +301,24 @@ async def test_retrieval_cannot_read_a_file_outside_the_offload_dir(tmp_path: Pa
     assert BIG not in str(retrieved)  # the oldest supported Strands returns an error text instead of raising
 
 
-async def test_failed_file_write_keeps_the_whole_result_in_context_and_logs_the_cause(
+async def test_failed_file_write_keeps_the_whole_result_in_context_and_logs_the_cause_and_the_tool(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     agent, offloader = _agent(tmp_path)
     Path(offloader.offload_dir).write_text("a file where the offload directory should be")
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.DEBUG):
         result = await _after_tool_call(agent, [IMAGE, {"text": BIG}])
 
     assert result["content"] == [IMAGE, {"text": BIG}]
     assert "NotADirectoryError" in caplog.text
+    warning = next(record.getMessage() for record in caplog.records if record.levelno == logging.WARNING)
+    offload_id = re.search(r"[0-9a-f]{32}", warning)
+    assert offload_id is not None
+    debug_lines = [record.getMessage() for record in caplog.records if record.levelno == logging.DEBUG]
+    assert any(
+        offload_id.group() in line and "'big_output_tool'" in line and "'tu-1'" in line for line in debug_lines
+    )
 
 
 async def test_failed_token_count_keeps_the_whole_result_in_context_and_logs_the_tool(
