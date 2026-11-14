@@ -7,7 +7,7 @@ import logging
 import os
 import uuid
 import zipfile
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from agent_builder_sdk.agentic_framework.agentic_api_helper import AgenticApiHelper
 from agent_builder_sdk.agentic_framework.common import download_from_presigned_url
@@ -17,6 +17,26 @@ logger = logging.getLogger(__name__)
 
 class AgentRegistry(AgenticApiHelper):
     """Client for interacting with ATX Agent Registry."""
+
+    def get_agent_configuration(
+        self, agent_id: str, version: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Get the configuration of an agent version (agentCard, monitoringType, ...).
+
+        Args:
+            agent_id: The agent identifier
+            version: Optional specific version, defaults to the latest active version
+
+        Returns:
+            The version's configuration, empty dict if the version has none
+
+        Raises:
+            botocore.exceptions.ClientError: If the GetAgentVersion call fails
+        """
+        request = self._inject_request_context({"name": agent_id})
+        if version:
+            request["version"] = version
+        return self.client.get_agent_version(**request).get("configuration") or {}
 
     def get_agent_skill_names(self, agent_id: str, version: Optional[str] = None) -> List[str]:
         """Get list of skill names from agent's card.
@@ -29,15 +49,7 @@ class AgentRegistry(AgenticApiHelper):
             List of skill names, empty list if no skills found
         """
         try:
-            request = self._inject_request_context({"name": agent_id})
-            if version:
-                request["version"] = version
-
-            response = self.client.get_agent_version(**request)
-
-            # Extract agentCard from configuration
-            configuration = response.get("configuration", {})
-            agent_card_doc = configuration.get("agentCard")
+            agent_card_doc = self.get_agent_configuration(agent_id, version).get("agentCard")
 
             if not agent_card_doc:
                 logger.warning(f"No agentCard found for agent {agent_id}")

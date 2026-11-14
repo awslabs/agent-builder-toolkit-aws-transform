@@ -28,6 +28,35 @@ def agent_registry(monkeypatch):
     )
 
 
+class TestGetAgentConfiguration:
+    """Test cases for get_agent_configuration method."""
+
+    def test_returns_configuration_of_the_given_version(self, agent_registry: AgentRegistry) -> None:
+        configuration = {"monitoringType": "HEARTBEAT", "agentCard": {"skills": []}}
+        agent_registry.client.get_agent_version.return_value = {"configuration": configuration}
+
+        assert agent_registry.get_agent_configuration("test-agent", "1.0") == configuration
+        call_args = agent_registry.client.get_agent_version.call_args[1]
+        assert call_args["name"] == "test-agent"
+        assert call_args["version"] == "1.0"
+        assert "requestContext" in call_args
+
+    def test_omits_version_to_read_the_latest(self, agent_registry: AgentRegistry) -> None:
+        agent_registry.client.get_agent_version.return_value = {"configuration": {}}
+
+        agent_registry.get_agent_configuration("test-agent")
+
+        assert "version" not in agent_registry.client.get_agent_version.call_args[1]
+
+    @pytest.mark.parametrize("response", [{}, {"configuration": None}])
+    def test_returns_empty_dict_without_configuration(
+        self, response: dict, agent_registry: AgentRegistry
+    ) -> None:
+        agent_registry.client.get_agent_version.return_value = response
+
+        assert agent_registry.get_agent_configuration("test-agent", "1.0") == {}
+
+
 class TestGetAgentSkillNames:
     """Test cases for get_agent_skill_names method."""
 
