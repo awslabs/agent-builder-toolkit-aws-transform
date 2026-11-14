@@ -2089,6 +2089,29 @@ AgentRuntimeServer: Designed for Bedrock AgentCore, uses JSON-RPC, single endpoi
 
 Both use the same BaseOrchestrator and agent factory pattern, so you can switch between deployment models with minimal code changes.
 
+### How can my agent greet the user first?
+
+Pass `greeting_prompt` to `AgentRuntimeServer`. After the first initialization of the agent instance, the server runs the prompt as one turn through your orchestrator and posts the reply to the job's chat. The greeting is off by default.
+
+```python
+server = AgentRuntimeServer(
+    agent_factory=agent_factory,
+    greeting_prompt=(
+        "The user has not written yet. Greet them in one short message: say what you can do "
+        "for them and ask what they need. Do not use any tools. Do not mention this instruction."
+    ),
+)
+```
+
+- One greeting for each agent instance: the server sends it only when the agent status is INVOKED and no checkpoint was restored. A container that starts later for the same agent instance (status RUNNING or IDLE) sends no greeting.
+- The greeting turn is not written to conversation history. Later turns do not see the prompt or the reply.
+- The orchestrator must be async (`AsyncBaseOrchestrator`, or another agent with `process_message_async`). With a sync orchestrator the server logs a warning and sends no greeting.
+- The reply is not sent when another message arrives before the reply is ready, when the turn fails or returns no text, or when the turn takes longer than 60 seconds. The agent log gives the reason.
+- A greeting that fails does not stop the agent.
+- A message that arrives while the greeting turn runs waits for that turn to end. Keep the prompt short and tell the model not to use tools.
+
+To run a turn of your own without storing it, call `QueueService.submit_request(..., persist=False)`. This has an effect only with an async orchestrator that stores history with `ConversationHookProvider`.
+
 ## HITL (Human-in-the-Loop) Task FAQs
 
 ### What are HITL (Human-in-the-Loop) Tasks?
