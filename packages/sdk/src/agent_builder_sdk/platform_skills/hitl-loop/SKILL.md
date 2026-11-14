@@ -67,8 +67,8 @@ End the loop when **the answer exists**: `humanArtifact.artifactId` is present, 
 `SUBMITTED` or `CLOSED`. Do not wait for the literal `SUBMITTED` — a `NON_BLOCKING` feedback task
 goes straight to `CLOSED` on submit, and a loop watching for `SUBMITTED` hangs forever on a task
 the user already answered. When you land on `CLOSED`, read the output and skip step 7; the
-platform already closed it. A task that waits for an approver (`AWAITING_APPROVAL`) is not
-answered yet, even when an answer artifact is already present.
+platform already closed it. A task that waits for an approver (`AWAITING_APPROVAL`) or that was
+rejected (`action` is `REJECT`) is not answered, even when an answer artifact is present.
 
 Branch on what you see:
 
@@ -77,7 +77,7 @@ Branch on what you see:
 | `CREATED` | start never landed | call `start_hitl_task` |
 | `AWAITING_HUMAN_INPUT` / `IN_PROGRESS` | healthy, waiting | keep waiting (check `action` — see rejection) |
 | `AWAITING_APPROVAL` / `WAITING_APPROVAL` | healthy, the user sent it and an approver has to confirm it | keep waiting and leave it open: never close or recreate it, do not read it yet |
-| `SUBMITTED` / answer artifact present | answered | read it |
+| `SUBMITTED` / answer artifact present | answered, unless rejected | read it, unless `action` is `REJECT` (see rejection) |
 | `CLOSED` | answered and auto-closed | read it, do not close |
 | `CLOSED_PENDING_NEXT_TASK` | you closed it to chain a follow-up | poll the follow-up task |
 | `CANCELLED` | someone killed it | stop polling |

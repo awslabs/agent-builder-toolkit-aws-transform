@@ -1209,6 +1209,15 @@ class TestPlatformKnowledge:
         assert set(do_by_status) == set(_agentic_service_shapes()["HitlTaskStatus"]["enum"])
         assert "keep waiting" in do_by_status["AWAITING_APPROVAL"]
 
+    def test_hitl_loop_answer_rule_leaves_out_an_approver_wait_and_a_rejected_task(self) -> None:
+        skill = (_PLATFORM_SKILLS_DIR / "hitl-loop" / "SKILL.md").read_text(encoding="utf-8")
+        rule = skill.split("End the loop when **the answer exists**")[1].split("\n\n")[0]
+        (answered_row,) = [row for row in skill.splitlines() if row.startswith("| `SUBMITTED`")]
+
+        assert "`AWAITING_APPROVAL`" in rule
+        assert "`REJECT`" in rule
+        assert "`REJECT`" in answered_row.split("|")[3]
+
     @pytest.mark.parametrize(
         ("skill_name", "response_shape"),
         [
