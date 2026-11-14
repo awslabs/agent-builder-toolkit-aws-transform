@@ -255,9 +255,15 @@ class TestBaseServer:
         assert "Handshake request received" in caplog.text
 
 
-def _request(method: str, agent_instance_id: str, token: Optional[str]) -> Dict[str, Any]:
+def _request(
+    method: str,
+    agent_instance_id: str,
+    token: Optional[str],
+    workspace_id: str = "ws-1",
+    job_id: str = "job-1",
+) -> Dict[str, Any]:
     """Build an invoke request (full context) or a health check (identifiers and token only)."""
-    job_metadata = {"workspaceId": "ws-1", "jobId": "job-1"}
+    job_metadata = {"workspaceId": workspace_id, "jobId": job_id}
     if method == JsonRpcMethods.INVOKE:
         params: Dict[str, Any] = {
             "agentInstanceId": agent_instance_id,
@@ -321,14 +327,25 @@ class TestContextAcrossRequests:
             workspace_id="ws-1", job_id="job-1", agent_instance_id="ai-1"
         )
 
-    async def test_request_for_another_agent_instance_replaces_context(
-        self, base_server: ConcreteBaseServer
+    @pytest.mark.parametrize(
+        "workspace_id, job_id, agent_instance_id",
+        [("ws-2", "job-1", "ai-1"), ("ws-1", "job-2", "ai-1"), ("ws-1", "job-1", "ai-2")],
+        ids=["workspace", "job", "agent_instance"],
+    )
+    async def test_request_for_another_workspace_job_or_agent_instance_replaces_context(
+        self,
+        base_server: ConcreteBaseServer,
+        workspace_id: str,
+        job_id: str,
+        agent_instance_id: str,
     ) -> None:
         await base_server.ensure_initialized(_request(JsonRpcMethods.INVOKE, "ai-1", "token-1"))
-        await base_server.ensure_initialized(_request(JsonRpcMethods.HEALTHCHECK, "ai-2", None))
+        await base_server.ensure_initialized(
+            _request(JsonRpcMethods.HEALTHCHECK, agent_instance_id, None, workspace_id, job_id)
+        )
 
         assert base_server.context == AgentRuntimeContext(
-            workspace_id="ws-1", job_id="job-1", agent_instance_id="ai-2"
+            workspace_id=workspace_id, job_id=job_id, agent_instance_id=agent_instance_id
         )
 
     async def test_handshake_keeps_context(self, base_server: ConcreteBaseServer) -> None:
