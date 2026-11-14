@@ -11,7 +11,7 @@ import os
 import uuid
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, Mapping, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -63,7 +63,7 @@ def _locale_kwargs(factory: Callable[..., Any], locale: Optional[str]) -> Dict[s
     The locale is passed only when it is set and ``factory`` names a ``locale`` parameter that
     takes a keyword. An unset locale is left out so the factory's own default applies. A bare
     ``**kwargs`` does not count, because such factories often forward it to a callable with a
-    fixed signature. A set locale that is not passed is logged at INFO.
+    fixed signature.
     """
     if not locale:
         return {}
@@ -72,13 +72,19 @@ def _locale_kwargs(factory: Callable[..., Any], locale: Optional[str]) -> Dict[s
         inspect.Parameter.POSITIONAL_OR_KEYWORD,
         inspect.Parameter.KEYWORD_ONLY,
     ):
-        logger.info(
-            "Locale %r is set but the agent factory names no 'locale' keyword parameter, "
-            "so it is not passed",
-            locale,
-        )
         return {}
     return {"locale": locale}
+
+
+def _log_locale_not_passed(locale: Optional[str], factory_kwargs: Mapping[str, Any]) -> None:
+    """Log at INFO a set ``locale`` when ``factory_kwargs``, the keyword arguments of the agent
+    factory call, hold no ``locale`` key."""
+    if locale and "locale" not in factory_kwargs:
+        logger.info(
+            "Locale %r is set but the agent factory is called without a 'locale' argument. "
+            "The server adds one only for a factory that names a 'locale' keyword parameter",
+            locale,
+        )
 
 
 class BaseServer(ABC):

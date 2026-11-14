@@ -34,7 +34,11 @@ from agent_builder_sdk.interfaces import AnyBaseAgent
 from agent_builder_sdk.mcp_client_factory import MCPClientFactory
 from agent_builder_sdk.messages.message_handler import MessageHandler
 from agent_builder_sdk.orchestrator_strands.conversation.constants import MessageSourceType
-from agent_builder_sdk.server.base_server import BaseServer, _locale_kwargs
+from agent_builder_sdk.server.base_server import (
+    BaseServer,
+    _locale_kwargs,
+    _log_locale_not_passed,
+)
 from agent_builder_sdk.server.request_context import RequestContextMiddleware
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 from agent_builder_sdk.task_handler import TaskHandler
@@ -202,6 +206,7 @@ class StatelessAgentRuntimeServer(BaseServer):
             }
 
             locale_kwargs = _locale_kwargs(self.agent_factory, self.context.locale)
+            _log_locale_not_passed(self.context.locale, locale_kwargs)
 
             if accepts_kwargs(self.agent_factory):
                 # If agent_factory has **kwargs, pass all parameters

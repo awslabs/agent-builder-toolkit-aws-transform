@@ -19,6 +19,7 @@ from typing import (
     Callable,
     Coroutine,
     Dict,
+    Mapping,
     Optional,
     Protocol,
     Sequence,
@@ -85,7 +86,11 @@ from agent_builder_sdk.orchestrator_strands.conversation.file_repository import 
     FileMultiSourceConversationRepository,
 )
 from agent_builder_sdk.request_handler import QueueRequestHandler
-from agent_builder_sdk.server.base_server import BaseServer, _locale_kwargs
+from agent_builder_sdk.server.base_server import (
+    BaseServer,
+    _locale_kwargs,
+    _log_locale_not_passed,
+)
 from agent_builder_sdk.server.request_context import RequestContextMiddleware
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 from agent_builder_sdk.server.streaming_agent_pool import StreamingAgentPool
@@ -765,6 +770,15 @@ class AgentRuntimeServer(BaseServer):
     ) -> AnyBaseAgent:
         """Like _create_agent but with an explicit per-user storage_dir. off_loop runs a sync
         factory in a worker thread."""
+        factory_kwargs: Mapping[str, Any] = agent_params
+        if not (
+            self._is_async_factory(self.agent_factory)
+            or self._factory_accepts_kwargs(self.agent_factory)
+        ):
+            # Read from agent_params, not the context: a subclass may override
+            # _get_agent_params.
+            factory_kwargs = _locale_kwargs(self.agent_factory, agent_params.get("locale"))
+        _log_locale_not_passed(self.context.locale if self.context else None, factory_kwargs)
         if self._is_async_factory(self.agent_factory):
             async_factory = cast(AsyncAgentFactory, self.agent_factory)
             return await async_factory(mcp_client, storage_dir, **agent_params)
@@ -776,13 +790,8 @@ class AgentRuntimeServer(BaseServer):
                 )
             else:
                 sync_factory_no_kwargs = cast(SyncAgentFactoryNoKwargs, self.agent_factory)
-                # Read from agent_params, not the context: a subclass may override
-                # _get_agent_params.
                 build = functools.partial(
-                    sync_factory_no_kwargs,
-                    mcp_client,
-                    storage_dir,
-                    **_locale_kwargs(self.agent_factory, agent_params.get("locale")),
+                    sync_factory_no_kwargs, mcp_client, storage_dir, **factory_kwargs
                 )
             if not off_loop:
                 return build()

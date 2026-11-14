@@ -7,6 +7,7 @@ Tests the StatelessAgentRuntimeServer class which provides compatibility with mu
 agent execution environments through JSON-RPC endpoints.
 """
 
+import logging
 from typing import Any, Optional
 from unittest import mock
 
@@ -789,6 +790,11 @@ def legacy_factory(mcp_client: Any, storage_dir: str) -> dict[str, Any]:
 
 NAMED_LOCALE_FACTORIES = [named_locale_factory, named_locale_and_kwargs_factory]
 
+LOCALE_NOT_PASSED_LINE = (
+    "Locale 'ja' is set but the agent factory is called without a 'locale' argument. "
+    "The server adds one only for a factory that names a 'locale' keyword parameter"
+)
+
 
 class TestLocaleDelivery:
     """The server passes the context locale to agent factories that name a ``locale`` parameter."""
@@ -838,3 +844,21 @@ class TestLocaleDelivery:
         self, factory: Any
     ) -> None:
         assert await self._build_agent(factory, "ja") == {}
+
+    @pytest.mark.parametrize(
+        "factory, expected",
+        [
+            (kwargs_only_factory, [LOCALE_NOT_PASSED_LINE]),
+            (legacy_factory, [LOCALE_NOT_PASSED_LINE]),
+            (named_locale_factory, []),
+        ],
+    )
+    async def test_only_a_locale_that_is_not_passed_is_logged(
+        self, factory: Any, expected: list[str], caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
+            await self._build_agent(factory, "ja")
+
+        assert [
+            r.getMessage() for r in caplog.records if r.getMessage().startswith("Locale ")
+        ] == expected

@@ -2894,17 +2894,35 @@ NAMED_LOCALE_FACTORIES = [
     async_named_locale_factory,
 ]
 
+LOCALE_NOT_PASSED_LINE = (
+    "Locale 'ja' is set but the agent factory is called without a 'locale' argument. "
+    "The server adds one only for a factory that names a 'locale' keyword parameter"
+)
+
+
+class _LocaleParamsServer(AgentRuntimeServer):
+    """Passes the locale through ``_get_agent_params``, as a partner subclass can."""
+
+    def _get_agent_params(self) -> dict[str, Any]:
+        assert self.context
+        return {**super()._get_agent_params(), "locale": self.context.locale}
+
 
 class TestLocaleDelivery:
     """The server passes the context locale to agent factories that name a ``locale`` parameter."""
 
     @staticmethod
-    def _server(factory: Any, locale: Optional[str], **server_kwargs: Any) -> AgentRuntimeServer:
+    def _server(
+        factory: Any,
+        locale: Optional[str],
+        server_class: type[AgentRuntimeServer] = AgentRuntimeServer,
+        **server_kwargs: Any,
+    ) -> AgentRuntimeServer:
         with (
             mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"),
             mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"),
         ):
-            server = AgentRuntimeServer(
+            server = server_class(
                 agent_factory=factory,
                 mcp_client=MagicMock(),
                 storage_dir="/tmp/test_storage",
@@ -2950,6 +2968,10 @@ class TestLocaleDelivery:
     ) -> None:
         assert await self._build_agent(factory, "ja") == {}
 
+    @staticmethod
+    def _locale_log_lines(caplog: pytest.LogCaptureFixture) -> list[str]:
+        return [r.getMessage() for r in caplog.records if r.getMessage().startswith("Locale ")]
+
     @pytest.mark.parametrize(
         "factory", [kwargs_only_factory, async_kwargs_only_factory, legacy_factory]
     )
@@ -2959,10 +2981,44 @@ class TestLocaleDelivery:
         with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
             await self._build_agent(factory, "ja")
 
-        assert [r.getMessage() for r in caplog.records if "not passed" in r.getMessage()] == [
-            "Locale 'ja' is set but the agent factory names no 'locale' keyword parameter, "
-            "so it is not passed"
-        ]
+        assert self._locale_log_lines(caplog) == [LOCALE_NOT_PASSED_LINE]
+
+    async def test_streaming_setup_does_not_log_the_locale_again(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        server = self._server(kwargs_only_factory, "ja", streaming_config=StreamingConfig())
+        with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
+            await server._create_agent(MagicMock(), **server._get_agent_params())
+            with mock.patch(
+                "agent_builder_sdk.server.agent_runtime_server.mcp_session_active",
+                return_value=True,
+            ):
+                server._setup_concurrent_streaming()
+            assert self._locale_log_lines(caplog) == [LOCALE_NOT_PASSED_LINE]
+
+            assert server._streaming_agent_pool is not None
+            await server._streaming_agent_pool._create_agent("/tmp/test_storage/user-1")
+        assert self._locale_log_lines(caplog) == [LOCALE_NOT_PASSED_LINE] * 2
+
+    async def test_locale_added_by_overridden_agent_params_is_not_logged(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        server = self._server(kwargs_only_factory, "ja", server_class=_LocaleParamsServer)
+        with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
+            await server._finalize_agent_setup("STOPPED")
+
+        assert server.agent["locale"] == "ja"
+        assert self._locale_log_lines(caplog) == []
+
+    async def test_locale_dropped_for_a_two_argument_factory_is_logged_once(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        server = self._server(legacy_factory, "ja", server_class=_LocaleParamsServer)
+        with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
+            await server._finalize_agent_setup("STOPPED")
+
+        assert server.agent == {}
+        assert self._locale_log_lines(caplog) == [LOCALE_NOT_PASSED_LINE]
 
     async def test_overridden_agent_params_decide_the_locale(self) -> None:
         server = self._server(named_locale_factory, "ja")

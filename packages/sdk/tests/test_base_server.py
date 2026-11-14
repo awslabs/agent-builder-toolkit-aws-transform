@@ -12,7 +12,11 @@ from unittest import mock
 
 import pytest
 
-from agent_builder_sdk.server.base_server import BaseServer, _locale_kwargs
+from agent_builder_sdk.server.base_server import (
+    BaseServer,
+    _locale_kwargs,
+    _log_locale_not_passed,
+)
 
 
 class ConcreteBaseServer(BaseServer):
@@ -575,33 +579,47 @@ def test_locale_kwargs_leaves_out_an_unset_locale(locale: Optional[str]) -> None
 
 @pytest.mark.parametrize(
     "factory",
-    [lambda mcp_client, storage_dir, **kwargs: None, lambda mcp_client, storage_dir: None],
-    ids=["kwargs_only", "no_locale"],
+    [
+        lambda mcp_client, storage_dir, locale=None: None,
+        lambda mcp_client, storage_dir, **kwargs: None,
+        lambda mcp_client, storage_dir: None,
+    ],
+    ids=["named", "kwargs_only", "no_locale"],
 )
-def test_locale_kwargs_logs_a_set_locale_that_is_not_passed(
+def test_locale_kwargs_does_not_log(
     factory: Callable[..., Any], caplog: pytest.LogCaptureFixture
 ) -> None:
-    with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
+    with caplog.at_level(logging.DEBUG, logger="agent_builder_sdk.server.base_server"):
         _locale_kwargs(factory, "ja")
 
-    (record,) = caplog.records
-    assert record.levelno == logging.INFO
-    assert "'ja'" in record.getMessage() and "not passed" in record.getMessage()
+    assert caplog.records == []
 
 
 @pytest.mark.parametrize(
-    "factory, locale",
-    [
-        (lambda mcp_client, storage_dir, locale=None: None, "ja"),
-        (lambda mcp_client, storage_dir, **kwargs: None, None),
-        (lambda mcp_client, storage_dir, **kwargs: None, ""),
-    ],
-    ids=["passed", "unset", "empty"],
+    "factory_kwargs", [{}, {"workspace_id": "test-workspace"}], ids=["empty", "other_keys"]
 )
-def test_locale_kwargs_is_silent_when_the_locale_is_passed_or_unset(
-    factory: Callable[..., Any], locale: Optional[str], caplog: pytest.LogCaptureFixture
+def test_log_locale_not_passed_logs_a_set_locale_that_the_factory_call_lacks(
+    factory_kwargs: dict[str, Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
+        _log_locale_not_passed("ja", factory_kwargs)
+
+    (record,) = caplog.records
+    assert record.levelno == logging.INFO
+    assert record.getMessage().startswith(
+        "Locale 'ja' is set but the agent factory is called without a 'locale' argument"
+    )
+
+
+@pytest.mark.parametrize(
+    "locale, factory_kwargs",
+    [("ja", {"locale": "ja"}), ("ja", {"locale": "fr"}), (None, {}), ("", {})],
+    ids=["passed", "passed_another_value", "unset", "empty"],
+)
+def test_log_locale_not_passed_is_silent_when_the_locale_is_passed_or_unset(
+    locale: Optional[str], factory_kwargs: dict[str, Any], caplog: pytest.LogCaptureFixture
 ) -> None:
     with caplog.at_level(logging.DEBUG, logger="agent_builder_sdk.server.base_server"):
-        _locale_kwargs(factory, locale)
+        _log_locale_not_passed(locale, factory_kwargs)
 
     assert caplog.records == []
