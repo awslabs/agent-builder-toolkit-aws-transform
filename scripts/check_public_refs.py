@@ -45,10 +45,11 @@ RULES = (
         ),
         re.compile(r"(?:^|\.)(?:aws\.amazon\.com|elastic-gumby\.ai\.aws\.dev)$", re.IGNORECASE),
     ),
-    # Addresses at amazon.com and amazon.dev, except the public code-of-conduct contact.
+    # Addresses at amazon.com and amazon.dev, except the public code-of-conduct contact. The
+    # name can be empty: "{alias}@domain" and a bare "@domain" suffix are addresses too.
     Rule(
         "email",
-        re.compile(r"(?<![a-z0-9._%+-])[a-z0-9._%+-]+@amazon\.(?:com|dev)", re.IGNORECASE),
+        re.compile(r"(?<![a-z0-9._%+-])[a-z0-9._%+-]*@amazon\.(?:com|dev)", re.IGNORECASE),
         re.compile(r"^opensource-codeofconduct@amazon\.com$", re.IGNORECASE),
     ),
     # "[.]" and not an escaped dot, so that this file passes its own check.
@@ -75,6 +76,8 @@ FLAGGED_SAMPLES = tuple(
         "first.last@ama|zon.com",
         "first.last+tag@ama|zon.dev",
         r"first\.last@ama|zon\.com",
+        "{alias}@ama|zon.com",
+        '"@ama|zon.dev"',
         "sla|ck.com/archives/C0000000000",
         "AKI|A0123456789ABCDEF",
         "ASI|A0123456789ABCDEF",
