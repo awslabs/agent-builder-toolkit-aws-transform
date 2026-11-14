@@ -435,11 +435,13 @@ def create_default_async_orchestrator_with_subagent(
             selects a custom interpreter instead; its network access depends on its network
             mode, and the tool tells the model not to assume either way. Each sandbox
             session ends ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS (default 900, max
-            28800; a non-numeric value raises ValueError) after it starts, regardless of
-            activity, and takes its files with it; the next call starts a new session and
-            says so in its result. Sessions are stopped at a normal interpreter exit; when
-            a signal ends the process they run until that timeout unless your shutdown
-            path calls agent_builder_sdk.experimental.code_interpreter.stop_all_sessions.
+            28800; a value that is not a whole number of 1 or more raises ValueError)
+            after it starts, regardless of activity, and takes its files with it; the
+            next call starts a new session and says so in its result. Sessions are
+            stopped when the SDK server gets a STOP request or shuts down, and at a
+            normal interpreter exit; a process that serves the agent in another way and
+            is ended by a signal must call
+            agent_builder_sdk.experimental.code_interpreter.stop_all_sessions itself.
             Requires the code-interpreter extra:
             pip install 'agent-builder-sdk-aws-transform[code-interpreter]'.
 

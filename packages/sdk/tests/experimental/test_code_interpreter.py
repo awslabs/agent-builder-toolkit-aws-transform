@@ -9,10 +9,11 @@ import sys
 import textwrap
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from unittest.mock import patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from agent_builder_sdk.custom_types.server_types import JsonRpcMethods
 from agent_builder_sdk.experimental.code_interpreter import code_interpreter_tool
 from agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter import (
     NEW_SESSION_NOTICE,
@@ -24,6 +25,9 @@ from agent_builder_sdk.experimental.code_interpreter.code_interpreter_tool impor
     create_code_interpreter_tool,
     stop_all_sessions,
 )
+from agent_builder_sdk.server.agent_runtime_server import AgentRuntimeServer
+from agent_builder_sdk.server.base_server import BaseServer
+from agent_builder_sdk.server.stateless_agent_runtime_server import StatelessAgentRuntimeServer
 from tests.experimental.conftest import FakeSandbox
 
 pytestmark = pytest.mark.filterwarnings("ignore::FutureWarning")
@@ -100,6 +104,22 @@ class TestSessionTimeout:
         with pytest.raises(ValueError, match=rf"^{SESSION_TIMEOUT_ENV_VAR} must be a whole number of seconds"):
             _tools({SESSION_TIMEOUT_ENV_VAR: value})
 
+    @pytest.mark.parametrize("value", ["0", "-5"])
+    def test_env_value_below_one_raises_an_error_that_names_the_variable(self, value: str) -> None:
+        # Not floored to 1: a one-second session would lose every staged file.
+        with pytest.raises(ValueError, match=rf"^{SESSION_TIMEOUT_ENV_VAR} must be .* 1 or more, got '{value}'$"):
+            _tools({SESSION_TIMEOUT_ENV_VAR: value})
+
+    @pytest.mark.parametrize("value", [0, -5])
+    def test_argument_below_one_raises_an_error_that_names_the_argument(self, value: int) -> None:
+        with pytest.raises(ValueError, match=rf"^session_timeout_seconds must be 1 or more, got {value}$"):
+            _tools(session_timeout_seconds=value)
+
+    def test_one_second_is_accepted(self, sandbox: FakeSandbox) -> None:
+        _list_files(_tools({SESSION_TIMEOUT_ENV_VAR: "1"}))
+        _list_files(_tools(session_timeout_seconds=1))
+        assert [s["session_timeout_seconds"] for s in sandbox.started] == [1, 1]
+
 
 class TestCodeInterpreterTool:
     def test_runs_an_action_given_as_a_dict_or_as_a_model(self, sandbox: FakeSandbox) -> None:
@@ -158,6 +178,19 @@ class TestStageFileToSandbox:
         assert result.endswith(NEW_SESSION_NOTICE)
         assert sandbox.files() == [["a.csv"], ["b.csv"]]
 
+    def test_failed_staging_into_a_replacement_session_tells_the_model(
+        self, sandbox: FakeSandbox, tmp_path: Path
+    ) -> None:
+        # The write was rejected, and the files staged earlier are gone as well.
+        tools = _tools()
+        _stage(tools, _file(tmp_path, "a.csv"), "a.csv")
+        sandbox.end_all_sessions()
+        sandbox.result = {"content": [{"type": "text", "text": "Permission denied: /etc/x"}], "isError": True}
+        result = _stage(tools, _file(tmp_path, "b.csv"), "/etc/x")
+        assert result.startswith("Error: staging failed"), result
+        assert "Permission denied" in result
+        assert result.endswith(NEW_SESSION_NOTICE)
+
 
 class TestStopAllSessions:
     def test_stops_the_sessions_of_every_tool_pair_in_use(self, sandbox: FakeSandbox) -> None:
@@ -200,3 +233,51 @@ class TestStopAllSessions:
         env = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
         out = subprocess.run([sys.executable, "-c", script], env=env, capture_output=True, text=True, timeout=120)
         assert out.stdout.splitlines() == ["exiting", "stopped aws-session-1"], out.stdout + out.stderr
+
+
+def _agent_runtime_server() -> AgentRuntimeServer:
+    module = "agent_builder_sdk.server.agent_runtime_server"
+    with patch(f"{module}.NotificationHandler"), patch(f"{module}.MessageHandler"):
+        return AgentRuntimeServer(agent_factory=Mock())
+
+
+def _stateless_server() -> StatelessAgentRuntimeServer:
+    with patch("agent_builder_sdk.server.stateless_agent_runtime_server.MessageHandler"):
+        return StatelessAgentRuntimeServer(agent_factory=Mock())
+
+
+class TestServerShutdown:
+    """A signal ends a served agent without running atexit handlers; the servers stop the sessions."""
+
+    @pytest.mark.parametrize("make_server", [_agent_runtime_server, _stateless_server])
+    async def test_lifespan_shutdown_stops_the_sessions(self, sandbox: FakeSandbox, make_server: Any) -> None:
+        server: BaseServer = make_server()
+        tools = _tools()
+        with patch.object(server, "_startup"):
+            async with server._lifespan(server.app):
+                _list_files(tools)
+                assert sandbox.stopped == []
+        assert sandbox.stopped == ["aws-session-1"]
+
+    @pytest.mark.parametrize("make_server", [_agent_runtime_server, _stateless_server])
+    async def test_stop_request_stops_the_sessions_once(self, sandbox: FakeSandbox, make_server: Any) -> None:
+        # A STOP request runs the cleanup, and the lifespan shutdown runs it again.
+        server: BaseServer = make_server()
+        tools = _tools()
+        _list_files(tools)
+        with patch.object(server, "handle_stop", AsyncMock(return_value={"message": "stopped"}), create=True):
+            response = await server.handle_jsonrpc({"jsonrpc": "2.0", "id": 1, "method": JsonRpcMethods.STOP})
+        assert response["error"] is None, response
+        assert sandbox.stopped == ["aws-session-1"]
+        await server._cleanup()
+        assert sandbox.stopped == ["aws-session-1"]
+
+    async def test_a_failed_stop_is_logged_and_does_not_fail_the_shutdown(
+        self, sandbox: FakeSandbox, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        tools = _tools()
+        _list_files(tools)
+        sandbox.stop_error = RuntimeError("no route to the service")
+        with caplog.at_level("WARNING"):
+            await _agent_runtime_server()._cleanup()
+        assert "Could not stop the code-interpreter sessions: no route to the service" in caplog.text

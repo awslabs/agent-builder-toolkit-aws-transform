@@ -16,7 +16,8 @@ Or via agent factory:
         enable_code_execution=True
     )
 
-Future: AgentCore Code Interpreter integration for sandboxed execution.
+For sandboxed execution use the AgentCore Code Interpreter tools instead:
+``enable_code_interpreter=True`` (``agent_builder_sdk.experimental.code_interpreter``).
 """
 
 import warnings
@@ -26,7 +27,8 @@ from agent_builder_sdk.experimental.code_execution.code_execution_tool import py
 warnings.warn(
     "agent_builder_sdk.experimental.code_execution is an experimental feature. "
     "Code executes locally without sandboxing. Use with caution. "
-    "AgentCore Code Interpreter integration planned for future release.",
+    "For sandboxed execution use enable_code_interpreter=True, which needs the "
+    "code-interpreter extra.",
     category=FutureWarning,
     stacklevel=2,
 )

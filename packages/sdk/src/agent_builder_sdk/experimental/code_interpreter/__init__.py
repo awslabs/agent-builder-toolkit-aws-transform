@@ -11,7 +11,8 @@ has the network access and the credentials it was created with. Data moves in wi
 pushing to AWS stays in the agent container.
 
 Sandbox sessions are billed until they end. ``stop_all_sessions`` stops them; it runs by
-itself at a normal interpreter exit, but not when a signal ends the process.
+itself when an SDK server gets a STOP request or shuts down, and at a normal interpreter
+exit.
 
 Needs the ``code-interpreter`` extra:
 ``pip install 'agent-builder-sdk-aws-transform[code-interpreter]'``.

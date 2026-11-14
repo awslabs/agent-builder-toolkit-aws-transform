@@ -246,9 +246,10 @@ class StatelessAgentRuntimeServer(BaseServer):
 
     @asynccontextmanager
     async def _lifespan(self, app: FastAPI):
-        """FastAPI lifespan for graceful startup (no cleanup needed for stateless)."""
+        """FastAPI lifespan: startup, then the base cleanup (sandbox sessions) on shutdown."""
         await self._startup()
         yield
+        await self._cleanup()
 
     async def _startup(self) -> None:
         """Unified startup logic."""

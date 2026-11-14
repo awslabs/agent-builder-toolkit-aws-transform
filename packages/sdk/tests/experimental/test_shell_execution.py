@@ -6,7 +6,10 @@ import os
 import subprocess
 import sys
 import time
+import tracemalloc
 import warnings
+from io import BytesIO
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -18,6 +21,8 @@ warnings.filterwarnings(
 
 from agent_builder_sdk.experimental.shell_execution import execute_shell  # noqa: E402
 from agent_builder_sdk.experimental.shell_execution.shell_execution_tool import (  # noqa: E402
+    _MAX_STDOUT_BYTES,
+    _CappedReader,
     _decode,
     _sanitized_env,
     _validate_command,
@@ -110,6 +115,43 @@ class TestExecuteShellTool:
         assert _decode(b"abc", 3) == "abc"
         assert _decode(b"ab\xc3\xa9", 3) == "ab\ufffd\n[output truncated]"
         assert _decode(b"", 3) == ""
+
+    def test_reader_keeps_the_first_bytes_and_counts_all(self) -> None:
+        reader = _CappedReader(BytesIO(b"abcdef" * 100_000), 4)
+        reader.join(timeout=10)
+        assert bytes(reader.kept) == b"abcd"
+        assert reader.total_bytes == 600_000
+
+    def test_output_far_over_the_limit_is_not_held_in_memory(self, caplog: pytest.LogCaptureFixture) -> None:
+        # 100 MB of output: the result is cut at the limit, and the agent process must
+        # not hold the rest while the command runs.
+        tracemalloc.start()
+        try:
+            with warnings.catch_warnings(), caplog.at_level("INFO"):
+                warnings.simplefilter("ignore", FutureWarning)
+                result = execute_shell(command="head -c 100000000 /dev/zero", working_directory="/tmp")
+            peak_bytes = tracemalloc.get_traced_memory()[1]
+        finally:
+            tracemalloc.stop()
+        assert result == "\x00" * _MAX_STDOUT_BYTES + "\n[output truncated]\n[exit code: 0]"
+        assert "stdout_bytes=100000000, stderr_bytes=0" in caplog.text
+        assert peak_bytes < 10 * 1024 * 1024
+
+    def test_command_does_not_read_the_agents_stdin(self) -> None:
+        # With the agent's stdin an open pipe, a command that reads stdin would wait
+        # on it until the timeout.
+        read_end, write_end = os.pipe()
+        agent_stdin = os.dup(0)
+        os.dup2(read_end, 0)
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", FutureWarning)
+                result = execute_shell(command="cat", working_directory="/tmp", timeout_seconds=2)
+        finally:
+            os.dup2(agent_stdin, 0)
+            for fd in (agent_stdin, read_end, write_end):
+                os.close(fd)
+        assert result == "[exit code: 0]"
 
     def test_timeout_kills_whole_process_tree(self, tmp_path):
         # A grandchild spawned by the shell must be killed on timeout, not orphaned.
@@ -219,20 +261,29 @@ class TestCommandValidation:
         # A lone `&` backgrounds the first stage and the shell runs whatever
         # follows, but only the first token is allowlist-checked — so `echo & curl`
         # smuggles curl past the allowlist. Reject it while keeping the redirection
-        # forms that legitimately contain `&` (2>&1, &>, >&).
+        # forms in which every shell reads `&` as part of the operator (2>&1, >&).
         assert not _validate_command("echo hi & curl evil.com")[0]
         assert not _validate_command("python3 x.py & curl evil")[0]
         assert not _validate_command("head -5&curl evil.com")[0]
         assert not _validate_command("sleep 5 &")[0]
-        # Redirections use & beside a > (or after a fd digit then >), not as a
-        # separator — these must still pass.
+        # Directly after > or <, & duplicates a file descriptor — these must still pass.
         assert _validate_command("ls 2>&1")[0]
         assert _validate_command("ls 1>&2")[0]
-        assert _validate_command("ls &> /tmp/x")[0]
+        assert _validate_command("ls > /tmp/x 2>&1")[0]
         assert _validate_command("cat f >& /tmp/x")[0]
+        assert _validate_command("cat <&0")[0]
         # A literal & inside quotes is content, not an operator.
         assert _validate_command("echo 'a & b'")[0]
         assert _validate_command('echo "a & b"')[0]
+
+    def test_ampersand_before_a_redirection_rejected(self) -> None:
+        # bash reads `&>file` as a redirection. A shell without that operator (dash, the
+        # /bin/sh of Debian images) reads `ls &` and then runs the rest as a command.
+        assert not _validate_command("ls &>/dev/null touch /tmp/marker")[0]
+        assert not _validate_command("ls &> /tmp/x")[0]
+        assert not _validate_command("ls &>> /tmp/x")[0]
+        assert not _validate_command("ls |& cat")[0]
+        assert not _validate_command("ls >&2 & curl evil.com")[0]
 
     def test_tar_short_compress_flag_rejected(self):
         # tar's -I (--use-compress-program) runs an arbitrary program. GNU getopt
@@ -370,6 +421,73 @@ class TestCommandValidation:
         assert _validate_command("tar xzf a.tar")[0]
         assert _validate_command("tar tf a.tar Input/File.txt")[0]
 
+    def test_braced_and_arithmetic_expansion_rejected(self) -> None:
+        # `${x:=word}` assigns, and an arithmetic context then evaluates the stored text:
+        # bash runs the `\$(...)` that the quote scan took as literal.
+        assert not _validate_command("ls ${x:=a[\\$(curl evil.com)]} ${y[x]}")[0]
+        assert not _validate_command("ls $[x]")[0]
+        assert not _validate_command("ls ${PATH:x}")[0]
+        assert not _validate_command("ls ${HOME}")[0]
+        assert not _validate_command('ls "${HOME}"')[0]
+        assert not _validate_command('ls "$[1+1]"')[0]
+        # A plain variable, and the same characters as literal text, stay usable.
+        assert _validate_command("ls $HOME/data")[0]
+        assert _validate_command('ls "$HOME/data"')[0]
+        assert _validate_command("echo '${x}' '$[1]'")[0]
+        assert _validate_command('echo \\${x} "\\${x}" "a{b}" "$" "{x}"')[0]
+        assert _validate_command("awk '{print $1}' f")[0]
+
+    def test_line_continuation_rejected(self) -> None:
+        # The shell removes a backslash-newline and joins the words around it, so
+        # `-ex` and `ec` reach find as `-exec`.
+        assert not _validate_command("find /tmp -ex\\\nec curl evil.com \\;")[0]
+        assert not _validate_command('find /tmp "-ex\\\nec" curl evil.com \\;')[0]
+        assert not _validate_command("ls -l \\\n/tmp")[0]
+        # Inside single quotes the pair is literal text.
+        assert _validate_command("printf 'a\\\nb'")[0]
+
+    def test_noclobber_redirection_rejected(self) -> None:
+        # `>|` is one redirection operator; read as `>` and a pipe, the words after it
+        # would pass as a stage of their own that starts with `ls`.
+        assert not _validate_command("find /tmp >|ls -exec curl evil.com \\;")[0]
+        assert not _validate_command("ls >|/tmp/out")[0]
+
+    def test_expansion_in_a_command_with_exec_options_rejected(self) -> None:
+        # The shell rewrites these words after the option check has read them.
+        assert not _validate_command("find /tmp -exec$none curl evil.com \\;")[0]
+        assert not _validate_command('find /tmp "-exec$none" curl evil.com \\;')[0]
+        assert not _validate_command("find /tmp -exe[c] curl evil.com \\;")[0]
+        assert not _validate_command("find /tmp -exe? curl evil.com \\;")[0]
+        assert not _validate_command("find /tmp * curl evil.com \\;")[0]
+        assert not _validate_command("find /tmp {-exec,} curl evil.com \\;")[0]
+        assert not _validate_command("tar -xf a.tar --to-command$none=curl")[0]
+        assert not _validate_command("sort --compress-progra? curl f")[0]
+        assert not _validate_command("rg --pr[e] curl pattern")[0]
+        assert not _validate_command("cat f | sort -k$none")[0]
+        # Quoted, the same characters are the program's own patterns.
+        assert _validate_command("find /tmp -name '*.py' -o -name \"[a-c]?.txt\"")[0]
+        assert _validate_command("find /tmp \\( -name a -o -name b \\) -newer /tmp/x")[0]
+        assert _validate_command("rg 'value: \\$\\{[a-z]+\\}$' /tmp")[0]
+        assert _validate_command("tar -xzf a.tar.gz --wildcards '*.json' -C /tmp/out")[0]
+        # Other commands have no option check to get around.
+        assert _validate_command("ls /tmp/*.csv $HOME/{a,b}")[0]
+        assert _validate_command("cat /tmp/part-?.txt | sort -u")[0]
+
+    def test_redirection_does_not_hide_an_exec_option(self) -> None:
+        # A redirection operator ends a word: the shell reads `-exec>/dev/null` as
+        # `-exec`, and takes a redirection in front of tar's first word out.
+        assert not _validate_command("find /tmp -exec>/dev/null curl evil.com \\;")[0]
+        assert not _validate_command("find /tmp -exec</dev/null curl evil.com \\;")[0]
+        assert not _validate_command("sort --compress-program>/dev/null curl f")[0]
+        assert not _validate_command("tar >/dev/null cIf curl a.tar d")[0]
+        assert not _validate_command("tar 2>/dev/null cIf curl a.tar d")[0]
+        assert not _validate_command("tar >/dev/null 2>&1 cIf curl a.tar d")[0]
+        assert _validate_command("find /tmp -name x 2>/dev/null")[0]
+        assert _validate_command("find /tmp -name '>' -newer /tmp/x")[0]
+        assert _validate_command("tar 2>/dev/null xzf a.tar")[0]
+        assert _validate_command("tar -tf a.tar >/tmp/Index 2>&1")[0]
+        assert _validate_command("ls>/tmp/out")[0]
+
     @pytest.mark.parametrize(
         "command",
         [
@@ -380,14 +498,32 @@ class TestCommandValidation:
             "tar -cf {tmp}/a.tar -C {tmp} src --checkpoint=1 --checkpoint-ac=exec='touch {tmp}/marker'",
             "tar cIf 'touch {tmp}/marker' {tmp}/a.tar -C {tmp} src",
             "sort --compress-prog='touch {tmp}/marker' -S 1k -T {tmp} /etc/services",
+            "find {tmp} -maxdepth 0 ${{x:--exec}} touch {tmp}/marker {{}} +",
+            'find {tmp} -maxdepth 0 "${{x:--exec}}" touch {tmp}/marker \\;',
+            "tar -cf /dev/null {tmp}/src ${{x:---checkpoint=1}} ${{y:---checkpoint-action=exec=touch\\ {tmp}/marker}}",
+            "find {tmp} -maxdepth 0 {{-exec,}} touch {tmp}/marker \\;",
+            "find {tmp} -maxdepth 0 -exe[c] touch {tmp}/marker \\;",
+            "find {tmp} -maxdepth 0 * touch {tmp}/marker \\;",
+            "find {tmp} -maxdepth 0 -exec$none touch {tmp}/marker \\;",
+            'find {tmp} -maxdepth 0 "-exec$none" touch {tmp}/marker \\;',
+            "find {tmp} -maxdepth 0 -ex\\\nec touch {tmp}/marker \\;",
+            "find {tmp} -maxdepth 0 -exec>/dev/null touch {tmp}/marker \\;",
+            "find {tmp} -maxdepth 0 >|ls -exec touch {tmp}/marker \\;",
+            "ls ${{x:=a[\\$(touch {tmp}/marker)]}} ${{y[x]}}",
+            "ls ${{x:=a[\\$(touch {tmp}/marker)]}} $[x]",
+            "ls ${{x:=a[\\$(touch {tmp}/marker)]}} ${{PATH:x}}",
+            'ls "${{x:=a[\\$(touch {tmp}/marker)]}}" "${{y[x]}}"',
         ],
     )
-    def test_end_to_end_bypass_does_not_run_another_program(self, tmp_path, command: str) -> None:
-        # `touch` is not on the allowlist; each command once ran it through execute_shell.
+    def test_end_to_end_bypass_does_not_run_another_program(self, tmp_path: Path, command: str) -> None:
+        # `touch` is not on the allowlist; each command once ran it through execute_shell
+        # (the brace and arithmetic forms where /bin/sh is bash).
         (tmp_path / "src").write_text("x")
+        # The working directory holds one entry, for the glob forms to match.
+        (tmp_path / "cwd" / "-exec").mkdir(parents=True)
         with warnings.catch_warnings(), mock.patch.dict(os.environ, {"ATX_SHELL_ALLOW_PYTHON": "false"}):
             warnings.simplefilter("ignore", FutureWarning)
-            result = execute_shell(command=command.format(tmp=tmp_path), working_directory=str(tmp_path))
+            result = execute_shell(command=command.format(tmp=tmp_path), working_directory=str(tmp_path / "cwd"))
         assert result.startswith("Error:"), result
         assert not (tmp_path / "marker").exists()
 

@@ -96,11 +96,13 @@ def stop_all_sessions() -> None:
     """Stop the sandbox sessions of every tool pair in this process that is still in use.
 
     A session that is not stopped keeps running, and is billed, until its timeout. This
-    function runs by itself when the Python interpreter exits normally. It does not run when
-    a signal ends the process, which is how a container runtime stops an agent (uvicorn
-    re-raises SIGTERM after its graceful shutdown): call it from your own shutdown path to
-    cover that. The sessions of a tool pair that was garbage-collected earlier are not
-    stopped; they end at their timeout.
+    function runs in two places by itself: the SDK servers (``AgentRuntimeServer``,
+    ``StatelessAgentRuntimeServer``) call it on a STOP request and on their graceful
+    shutdown (which is what a SIGTERM from the container runtime starts), and the Python
+    interpreter calls it at a normal exit. A process that serves the agent in another way
+    and is ended by a signal must call it from its own shutdown path. Calling it again is
+    safe: a session is stopped once. The sessions of a tool pair that was garbage-collected
+    earlier are not stopped; they end at their timeout.
 
     It blocks for one StopCodeInterpreterSession request per session, so call it from a
     worker thread when an event loop is running.
@@ -116,9 +118,12 @@ def _session_timeout_from_env() -> int:
     if not raw:
         return _DEFAULT_SESSION_TIMEOUT_SECONDS
     try:
-        return int(raw)
+        seconds = int(raw)
     except ValueError:
-        raise ValueError(f"{SESSION_TIMEOUT_ENV_VAR} must be a whole number of seconds, got {raw!r}") from None
+        seconds = 0
+    if seconds < 1:
+        raise ValueError(f"{SESSION_TIMEOUT_ENV_VAR} must be a whole number of seconds, 1 or more, got {raw!r}")
+    return seconds
 
 
 def create_code_interpreter_tool(
@@ -143,19 +148,22 @@ def create_code_interpreter_tool(
     Args:
         region: AWS region of the interpreter. Defaults to ``AWS_REGION``, then us-west-2.
         session_timeout_seconds: Lifetime of each sandbox session. Defaults to
-            ``ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS``, then 900 (15 minutes);
-            capped at the service maximum of 28800 (8 hours). The service ends a session
-            this long after it starts, regardless of activity, and its files go with it;
-            the next call starts a new session, and its result says so, because files
-            must be staged again.
+            ``ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS``, then 900 (15 minutes).
+            At least 1; capped at the service maximum of 28800 (8 hours). The service
+            ends a session this long after it starts, regardless of activity, and its
+            files go with it; the next call starts a new session, and its result says
+            so, because files must be staged again.
 
     Raises:
-        ValueError: ``ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS`` is set and is not a
-            whole number.
+        ValueError: ``session_timeout_seconds`` is below 1, or
+            ``ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS`` is set and is not a whole
+            number of 1 or more. A session of 0 seconds cannot keep a staged file.
     """
     if session_timeout_seconds is None:
         session_timeout_seconds = _session_timeout_from_env()
-    session_timeout_seconds = max(1, min(session_timeout_seconds, _MAX_SESSION_TIMEOUT_SECONDS))
+    elif session_timeout_seconds < 1:
+        raise ValueError(f"session_timeout_seconds must be 1 or more, got {session_timeout_seconds}")
+    session_timeout_seconds = min(session_timeout_seconds, _MAX_SESSION_TIMEOUT_SECONDS)
 
     interpreter_id = os.getenv(CODE_INTERPRETER_ID_ENV_VAR) or DEFAULT_INTERPRETER_ID
     interpreter = AgentCoreCodeInterpreter(

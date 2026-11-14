@@ -2869,19 +2869,20 @@ agent = create_default_async_orchestrator_with_subagent(
 |---|---|---|
 | `ATX_SHELL_ALLOW_PYTHON` | `true` | `false` removes `python` and `python3` from the shell allowlist. |
 | `ATX_CODE_INTERPRETER_ID` | `aws.codeinterpreter.v1` | Identifier of your own interpreter. The default interpreter has no network access. The network access of your own interpreter depends on its network mode. |
-| `ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS` | `900` | Lifetime of a sandbox session in seconds, 1 to 28800. A value that is not a whole number raises `ValueError` when the agent is built. |
+| `ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS` | `900` | Lifetime of a sandbox session in seconds, 1 to 28800. A value over 28800 is used as 28800. A value that is not a whole number, or is below 1, raises `ValueError` when the agent is built. |
 
 `execute_shell`:
 
-- Runs allowlisted commands (file inspection, text processing, archives, `rm`/`mkdir`, `python`) joined by pipes. It rejects `;`, `&&`, `||`, `&`, command and process substitution, an unquoted `#`, `$'...'` quoting, a variable assignment or a redirection before the command name, and the options of `find`, `tar`, `sort` and `rg` that run another program.
-- Limits: 30 seconds per command by default (120 maximum), 20 KB of stdout and 10 KB of stderr returned.
+- Runs allowlisted commands (file inspection, text processing, archives, `rm`/`mkdir`, `python`) joined by pipes. It rejects `;`, `&&`, `||`, `&` (also `&>file`: write `>file 2>&1`), `>|`, command and process substitution, `${...}` and `$[...]` (plain `$NAME` is allowed), an unquoted `#`, `$'...'` quoting, a backslash at the end of a line, a variable assignment or a redirection before the command name, and the options of `find`, `tar`, `sort` and `rg` that run another program.
+- In the arguments of `find`, `tar`, `sort` and `rg` it also rejects `$` outside single quotes and an unquoted `*`, `?`, `[` or `{`, because the shell would change the word after the option check. Quote patterns (`find /tmp -name '*.py'`) and write paths out in full. Other commands take globs and `$NAME` as usual.
+- Limits: 30 seconds per command by default (120 maximum). 20 KB of stdout and 10 KB of stderr are kept; the rest is read and dropped, so a large output does not grow the agent's memory. The command gets an empty stdin.
 - The subprocess gets no AWS credentials: credential environment variables are removed, and the shared credential files and the instance metadata lookup are switched off. Scripts that call AWS must use temporary credentials from a connector.
 
 Security limits of `execute_shell`. The allowlist is defense in depth. It is not a sandbox:
 
 - `awk`, `sed` and `python` can start other programs from their own scripts. `ATX_SHELL_ALLOW_PYTHON=false` removes `python` only.
 - A command given with a path is matched by its base name.
-- The validator is a set of rules, not a shell parser, so do not rely on it to contain a hostile prompt.
+- The validator is a set of rules, not a shell parser, so do not rely on it to contain a hostile prompt. It does not cover what the shell's own builtins evaluate (for example `printf -v` or `test -v` with an array subscript).
 - A command can read and delete every file that the container user can.
 - Treat the tool as able to run any program in the container. The container and its execution role are the security boundary.
 
@@ -2890,7 +2891,7 @@ Code interpreter:
 - The agent's execution role needs `bedrock-agentcore:StartCodeInterpreterSession`, `InvokeCodeInterpreter`, `GetCodeInterpreterSession` and `StopCodeInterpreterSession`. Sessions start in `AWS_REGION` (`us-west-2` when unset).
 - `stage_file_to_sandbox` copies one file of at most 5 MiB from the agent container into the sandbox.
 - A session starts on first use and ends when its lifetime is over, also when it is in use. The next call starts a new, empty session and its result tells the model so.
-- A session is billed until it ends. `agent_builder_sdk.experimental.code_interpreter.stop_all_sessions()` stops the sessions of the process. It runs by itself when the Python interpreter exits normally. It does not run when a signal ends the process, for example the SIGTERM of a container runtime: the sessions then run until their lifetime is over, unless your shutdown code calls it.
+- A session is billed until it ends. `agent_builder_sdk.experimental.code_interpreter.stop_all_sessions()` stops the sessions of the process. `AgentRuntimeServer` and `StatelessAgentRuntimeServer` call it on a STOP request and on graceful shutdown (the SIGTERM of a container runtime starts one), and the Python interpreter calls it at a normal exit. If you serve the agent in another way and a signal ends the process, call it from your shutdown code; otherwise the sessions run until their lifetime is over.
 
 ## AWS Transform Agentic API Specification
 

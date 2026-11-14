@@ -962,6 +962,8 @@ class AgentRuntimeServer(BaseServer):
         except Exception as e:
             logger.error(f"Error during shutdown: {e}")
 
+        await self._stop_code_interpreter_sessions()
+
     async def handle_stop(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Handle stop agent request for orchestrator agents.

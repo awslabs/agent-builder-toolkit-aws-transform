@@ -4,9 +4,11 @@
 Abstract base server interface.
 """
 
+import asyncio
 import json
 import logging
 import os
+import sys
 import uuid
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
@@ -85,7 +87,23 @@ class BaseServer(ABC):
 
     async def _cleanup(self) -> None:
         """Cleanup all components during shutdown - (optional)"""
-        pass
+        await self._stop_code_interpreter_sessions()
+
+    async def _stop_code_interpreter_sessions(self) -> None:
+        """Stop the sandbox sessions of the code-interpreter tools, which are billed until they end.
+
+        Safe to run more than once in a shutdown: a session is stopped once. The module
+        is looked up instead of imported, so a server whose agent does not use the tools
+        does not need the code-interpreter extra.
+        """
+        tools = sys.modules.get("agent_builder_sdk.experimental.code_interpreter.code_interpreter_tool")
+        if tools is None:
+            return
+        try:
+            # One blocking StopCodeInterpreterSession request per session.
+            await asyncio.to_thread(tools.stop_all_sessions)
+        except Exception as e:
+            logger.warning(f"Could not stop the code-interpreter sessions: {e}")
 
     @abstractmethod
     def start(self) -> None:
