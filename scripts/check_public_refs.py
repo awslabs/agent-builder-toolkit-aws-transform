@@ -34,15 +34,16 @@ class Rule(NamedTuple):
 RULES = (
     # Hosts under amazon.com, amazon.dev, aws.dev, a2z.com and a2z.org, except the public
     # aws.amazon.com sites and the product API endpoints. "}" and ">" catch a host whose
-    # leading label is a template placeholder.
+    # leading label is a template placeholder. The backslashes catch a host whose dots are
+    # escaped, as in a regular expression or an escaped string.
     Rule(
         "host",
         re.compile(
-            r"(?<![a-z0-9.-])[a-z0-9.-]*[a-z0-9}>]"
-            r"(?:[.-]amazon\.(?:com|dev)|\.aws\.dev|\.a2z\.(?:com|org))",
+            r"(?<![a-z0-9.\\-])[a-z0-9.\\-]*[a-z0-9}>]\\*"
+            r"(?:[.-]amazon\\*\.(?:com|dev)|\.aws\\*\.dev|\.a2z\\*\.(?:com|org))",
             re.IGNORECASE,
         ),
-        re.compile(r"(?:^|\.)(?:[a-z0-9-]+\.)*(?:aws\.amazon\.com|elastic-gumby\.ai\.aws\.dev)$", re.IGNORECASE),
+        re.compile(r"(?:^|\.)(?:aws\\*\.amazon\\*\.com|elastic-gumby\\*\.ai\\*\.aws\\*\.dev)$", re.IGNORECASE),
     ),
     # Addresses at amazon.com and amazon.dev, except the public code-of-conduct contact.
     Rule(
@@ -67,6 +68,8 @@ FLAGGED_SAMPLES = tuple(
         "<host>.ama|zon.com",
         "made-up.a2|z.com",
         "made-up.a2|z.org",
+        r"made-up\.ama|zon\.com",
+        r"made-up\\.aw|s\\.dev",
         "first.last@ama|zon.com",
         "first.last+tag@ama|zon.dev",
         "sla|ck.com/archives/C0000000000",
@@ -88,7 +91,9 @@ ALLOWED_SAMPLES = (
     "Copyright Amazon.com, Inc. or its affiliates.",
     "https://docs.aws.amazon.com/bedrock/",
     "{region}.console.aws.amazon.com",
+    r"docs\.aws\.amazon\.com",
     "iad.prod.agenticapi.elastic-gumby.ai.aws.dev",
+    r"iad\.prod\.agenticapi\.elastic-gumby\.ai\.aws\.dev",
     "opensource-codeofconduct@amazon.com",
     "first.last@example.com",
     "AKIAIOSFODNN7EXAMPLE",
@@ -143,7 +148,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         summary = (
             "The rules judge these samples wrongly"
             if self_test
-            else "Non-public references or access keys found. Remove them before merging"
+            else "Non-public references or access keys found. Remove them, or when a reference is public "
+            "add it to the allowlist of its rule in scripts/check_public_refs.py"
         )
         print(f"::error::{summary}:", *problems, sep="\n")
         return 1

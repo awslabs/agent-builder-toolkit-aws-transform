@@ -92,10 +92,11 @@ class TestRules:
     def test_line_number_counts_from_one(self, check_public_refs: ModuleType) -> None:
         assert list(check_public_refs.find_refs(f"{EMAIL}\n\n{EMAIL}\n")) == [(1, "email", EMAIL), (3, "email", EMAIL)]
 
-    def test_long_run_of_host_characters_scans_in_linear_time(self, check_public_refs: ModuleType) -> None:
+    @pytest.mark.parametrize("unit", ["a", "a\\"])
+    def test_long_run_of_host_characters_scans_in_linear_time(self, check_public_refs: ModuleType, unit: str) -> None:
         # A pattern that retries from every character of the run needs tens of seconds for this input.
         start = time.process_time()
-        assert list(check_public_refs.find_refs("a" * 30_000 + "%" * 30_000)) == []
+        assert list(check_public_refs.find_refs(unit * 30_000 + "%" * 30_000)) == []
         assert time.process_time() - start < 2
 
 
@@ -187,6 +188,7 @@ class TestMain:
         assert check_public_refs.main([]) == 1
         out = capsys.readouterr().out
         assert out.startswith("::error::")
+        assert "allowlist of its rule in scripts/check_public_refs.py" in out.splitlines()[0]
         assert f"notes.md:1: email: {EMAIL}" in out.splitlines()
 
     def test_self_test_exits_zero_without_reading_the_repository(
