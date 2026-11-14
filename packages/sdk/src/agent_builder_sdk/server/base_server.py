@@ -64,7 +64,8 @@ def _locale_kwargs(factory: Callable[..., Any], locale: Optional[str]) -> Dict[s
     parameter that takes a keyword. An unset locale is left out so the factory's own default
     applies. The request value is not type-checked before it gets here, so a value that is
     not a string is left out too. A bare ``**kwargs`` does not count, because such factories
-    often forward it to a callable with a fixed signature.
+    often forward it to a callable with a fixed signature. A ``functools.wraps`` wrapper must
+    itself take the keyword, by name or through ``**kwargs``.
     """
     if not locale or not isinstance(locale, str):
         return {}
@@ -73,6 +74,12 @@ def _locale_kwargs(factory: Callable[..., Any], locale: Optional[str]) -> Dict[s
         inspect.Parameter.POSITIONAL_OR_KEYWORD,
         inspect.Parameter.KEYWORD_ONLY,
     ):
+        return {}
+    try:
+        # The signature read above follows functools.wraps to the wrapped callable, but the
+        # server calls the wrapper.
+        inspect.signature(factory, follow_wrapped=False).bind_partial(locale=locale)
+    except TypeError:
         return {}
     return {"locale": locale}
 

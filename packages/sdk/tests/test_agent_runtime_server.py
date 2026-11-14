@@ -9,6 +9,7 @@ agent execution environments through JSON-RPC endpoints.
 
 import asyncio
 import dataclasses
+import functools
 import logging
 from multiprocessing import Event as MPEvent
 from typing import Any, Optional
@@ -2888,6 +2889,11 @@ def legacy_factory(mcp_client: Any, storage_dir: str) -> dict[str, Any]:
     return {}
 
 
+@functools.wraps(named_locale_factory)
+def fixed_wrapper_factory(mcp_client: Any, storage_dir: str) -> dict[str, Any]:
+    return {}
+
+
 NAMED_LOCALE_FACTORIES = [
     named_locale_factory,
     keyword_only_locale_factory,
@@ -2962,7 +2968,8 @@ class TestLocaleDelivery:
         assert "locale" not in agent
 
     @pytest.mark.parametrize(
-        "factory", [forwarding_factory, legacy_factory, async_fixed_signature_factory]
+        "factory",
+        [forwarding_factory, legacy_factory, fixed_wrapper_factory, async_fixed_signature_factory],
     )
     async def test_factory_without_locale_parameter_is_called_as_before(
         self, factory: Any
@@ -2974,7 +2981,8 @@ class TestLocaleDelivery:
         return [r.getMessage() for r in caplog.records if r.getMessage().startswith("Locale ")]
 
     @pytest.mark.parametrize(
-        "factory", [kwargs_only_factory, async_kwargs_only_factory, legacy_factory]
+        "factory",
+        [kwargs_only_factory, async_kwargs_only_factory, legacy_factory, fixed_wrapper_factory],
     )
     async def test_locale_that_is_not_passed_is_logged_once_per_build(
         self, factory: Any, caplog: pytest.LogCaptureFixture

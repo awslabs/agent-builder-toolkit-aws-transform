@@ -542,6 +542,11 @@ class _CallableFactory:
         return None
 
 
+def _wrapped(wrapper: Callable[..., Any]) -> Callable[..., Any]:
+    """``wrapper`` as a ``functools.wraps`` wrapper of a factory that names ``locale``."""
+    return functools.wraps(lambda mcp_client, storage_dir, locale=None: None)(wrapper)
+
+
 @pytest.mark.parametrize(
     "factory, expected",
     [
@@ -549,6 +554,9 @@ class _CallableFactory:
         (lambda mcp_client, storage_dir, *, locale=None: None, {"locale": "ja"}),
         (lambda mcp_client, storage_dir, locale=None, **kwargs: None, {"locale": "ja"}),
         (_CallableFactory(), {"locale": "ja"}),
+        (_wrapped(lambda *args, **kwargs: None), {"locale": "ja"}),
+        (_wrapped(lambda mcp_client, storage_dir: None), {}),
+        (functools.partial(_wrapped(lambda mcp_client, storage_dir: None)), {}),
         (lambda mcp_client, storage_dir, locale=None, /: None, {}),
         (lambda mcp_client, storage_dir, *locale: None, {}),
         (lambda mcp_client, storage_dir, **locale: None, {}),
@@ -560,6 +568,9 @@ class _CallableFactory:
         "keyword_only",
         "named_and_kwargs",
         "callable_object",
+        "wrapper_with_kwargs",
+        "wrapper_with_fixed_signature",
+        "partial_of_wrapper_with_fixed_signature",
         "positional_only",
         "var_positional",
         "var_keyword_named_locale",

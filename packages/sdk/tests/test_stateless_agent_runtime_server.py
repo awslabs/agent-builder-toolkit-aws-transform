@@ -7,6 +7,7 @@ Tests the StatelessAgentRuntimeServer class which provides compatibility with mu
 agent execution environments through JSON-RPC endpoints.
 """
 
+import functools
 import logging
 from typing import Any, Optional
 from unittest import mock
@@ -788,6 +789,11 @@ def legacy_factory(mcp_client: Any, storage_dir: str) -> dict[str, Any]:
     return {}
 
 
+@functools.wraps(named_locale_factory)
+def fixed_wrapper_factory(mcp_client: Any, storage_dir: str) -> dict[str, Any]:
+    return {}
+
+
 NAMED_LOCALE_FACTORIES = [named_locale_factory, named_locale_and_kwargs_factory]
 
 LOCALE_NOT_PASSED_LINE = (
@@ -840,7 +846,9 @@ class TestLocaleDelivery:
         assert agent["workspace_id"] == "test-workspace"
         assert "locale" not in agent
 
-    @pytest.mark.parametrize("factory", [forwarding_factory, legacy_factory])
+    @pytest.mark.parametrize(
+        "factory", [forwarding_factory, legacy_factory, fixed_wrapper_factory]
+    )
     async def test_factory_without_locale_parameter_is_called_as_before(
         self, factory: Any
     ) -> None:
@@ -851,6 +859,7 @@ class TestLocaleDelivery:
         [
             (kwargs_only_factory, [LOCALE_NOT_PASSED_LINE]),
             (legacy_factory, [LOCALE_NOT_PASSED_LINE]),
+            (fixed_wrapper_factory, [LOCALE_NOT_PASSED_LINE]),
             (named_locale_factory, []),
         ],
     )
