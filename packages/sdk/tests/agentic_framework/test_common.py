@@ -8,13 +8,14 @@ from collections.abc import Iterator
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from unittest import mock
 
 import pytest
 import requests
 from botocore.exceptions import ClientError
 from requests.adapters import HTTPAdapter
+from urllib3.response import HTTPResponse
 from urllib3.util.retry import Retry
 
 from agent_builder_sdk.agentic_framework import common
@@ -34,7 +35,9 @@ def session():
 
 @pytest.fixture
 def response():
-    return mock.create_autospec(requests.Response, instance=True)
+    response = mock.create_autospec(requests.Response, instance=True)
+    response.raw = mock.Mock(length_remaining=0)  # the whole body arrived
+    return response
 
 
 @pytest.fixture
@@ -327,18 +330,45 @@ def test_download_retries_slow_down(fake_s3: _FakeS3Server, tmp_path: Path) -> N
     assert len(fake_s3.received) == 2
 
 
-def test_download_cut_mid_body_raises_sdk_error(fake_s3: _FakeS3Server, tmp_path: Path) -> None:
-    """A connection that drops while the body is read fails as the SDK's error, like every
-    other transport failure, and leaves no partial file."""
+@pytest.mark.parametrize(
+    ("urllib3_enforces_length", "message"),
+    [(True, "connection error"), (False, "incomplete body")],
+    ids=["urllib3-2", "urllib3-1"],
+)
+def test_download_cut_mid_body_raises_sdk_error(
+    fake_s3: _FakeS3Server,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    urllib3_enforces_length: bool,
+    message: str,
+) -> None:
+    """A body cut short of its Content-Length fails as the SDK's error and leaves no partial
+    file, whether urllib3 raises for it (the 2.x default) or returns the short body as a
+    success (the 1.x default)."""
+    monkeypatch.setattr(
+        HTTPResponse,
+        "enforce_content_length",
+        property(lambda self: urllib3_enforces_length, lambda self, value: None),
+        raising=False,  # urllib3 sets it per instance; the property overrides that
+    )
     fake_s3.responses = [(200, b"artifact bytes")]
     fake_s3.truncate_response_to = 7
     destination = tmp_path / "artifact.zip"
 
-    with pytest.raises(InternalBaseAgentError, match="Artifact download failed") as error:
+    with pytest.raises(InternalBaseAgentError, match=f"Artifact download failed: {message}"):
         common.download_from_presigned_url(fake_s3.presigned, str(destination))
 
-    assert isinstance(error.value.__cause__, requests.exceptions.ChunkedEncodingError)
     assert not destination.exists()
+
+
+def test_upload_sends_str_body_as_release_1_1_0_did(fake_s3: _FakeS3Server) -> None:
+    """The signature says bytes, but 1.1.0 uploaded a str, so a str must not start to fail."""
+    fake_s3.responses = [(200, b"")]
+    content: Any = '{"a": 1}'
+
+    common.upload_from_presigned_url(fake_s3.presigned, content)
+
+    assert fake_s3.received == [("8", b'{"a": 1}')]
 
 
 def test_upload_connect_timeout_bounds_each_write_not_the_whole_body(
