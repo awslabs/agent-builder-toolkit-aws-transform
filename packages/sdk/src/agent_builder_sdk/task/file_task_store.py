@@ -111,12 +111,13 @@ class FileTaskStore(TaskStore):
         event loop. A file that cannot be read or parsed as a task is skipped with a
         warning and the other tasks are still returned; ``get_task`` raises for it.
 
-        A task that this store instance writes during the listing is always listed:
-        ``store_task`` and ``update_task`` wait for the directory scan (not for the
-        file reads) before they rename. A task that another process, or another
-        store instance on the same directory, writes during the scan can be absent
-        from the result on filesystems where a directory scan can miss an entry
-        that is renamed (tmpfs).
+        A task that already exists and that this store instance updates during the
+        listing is always listed: ``store_task`` and ``update_task`` wait for the
+        directory scan (not for the file reads) before they rename. A task that is
+        first stored after the directory scan is not in the result. A task that
+        another process, or another store instance on the same directory, writes
+        during the scan can be absent from the result on filesystems where a
+        directory scan can miss an entry that is renamed (tmpfs).
         """
         return await asyncio.to_thread(self._read_all_tasks)
 
@@ -124,7 +125,10 @@ class FileTaskStore(TaskStore):
         """Load every readable task file, ordered by the task ID in the file name."""
         tasks: List[A2ATask] = []
         with self._dir_lock:
-            task_paths = sorted(self.storage_dir.glob("*.json"), key=lambda path: path.stem)
+            # Not path.stem: the stem of ".json" (an empty task ID) is ".json".
+            task_paths = sorted(
+                self.storage_dir.glob("*.json"), key=lambda path: path.name.removesuffix(".json")
+            )
         for task_path in task_paths:
             try:
                 with open(task_path, "r") as f:

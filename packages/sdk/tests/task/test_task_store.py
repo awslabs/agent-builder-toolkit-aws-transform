@@ -459,17 +459,25 @@ class TestFileTaskStore:
         """A new store on the same directory lists the persisted tasks ordered by ID."""
         store = FileTaskStore(storage_dir=temp_storage_dir)
         # "task-1-retry.json" sorts before "task-1.json" as a file name, after it as an ID.
-        for task in (make_task("task-1-retry"), sample_task, make_task("task-1")):
-            await store.store_task(task)
+        # The file of the empty ID is ".json": its stem is ".json", after ".hidden".
+        for task_id in ("task-1-retry", ".hidden", "task-1", ""):
+            await store.store_task(make_task(task_id))
+        await store.store_task(sample_task)
         # A complete temporary file, as a writer stopped before its rename leaves behind.
         leftover = store.storage_dir / ".deadbeef.tmp"
         leftover.write_text(json.dumps(make_task("task-1", TaskState.WORKING).to_dict()))
 
         tasks = await FileTaskStore(storage_dir=temp_storage_dir).list_tasks()
 
-        assert [task.id for task in tasks] == ["task-1", "task-1-retry", sample_task.id]
-        assert tasks[0].status.state == TaskState.SUBMITTED
-        assert tasks[2].to_dict() == sample_task.to_dict()
+        assert [task.id for task in tasks] == [
+            "",
+            ".hidden",
+            "task-1",
+            "task-1-retry",
+            sample_task.id,
+        ]
+        assert tasks[2].status.state == TaskState.SUBMITTED
+        assert tasks[4].to_dict() == sample_task.to_dict()
 
     @pytest.mark.asyncio
     async def test_list_tasks_reads_files_in_worker_thread(
