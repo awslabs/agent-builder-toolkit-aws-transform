@@ -2103,10 +2103,10 @@ server = AgentRuntimeServer(
 )
 ```
 
-- One greeting for each agent instance: the server sends it only when the agent status is INVOKED and no checkpoint was restored. A container that starts later for the same agent instance (status RUNNING or IDLE) sends no greeting.
+- One greeting for each agent instance: the server sends it only when the agent status is INVOKED, no `atx_agent/restore` request was received and no checkpoint was restored. A restored agent sends no greeting, also when checkpointing is off or the checkpoint download fails. A container that starts later for the same agent instance (status RUNNING or IDLE) sends no greeting.
 - The greeting turn is not written to conversation history. Later turns do not see the prompt or the reply.
 - The orchestrator must be async (`AsyncBaseOrchestrator`, or another agent with `process_message_async`). With a sync orchestrator the server logs a warning and sends no greeting.
-- The reply is not sent when another message arrives before the reply is ready, when the turn fails or returns no text, or when the turn takes longer than 60 seconds. The agent log gives the reason.
+- The reply is not sent when another message or a restore request arrives before the reply is ready, when the turn fails or returns no text, or when the turn takes longer than 60 seconds. The agent log gives the reason.
 - A greeting that fails does not stop the agent.
 - A message that arrives while the greeting turn runs waits for that turn to end. Keep the prompt short and tell the model not to use tools.
 

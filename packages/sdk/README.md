@@ -199,9 +199,9 @@ server = AgentRuntimeServer(
 ```
 
 - The prompt runs as one turn through your orchestrator. The turn is not written to conversation history.
-- Only the first boot of an agent instance greets (status `INVOKED`, no checkpoint restored). A container that starts later for the same instance does not.
+- Only the first boot of an agent instance greets (status `INVOKED`, no `atx_agent/restore` request, no checkpoint restored). A container that starts later for the same instance does not.
 - The orchestrator must be async (`AsyncBaseOrchestrator`). A sync orchestrator gets a warning in the log and no greeting.
-- The reply is not sent when another message arrives first, when the turn fails or returns no text, or when it takes longer than 60 seconds. A greeting that fails does not stop the agent.
+- The reply is not sent when another message or a restore request arrives first, when the turn fails or returns no text, or when it takes longer than 60 seconds. A greeting that fails does not stop the agent.
 
 ## Requirements
 

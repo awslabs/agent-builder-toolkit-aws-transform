@@ -25,6 +25,7 @@ from strands.types.content import ContentBlock, Message, Messages
 from strands.types.streaming import StreamEvent
 
 from agent_builder_sdk.custom_types.orchestrator_agent_types import ProcessMessageRequest
+from agent_builder_sdk.custom_types.server_types import JsonRpcMethods
 from agent_builder_sdk.message_queue import RequestStatus
 from agent_builder_sdk.orchestrator_strands.base_orchestrator import AsyncBaseOrchestrator
 from agent_builder_sdk.orchestrator_strands.conversation.constants import MessageSourceType
@@ -34,7 +35,6 @@ from agent_builder_sdk.orchestrator_strands.conversation.file_repository import 
 from agent_builder_sdk.orchestrator_strands.conversation.message_type import ConversationMessage
 from agent_builder_sdk.orchestrator_strands.hooks import ConversationHookProvider
 from agent_builder_sdk.server.agent_runtime_server import AgentRuntimeServer
-from agent_builder_sdk.server.server_models import AgentRuntimeContext
 
 SERVER = "agent_builder_sdk.server.agent_runtime_server"
 PROMPT = "Greet the user in one short message."
@@ -92,9 +92,6 @@ async def _running_server(
         storage_dir=str(storage_dir),
         greeting_prompt=greeting_prompt,
     )
-    server.context = AgentRuntimeContext(
-        workspace_id="workspace-id", job_id="job-id", agent_instance_id="agent-instance-id"
-    )
     fast_wait = functools.partial(server.queue.wait_for_response, poll_interval=0.01)
     with (
         mock.patch(f"{SERVER}.has_mde_environment", return_value=False),
@@ -107,13 +104,28 @@ async def _running_server(
             await server._cleanup()
 
 
+def _request(method: str) -> dict[str, Any]:
+    return {
+        "jsonrpc": "2.0",
+        "method": method,
+        "params": {
+            "agentInstanceId": "agent-instance-id",
+            "invocationContext": {
+                "jobMetadata": {"workspaceId": "workspace-id", "jobId": "job-id"}
+            },
+        },
+    }
+
+
 async def _initialize(
     server: AgentRuntimeServer,
     status: str = "INVOKED",
     restored: bool = False,
     wait_for_greeting: bool = True,
+    method: str = JsonRpcMethods.INVOKE,
 ) -> None:
-    """Initialize the agent with the platform reporting ``status`` for it."""
+    """Send the ``method`` request that initializes the agent, with the platform reporting
+    ``status`` for it."""
     checkpoints = mock.Mock()
     checkpoints.restore_if_available.return_value = restored
     with (
@@ -130,7 +142,7 @@ async def _initialize(
             return_value=checkpoints,
         ),
     ):
-        await server.initialize_agent()
+        await server.ensure_initialized(_request(method))
         if server._initialization_task is not None:
             await server._initialization_task
     assert server.initialized
@@ -200,31 +212,42 @@ async def test_first_boot_posts_one_greeting_and_stores_no_turn(
 
 
 @pytest.mark.parametrize(
-    ("status", "restored", "greeting_prompt", "log"),
+    ("status", "restored", "method", "greeting_prompt", "log"),
     [
         pytest.param(
             "RUNNING",
             False,
+            JsonRpcMethods.INVOKE,
             PROMPT,
-            "skipped: not the first boot (status=RUNNING, checkpoint restored=False)",
+            "(status=RUNNING, checkpoint restored=False, restore requested=False)",
             id="container-rotation-running",
         ),
         pytest.param(
             "IDLE",
             False,
+            JsonRpcMethods.INVOKE,
             PROMPT,
-            "skipped: not the first boot (status=IDLE, checkpoint restored=False)",
+            "(status=IDLE, checkpoint restored=False, restore requested=False)",
             id="container-rotation-idle",
         ),
         pytest.param(
             "INVOKED",
             True,
+            JsonRpcMethods.INVOKE,
             PROMPT,
-            "skipped: not the first boot (status=INVOKED, checkpoint restored=True)",
+            "(status=INVOKED, checkpoint restored=True, restore requested=False)",
             id="checkpoint-restored",
         ),
-        pytest.param("INVOKED", False, None, None, id="no-prompt"),
-        pytest.param("INVOKED", False, "  ", None, id="blank-prompt"),
+        pytest.param(
+            "INVOKED",
+            False,
+            JsonRpcMethods.RESTORE,
+            PROMPT,
+            "(status=INVOKED, checkpoint restored=False, restore requested=True)",
+            id="restore-without-checkpoint",
+        ),
+        pytest.param("INVOKED", False, JsonRpcMethods.INVOKE, None, None, id="no-prompt"),
+        pytest.param("INVOKED", False, JsonRpcMethods.INVOKE, "  ", None, id="blank-prompt"),
     ],
 )
 async def test_no_greeting_without_a_prompt_or_after_the_first_boot(
@@ -233,19 +256,22 @@ async def test_no_greeting_without_a_prompt_or_after_the_first_boot(
     caplog: pytest.LogCaptureFixture,
     status: str,
     restored: bool,
+    method: str,
     greeting_prompt: Optional[str],
     log: Optional[str],
 ) -> None:
     agent = _AsyncAgent()
     async with _running_server(agent, tmp_path, greeting_prompt) as server:
         with caplog.at_level(logging.INFO, logger=SERVER):
-            await _initialize(server, status=status, restored=restored)
+            await _initialize(server, status=status, restored=restored, method=method)
 
         assert server._greeting_task is None
     assert agent.messages == []
     send.assert_not_awaited()
     greeting_logs = [r.getMessage() for r in caplog.records if "greeting" in r.getMessage()]
-    assert greeting_logs == ([f"Proactive greeting {log}"] if log else [])
+    assert greeting_logs == (
+        [f"Proactive greeting skipped: not the first boot {log}"] if log else []
+    )
 
 
 async def test_sync_orchestrator_gets_a_warning_and_no_greeting(
@@ -322,6 +348,25 @@ async def test_greeting_is_not_sent_when_a_turn_arrives_while_it_is_written(
 
     assert agent.messages[0] == PROMPT
     send.assert_not_awaited()
+
+
+async def test_greeting_is_not_sent_when_a_restore_arrives_while_it_is_written(
+    tmp_path: Path, send: mock.AsyncMock, caplog: pytest.LogCaptureFixture
+) -> None:
+    agent = _AsyncAgent()
+    async with _running_server(agent, tmp_path) as server:
+
+        async def restore_during_the_greeting(request: ProcessMessageRequest) -> AgentResult:
+            await server.ensure_initialized(_request(JsonRpcMethods.RESTORE))
+            return _result(GREETING)
+
+        agent.turn = restore_during_the_greeting
+        with caplog.at_level(logging.INFO, logger=SERVER):
+            await _initialize(server)
+
+    assert agent.messages == [PROMPT]
+    send.assert_not_awaited()
+    assert "Proactive greeting not sent: a restore was requested" in caplog.text
 
 
 async def _fails(request: ProcessMessageRequest) -> AgentResult:

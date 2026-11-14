@@ -62,6 +62,7 @@ from agent_builder_sdk.constants import (
     DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS,
 )
 from agent_builder_sdk.custom_types.notification_types import NotificationType
+from agent_builder_sdk.custom_types.server_types import JsonRpcMethods
 from agent_builder_sdk.env_var import has_mde_environment, set_runtime_env_vars
 from agent_builder_sdk.extensions.acknowledgments.acknowledgment_handler import (
     AcknowledgmentHandler,
@@ -190,10 +191,11 @@ class AgentRuntimeServer(BaseServer):
                 ContextVar for exactly this reason.) This constraint does NOT apply with streaming
                 off (turns are serialized).
             greeting_prompt: Opt-in. Prompt for a greeting that the agent posts to the job's chat
-                once, right after its first initialization (agent status INVOKED, no checkpoint
-                restored). The prompt runs as a turn through the orchestrator that is not written
-                to conversation history. The reply is not sent when another turn arrives first,
-                when the turn fails or returns no text, or when it takes longer than 60 seconds.
+                once, right after its first initialization (agent status INVOKED, no restore
+                request, no checkpoint restored). The prompt runs as a turn through the
+                orchestrator that is not written to conversation history. The reply is not sent
+                when a restore request or another turn arrives first, when the turn fails or
+                returns no text, or when it takes longer than 60 seconds.
                 Requires an async orchestrator (one with ``process_message_async``); a sync
                 orchestrator gets no greeting and a warning. None (default) or a blank string
                 sends no greeting.
@@ -209,6 +211,7 @@ class AgentRuntimeServer(BaseServer):
         self.auto_transition_job_to_executing = auto_transition_job_to_executing
         self.greeting_prompt = greeting_prompt
         self._greeting_task: Optional[asyncio.Task] = None
+        self._restore_requested = False
 
         handlers = list(extension_handlers) if extension_handlers else []
         if not any(isinstance(h, AcknowledgmentHandler) for h in handlers):
@@ -336,6 +339,14 @@ class AgentRuntimeServer(BaseServer):
     def _create_checkpoint_callback(self):
         """Create checkpoint callback for conversation-based checkpointing."""
         return self.checkpoint_service.create_callback() if self.checkpoint_service else None
+
+    async def ensure_initialized(self, request: Optional[Dict[str, Any]] = None) -> None:
+        """Initialize the agent from the request and record a restore request."""
+        # Recorded for every request, not only the one that starts the initialization: a restore
+        # can bring back no checkpoint and can arrive after another request started the agent.
+        if request and request.get("method") == JsonRpcMethods.RESTORE:
+            self._restore_requested = True
+        await super().ensure_initialized(request)
 
     async def initialize_agent(self, auth_token: Optional[str] = None) -> None:
         """
@@ -591,18 +602,25 @@ class AgentRuntimeServer(BaseServer):
     def _start_greeting(self, agent_status: str) -> None:
         """Start the greeting task on the first boot of the agent instance.
 
-        RUNNING or IDLE means a container rotation and a restored checkpoint means the job
-        already has a conversation, so neither gets a greeting. Must run after the agent is set
-        to RUNNING: that status is what keeps the next container from greeting again.
+        RUNNING or IDLE means a container rotation, and a restore request or a restored
+        checkpoint means the job already has a conversation, so none of them gets a greeting.
+        Must run after the agent is set to RUNNING: that status is what keeps the next container
+        from greeting again.
         """
         prompt = self.greeting_prompt
         if not prompt or not prompt.strip():
             return
-        if agent_status != "INVOKED" or self.checkpoint_service.was_restored:
+        if (
+            agent_status != "INVOKED"
+            or self.checkpoint_service.was_restored
+            or self._restore_requested
+        ):
             logger.info(
-                "Proactive greeting skipped: not the first boot (status=%s, checkpoint restored=%s)",
+                "Proactive greeting skipped: not the first boot "
+                "(status=%s, checkpoint restored=%s, restore requested=%s)",
                 agent_status,
                 self.checkpoint_service.was_restored,
+                self._restore_requested,
             )
             return
         if not hasattr(self.agent, "process_message_async"):
@@ -616,8 +634,9 @@ class AgentRuntimeServer(BaseServer):
         """Run ``prompt`` as a turn kept out of conversation history and post the reply to chat.
 
         The turn goes through the queue, so the orchestrator writes the greeting with its own
-        system prompt. The reply is not sent when another turn arrived first, when the turn
-        failed or returned no text, or when it took longer than ``_GREETING_TIMEOUT_SECONDS``.
+        system prompt. The reply is not sent when a restore request or another turn arrived
+        first, when the turn failed or returned no text, or when it took longer than
+        ``_GREETING_TIMEOUT_SECONDS``.
         A failure is logged and not raised: the agent is already serving requests.
         """
         try:
@@ -638,6 +657,9 @@ class AgentRuntimeServer(BaseServer):
                 return
             if not response.message.strip():
                 logger.warning("Proactive greeting not sent: the turn returned no text")
+                return
+            if self._restore_requested:
+                logger.info("Proactive greeting not sent: a restore was requested")
                 return
             if await self._conversation_started():
                 logger.info("Proactive greeting not sent: another turn arrived first")
