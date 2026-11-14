@@ -64,17 +64,18 @@ def get_bedrock_shared_capacity_role_arn(region: str) -> Optional[str]:
     Get the BedrockSharedCapacityRole ARN from the environment.
 
     Args:
-        region: AWS region name (used only in the log message)
+        region: AWS region name. It does not select the ARN; it appears only
+            in the warning that is logged when the variable is unset.
 
     Returns:
-        Value of BEDROCK_SHARED_CAPACITY_ROLE_ARN if set, None otherwise
+        Value of BEDROCK_SHARED_CAPACITY_ROLE_ARN if set and not empty, None otherwise
     """
     role_arn = os.getenv("BEDROCK_SHARED_CAPACITY_ROLE_ARN")
     if role_arn:
         logger.info(f"Using BedrockSharedCapacityRole ARN from environment: {role_arn}")
         return role_arn
 
-    logger.warning(f"No BedrockSharedCapacityRole ARN available for region: {region}")
+    logger.warning(f"BEDROCK_SHARED_CAPACITY_ROLE_ARN is not set; no shared-capacity role ARN for region: {region}")
     return None
 
 

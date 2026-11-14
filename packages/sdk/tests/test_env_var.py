@@ -319,10 +319,15 @@ class TestGetBedrockSharedCapacityRoleArn:
             assert result == test_arn
 
     @pytest.mark.parametrize("region", ["us-east-1", "us-west-2", "eu-west-1"])
-    def test_returns_none_when_env_var_unset(self, region):
+    def test_returns_none_when_env_var_unset(self, region: str) -> None:
         """Test that function returns None in every region when the env var is unset."""
         with mock.patch.dict(os.environ, {}, clear=True):
             assert get_bedrock_shared_capacity_role_arn(region) is None
+
+    def test_returns_none_when_env_var_empty(self) -> None:
+        """Test that an empty value counts as unset."""
+        with mock.patch.dict(os.environ, {"BEDROCK_SHARED_CAPACITY_ROLE_ARN": ""}):
+            assert get_bedrock_shared_capacity_role_arn("us-east-1") is None
 
 
 class TestShouldUseProdBedrockCapacity:
