@@ -5,6 +5,7 @@ import copy
 import json
 import logging
 import re
+import threading
 from collections.abc import AsyncGenerator, Callable, Sequence
 from pathlib import Path
 from types import SimpleNamespace
@@ -16,16 +17,22 @@ from strands.hooks import AfterToolCallEvent
 from strands.models import Model
 from strands.types.exceptions import StorageError
 from strands.vended_plugins.context_offloader import ContextOffloader
+from strands.vended_plugins.skills import AgentSkills
 
 from agent_builder_sdk.orchestrator_strands.base_orchestrator import AsyncBaseOrchestrator
 from agent_builder_sdk.orchestrator_strands.tool_output_offloader import (
     DEFAULT_KEEP_IN_CONTEXT_TOOLS,
+    MAX_INDENTED_JSON_CHARS,
     ToolOutputOffloader,
 )
+from agent_builder_sdk.orchestrator_strands.tools.memory_tool import MemoryTool
+from agent_builder_sdk.orchestrator_strands.tools.send_message_tools import SendMessageTools
+from agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools import SubagentRegistryTools
 
 THRESHOLD = 400
 PREVIEW = 20
 BIG = "\n".join(f"line {i}" for i in range(1, 201))
+ROWS = json.dumps(list(range(200)))
 IMAGE: dict[str, Any] = {"image": {"format": "png", "source": {"bytes": b"\x89PNG"}}}
 DOCUMENT: dict[str, Any] = {"document": {"format": "pdf", "name": "d", "source": {"bytes": b"%PDF"}}}
 
@@ -232,10 +239,47 @@ async def test_json_text_that_is_over_the_limit_only_when_indented_stays_in_cont
     assert _files(tmp_path) == []
 
 
+async def test_json_text_is_indented_off_the_event_loop_thread(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    agent, _ = _agent(tmp_path)
+    text = json.dumps([{"a": i} for i in range(100)], separators=(",", ":"))
+    dumps = json.dumps
+    threads: list[threading.Thread] = []
+
+    def recording_dumps(*args: Any, **kwargs: Any) -> str:
+        threads.append(threading.current_thread())
+        return dumps(*args, **kwargs)
+
+    monkeypatch.setattr(json, "dumps", recording_dumps)
+
+    await _after_tool_call(agent, [{"text": text}])
+
+    assert threads and threading.current_thread() not in threads
+
+
 @pytest.mark.parametrize(
     "text",
-    ["[INFO] start\n" + BIG, json.dumps("\u00e9" * 300), json.dumps([{"note": "\ud83d"}] * 60), "[" * 100_000 + "]" * 100_000],
-    ids=["not JSON", "JSON string", "JSON with an escaped lone surrogate", "JSON nested too deeply"],
+    [
+        "[INFO] start\n" + BIG,
+        json.dumps("\u00e9" * 300),
+        json.dumps([{"note": "\ud83d"}] * 60),
+        "[" * 100_000 + "]" * 100_000,
+        '{"result":"first","result":"second","rows":' + ROWS + "}",
+        '{"big":1e400,"rows":' + ROWS + "}",
+        '{"missing":NaN,"rows":' + ROWS + "}",
+        json.dumps(["x" * 1000] * (MAX_INDENTED_JSON_CHARS // 1000)),
+    ],
+    ids=[
+        "not JSON",
+        "JSON string",
+        "JSON with an escaped lone surrogate",
+        "JSON nested too deeply",
+        "JSON with a repeated key",
+        "JSON with a number beyond the range of a float",
+        "JSON with NaN",
+        "JSON over the size limit for indenting",
+    ],
 )
 async def test_text_that_is_not_indented_as_json_is_stored_as_returned_without_a_warning(
     tmp_path: Path, caplog: pytest.LogCaptureFixture, text: str
@@ -289,6 +333,20 @@ async def test_results_of_keep_in_context_tools_are_not_offloaded(
 
     assert (result["content"] != [{"text": BIG}]) is offloaded
     assert len(_files(tmp_path)) == int(offloaded)
+
+
+def test_default_keep_in_context_tools_are_the_names_of_real_tools() -> None:
+    tools = [
+        AgentSkills.skills,
+        MemoryTool.memory,
+        SubagentRegistryTools.discover_subagents,
+        SendMessageTools.send_message_to_subagent,
+        SendMessageTools.async_send_message_to_subagent,
+        SendMessageTools.stream_message_to_subagent,
+        SendMessageTools.send_message_to_subagent_and_relay,
+    ]
+
+    assert {each.tool_name for each in tools} == DEFAULT_KEEP_IN_CONTEXT_TOOLS
 
 
 async def test_offloaded_file_is_still_retrievable_after_many_agent_cycles(tmp_path: Path) -> None:

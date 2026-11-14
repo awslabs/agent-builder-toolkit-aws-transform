@@ -2588,7 +2588,7 @@ def agent_factory(mcp_client, storage_dir):
 
 The `create_*` factory functions do not take plugins; use the constructor of `AsyncBaseOrchestrator`, `BaseOrchestrator` or your own subclass.
 
-With concurrent streaming (`streaming_config` on `AgentRuntimeServer`), the factory must accept `**kwargs`: the server rejects the two-argument factory above at startup. The server calls the factory once for buffered turns and once per streaming source, each time with a different `storage_dir`. These agents share one conversation history when the factory passes `kwargs["conversation_repository"]` to a `ConversationHookProvider` in `hooks=` (the SDK README section "Streaming (opt-in)" states the full factory requirement). A reference is readable only by an offloader on the directory that holds the file, so do not use the factory's `storage_dir` argument for the offloader. Give every offloader the same directory under the server's `storage_dir`:
+With concurrent streaming (`streaming_config` on `AgentRuntimeServer`), the factory must accept `**kwargs`: the server rejects the two-argument factory above at startup. The server calls the factory once for buffered turns and once per streaming source, each time with a different `storage_dir`. These agents share one conversation history when the factory passes `kwargs.get("conversation_repository")` to a `ConversationHookProvider` in `hooks=` (the SDK README section "Streaming (opt-in)" states the full factory requirement). The server passes that key only with concurrent streaming; without it the same factory still works, and the history is then kept under the factory's `storage_dir`. A reference is readable only by an offloader on the directory that holds the file, so do not use the factory's `storage_dir` argument for the offloader. Give every offloader the same directory under the server's `storage_dir`:
 
 ```
 AgentRuntimeServer(storage_dir=BASE)
@@ -2609,7 +2609,7 @@ def agent_factory(mcp_client, storage_dir, **kwargs):
     return AsyncBaseOrchestrator(
         system_prompt="You are a specialized orchestrator for...",
         mcp_clients=[mcp_client],
-        hooks=[ConversationHookProvider(repository=kwargs["conversation_repository"])],
+        hooks=[ConversationHookProvider(repository=kwargs.get("conversation_repository"), storage_dir=storage_dir)],
         plugins=[ToolOutputOffloader(storage_dir=OFFLOAD_STORAGE_DIR)],
     )
 ```
@@ -2631,8 +2631,9 @@ What to expect:
 - When the agent has a Strands sandbox (`sandbox=`), the files are written through it, inside the sandbox. They are then not in the host storage directory and not in its checkpoints, so a reference does not survive a checkpoint restore.
 - When the token count or the file write fails, the full result stays in the conversation and a warning is logged. The warning for a failed write names a generated id, not the tool. A debug-level line of the logger `agent_builder_sdk.orchestrator_strands.tool_output_offloader` maps that id to the tool name and the tool-use id.
 - A result of `retrieve_offloaded_content` is never offloaded. A retrieval without `line_range` or `pattern` puts the whole stored block back into the conversation.
-- Retrieval by `line_range` or `pattern` works on lines. A text block that holds a JSON object or array is therefore stored indented, one value per line. Numbers and string escapes are then as Python's `json` module writes them (`1.10` becomes `1.1`), and the file is larger than the compact text.
-- Any other text is stored as the tool returned it. Of a single line longer than `max_result_tokens * 4` characters (minified code, or one long string value inside JSON), only the start is readable by `line_range` or `pattern`. The rest needs a whole retrieval.
+- Retrieval by `line_range` or `pattern` works on lines. A text block that holds a JSON object or array is therefore stored indented, one value per line. Numbers and string escapes are then as Python's `json` module writes them (`1.10` becomes `1.1`), and the file is larger than the compact text. The indenting runs in a worker thread, not on the event loop.
+- JSON text is not indented when it is longer than 5,000,000 characters (`MAX_INDENTED_JSON_CHARS`; the parsed value takes over ten times the memory of the text), when an object repeats a key, or when it holds `NaN`, `Infinity` or a number beyond the range of a float (`1e400`).
+- That text, and any other text, is stored as the tool returned it. Of a single line longer than `max_result_tokens * 4` characters (minified code, or one long string value inside JSON), only the start is readable by `line_range` or `pattern`. The rest needs a whole retrieval.
 - `pattern` is a regular expression that the model writes. Strands runs it on the event loop, one line at a time, with no time limit. A pattern that backtracks heavily on a long line blocks the event loop until the search ends, and a turn timeout does not interrupt it. Newer Strands releases (1.59.0 and later were checked) search a pattern with a nested quantifier, such as `(a+)+`, as plain text; 1.51.0 does not.
 - Requires `strands-agents>=1.51.0`, which is the minimum version of the SDK.
 

@@ -2,13 +2,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """Move oversized tool results out of the model context into local files."""
 
+import asyncio
 import dataclasses
 import json
 import logging
 import os
 import uuid
 from contextvars import ContextVar
-from typing import AbstractSet, Any, FrozenSet, List, Optional
+from typing import AbstractSet, Any, Dict, FrozenSet, List, Optional, Tuple
 
 from strands.hooks import AfterToolCallEvent
 from strands.plugins import hook
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_RESULT_TOKENS = 12_500
 DEFAULT_PREVIEW_TOKENS = 1_000
+# The parsed value and its indented text take over ten times the memory of the text.
+MAX_INDENTED_JSON_CHARS = 5_000_000
 
 # Tools whose result the model acts on as a whole: a loaded skill, recalled memory, a subagent's answer.
 DEFAULT_KEEP_IN_CONTEXT_TOOLS: FrozenSet[str] = frozenset(
@@ -43,16 +46,28 @@ def _is_offloadable(block: ToolResultContent) -> bool:
     return bool(block.get("text")) or "json" in block
 
 
+def _object_with_unique_keys(pairs: List[Tuple[str, Any]]) -> Dict[str, Any]:
+    parsed = dict(pairs)
+    if len(parsed) != len(pairs):
+        raise ValueError("repeated key in a JSON object")
+    return parsed
+
+
 def _with_json_on_short_lines(block: ToolResultContent) -> ToolResultContent:
-    """Return a text block that holds a JSON object or array with that JSON indented, else ``block``."""
+    """Return a text block that holds a JSON object or array with that JSON indented, else ``block``.
+
+    ``block`` is also returned for JSON of more than ``MAX_INDENTED_JSON_CHARS`` characters, and for
+    JSON that the indented text would not hold in full: an object that repeats a key, ``NaN``,
+    ``Infinity``, or a number beyond the range of a float (``1e400``).
+    """
     text = block.get("text")
-    if not text:
+    if not text or len(text) > MAX_INDENTED_JSON_CHARS:
         return block
     try:
-        parsed = json.loads(text)
+        parsed = json.loads(text, object_pairs_hook=_object_with_unique_keys)
         if not isinstance(parsed, (dict, list)):
             return block
-        indented = json.dumps(parsed, indent=2, ensure_ascii=False)
+        indented = json.dumps(parsed, indent=2, ensure_ascii=False, allow_nan=False)
         # json.loads accepts an escaped lone surrogate, which cannot be written as UTF-8.
         indented.encode()
     except (ValueError, RecursionError):
@@ -76,11 +91,14 @@ class ToolOutputOffloader(ContextOffloader):
     Retrieval by line range or pattern works on lines and returns at most ``max_result_tokens * 4``
     characters. A text block that holds a JSON object or array is therefore stored indented, one
     value per line, with numbers and string escapes as Python's ``json`` module writes them
-    (``1.10`` becomes ``1.1``). Any other text is stored as the tool returned it: of a single line
-    longer than that limit, only the start is readable by line range or pattern, and the rest only
-    by a whole retrieval. The pattern is a regular expression that the model writes. Strands runs
-    it on the event loop, line by line, with no time limit: a pattern that backtracks heavily on a
-    long line blocks the loop until the search ends.
+    (``1.10`` becomes ``1.1``). The indenting runs in a worker thread. JSON text is not indented
+    when it is longer than ``MAX_INDENTED_JSON_CHARS`` (5,000,000) characters, when an object
+    repeats a key, or when it holds ``NaN``, ``Infinity`` or a number beyond the range of a float
+    (``1e400``). That text, and any other text, is stored as the tool returned it: of a single line
+    longer than the retrieval limit, only the start is readable by line range or pattern, and the
+    rest only by a whole retrieval. The pattern is a regular expression that the model writes.
+    Strands runs it on the event loop, line by line, with no time limit: a pattern that backtracks
+    heavily on a long line blocks the loop until the search ends.
 
     Files are never evicted, so a reference stays valid for as long as the directory exists: for
     another agent whose offloader uses the same ``storage_dir``, and after a checkpoint restore of
@@ -140,14 +158,14 @@ class ToolOutputOffloader(ContextOffloader):
             evict_after_cycles=None,
         )
 
-    def _should_offload_tool(self, tool_name: str, token_count: int, **kwargs: Any) -> bool:
+    async def _should_offload_tool(self, tool_name: str, token_count: int, **kwargs: Any) -> bool:
         if tool_name in self._keep_in_context_tools:
             return False
         # The parent calls this after it has counted the tokens of the result and before it reads the
         # blocks for the preview and the files. The line breaks go in here, so max_result_tokens
         # applies to the text as the tool returned it.
         blocks = _staged_blocks.get()
-        blocks[:] = [_with_json_on_short_lines(block) for block in blocks]
+        blocks[:] = await asyncio.to_thread(lambda: [_with_json_on_short_lines(block) for block in blocks])
         return True
 
     async def _handle_tool_result(self, event: AfterToolCallEvent) -> None:
