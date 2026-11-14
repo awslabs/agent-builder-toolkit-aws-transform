@@ -6,6 +6,7 @@ from typing import Any
 from strands.hooks import (
     AfterModelCallEvent,
     BeforeInvocationEvent,
+    HookOrder,
     HookProvider,
     HookRegistry,
     MessageAddedEvent,
@@ -17,14 +18,6 @@ from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     conversation_source_type,
 )
 from agent_builder_sdk.utils import _BLANK_TEXT_SENTINEL
-
-# HookOrder is strands >= 1.43.
-try:
-    from strands.hooks import HookOrder  # type: ignore[attr-defined, unused-ignore]
-
-    _RUN_LATE: dict[str, Any] = {"order": HookOrder.DEFAULT + 100}
-except ImportError:
-    _RUN_LATE = {}
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +64,7 @@ class BlankReplyHookProvider(HookProvider):
     so before the ask is stored. A message that such a hook stores on that answer lands ahead of
     the ask. Any message stored between the ask and its answer instead makes the ask look
     unanswered, and replay drops it: one that a hook ordered after this one stores on the answer,
-    or any message stored before the replacement once such a hook discards the answer. Without
-    ``HookOrder`` it registers unordered and accepts all of this.
+    or any message stored before the replacement once such a hook discards the answer.
 
     Left alone:
     - turns served over message/stream (``stream_state`` in ``invocation_state``): the streaming
@@ -83,7 +75,9 @@ class BlankReplyHookProvider(HookProvider):
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(BeforeInvocationEvent, self._reset)
-        registry.add_callback(AfterModelCallEvent, self._continue_if_blank, **_RUN_LATE)
+        registry.add_callback(
+            AfterModelCallEvent, self._continue_if_blank, order=HookOrder.DEFAULT + 100
+        )
 
     def _reset(self, event: BeforeInvocationEvent) -> None:
         event.invocation_state.pop(_STATE_KEY, None)
@@ -113,8 +107,7 @@ class BlankReplyHookProvider(HookProvider):
         if pending is not None:
             if response is None or event.retry:
                 # The call raised, or an earlier hook discarded its answer. Leave the ask in place:
-                # a retry is still the continuation, and without HookOrder this runs before the
-                # retry strategy has decided whether to retry. _reset drops an unanswered leftover.
+                # a retry is still the continuation. _reset drops an unanswered leftover.
                 return
             state[_STATE_KEY] = True
             await event.agent.hooks.invoke_callbacks_async(

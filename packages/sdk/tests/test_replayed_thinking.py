@@ -123,7 +123,6 @@ async def test_orchestrator_with_notifications_replays_no_stale_thinking(tmp_pat
     orchestrator = AsyncBaseOrchestrator("")
     orchestrator.callback_handler = lambda *args, **kwargs: None
     orchestrator.model = _prefix_checking_model()
-    # Added after construction on purpose: the strip must still run after the history swap.
     orchestrator.hooks.add_hook(ConversationHookProvider(storage_dir=str(tmp_path)))
 
     user, notification = ConversationContext(user_id="user"), ConversationContext()
@@ -131,6 +130,24 @@ async def test_orchestrator_with_notifications_replays_no_stale_thinking(tmp_pat
         await orchestrator.process_message_async(ProcessMessageRequest(text, context))
 
     assert orchestrator.model.stream.call_count == 4
+
+
+async def test_new_agent_on_a_stored_conversation_replays_no_stale_thinking(tmp_path: Path) -> None:
+    model = _prefix_checking_model()
+    user, notification = ConversationContext(user_id="user"), ConversationContext()
+
+    # The second orchestrator stands for a process restart: it has seen no earlier model call,
+    # so only the strip at invocation start protects u2.
+    for turns in ([("u1", user), ("n1", notification)], [("u2", user)]):
+        orchestrator = AsyncBaseOrchestrator("")
+        orchestrator.callback_handler = lambda *args, **kwargs: None
+        orchestrator.model = model
+        # Added after construction on purpose: the strip must still run after the history swap.
+        orchestrator.hooks.add_hook(ConversationHookProvider(storage_dir=str(tmp_path)))
+        for text, context in turns:
+            await orchestrator.process_message_async(ProcessMessageRequest(text, context))
+
+    assert model.stream.call_count == 3
 
 
 async def test_orchestrator_recovers_from_a_thinking_only_reply(tmp_path: Path) -> None:
