@@ -119,15 +119,22 @@ def test_auth_process_main_exception(caplog):
 @pytest.mark.usefixtures("mock_auth_dependencies", "restore_sigterm")
 def test_auth_process_main_resets_inherited_sigterm_handler() -> None:
     """The child drops the SIGTERM handler it inherits, so terminate() stops it at once."""
+    seen: list[object] = []
+
+    def record_then_stop() -> int:
+        seen.append(signal.getsignal(signal.SIGTERM))
+        raise KeyboardInterrupt
+
     refresher = AuthTokenRefresher(first_token="test-token")
-    refresher._refresh_token = mock.Mock(side_effect=KeyboardInterrupt)
+    refresher._refresh_token = mock.Mock(side_effect=record_then_stop)
     # Stand-in for a server's graceful-shutdown handler that the fork would inherit.
     signal.signal(signal.SIGTERM, lambda signum, frame: None)
 
     with mock.patch("agent_builder_sdk._auth_token_refresher.logging.basicConfig"):
         refresher._auth_process_main()
 
-    assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
+    # terminate() arrives while the refresh loop runs, so the disposition is read there.
+    assert seen == [signal.SIG_DFL]
 
 
 @pytest.fixture
