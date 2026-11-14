@@ -6,7 +6,7 @@ import tempfile
 from importlib.resources import read_text
 from multiprocessing import Process
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Set
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set
 
 from pydantic import BaseModel
 from strands.agent import AgentResult
@@ -17,6 +17,7 @@ from strands.hooks import (
     HookProvider,
     HookRegistry,
 )
+from strands.models import Model
 from strands.types.exceptions import ContextWindowOverflowException
 
 from agent_builder_sdk.custom_types.common_types import (
@@ -282,6 +283,13 @@ class _StripReplayedThinking(HookProvider):
     conversations) and trims it (sliding window), so earlier turns' thinking can't be replayed
     safely. Thinking produced during the invocation stays in place for its own tool loop,
     unless the context window overflows: Strands then trims or truncates history and retries.
+
+    A Bedrock model set to manual extended thinking (``thinking`` of type ``enabled`` in
+    ``additional_request_fields``) keeps that thinking through the overflow retry: the mode
+    requires the tool call in progress to start with its thinking block, and the models that
+    accept it (Claude 4.6 and earlier) do not bind thinking to the prefix. This follows the
+    published API rules and was not checked against a live model. A thinking setting in another
+    provider's config is not read, so that retry is stripped.
     """
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
@@ -305,8 +313,17 @@ class _StripReplayedThinking(HookProvider):
 
     @classmethod
     def _strip_before_overflow_retry(cls, event: AfterModelCallEvent) -> None:
-        if isinstance(event.exception, ContextWindowOverflowException):
+        overflowed = isinstance(event.exception, ContextWindowOverflowException)
+        if overflowed and not _uses_manual_thinking(event.agent.model):
             cls._strip(event)
+
+
+def _uses_manual_thinking(model: Model) -> bool:
+    """Whether a Bedrock model's config asks for extended thinking with a fixed token budget."""
+    config = model.get_config()
+    fields = config.get("additional_request_fields") if isinstance(config, Mapping) else None
+    thinking = fields.get("thinking") if isinstance(fields, Mapping) else None
+    return isinstance(thinking, Mapping) and thinking.get("type") == "enabled"
 
 
 def describe_agent_result(result: Any) -> str:
