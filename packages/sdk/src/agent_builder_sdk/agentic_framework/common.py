@@ -41,12 +41,18 @@ _PRESIGNED_URL_RETRY = Retry(
 )
 
 # (connect, read) seconds. requests applies no timeout by default, so a wedged socket
-# would otherwise block the caller forever. urllib3 applies the connect value to every
-# socket write while it sends the request, not only to connecting, which is why the
-# upload body is streamed (see upload_from_presigned_url). The upload read timeout is the
-# wait for S3 to acknowledge the PUT after the body has been sent, which for a large
-# artifact runs longer than any single read while streaming a download, so it is not held
-# to the same bound.
+# would otherwise block the caller forever. Each value bounds one socket operation, not
+# the whole call. urllib3 applies the connect value to every socket write while it sends
+# the request, not only to connecting, which is why the upload body is streamed (see
+# upload_from_presigned_url). The upload read timeout is the wait for S3 to acknowledge
+# the PUT after the body has been sent, which for a large artifact runs longer than any
+# single read while streaming a download, so it is not held to the same bound.
+#
+# _PRESIGNED_URL_RETRY also retries an attempt that timed out. urllib3 counts a read
+# timeout and a dropped connection as the same kind of error, so Retry(read=0) would stop
+# the retry of both. Worst case, an endpoint that takes the request and never answers:
+# 4 attempts x 300 s plus 3 s of backoff (about 20 minutes) for an upload, 4 x 60 s plus
+# 3 s (about 4 minutes) for a download.
 _PRESIGNED_UPLOAD_TIMEOUT = (5, 300)
 _PRESIGNED_DOWNLOAD_TIMEOUT = (5, 60)
 
