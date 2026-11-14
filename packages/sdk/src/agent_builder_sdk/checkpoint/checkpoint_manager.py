@@ -117,6 +117,17 @@ class CheckpointManager:
             logger.warning("Force checkpoint error:", exc_info=True)
             return False
 
+    def restore_checkpoint(self, artifact_id: str) -> bool:
+        """Roll back to a specific checkpoint, serialized against background checkpointing."""
+        with self._checkpoint_lock:
+            try:
+                self.checkpoint_repository.restore_checkpoint(artifact_id)
+                logger.info(f"Rolled back to checkpoint {artifact_id}")
+                return True
+            except Exception:
+                logger.warning("Checkpoint rollback failed:", exc_info=True)
+                return False
+
 
 class BackgroundCheckpointer:
     """Background checkpointing with runtime configuration."""
@@ -164,6 +175,7 @@ class BackgroundCheckpointer:
         """Background checkpoint loop."""
         while self.enabled:
             try:
+                # Run off the event loop: the ZIP and upload are blocking (#74).
                 await asyncio.to_thread(self.manager.attempt_checkpoint)
                 # sleep 30s
                 await asyncio.sleep(30)

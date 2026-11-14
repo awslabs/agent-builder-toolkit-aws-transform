@@ -11,6 +11,9 @@ from agent_builder_sdk.custom_types.orchestrator_agent_types import (
     MemoryContext,
 )
 from agent_builder_sdk.memory.memory_manager import MemoryManager
+from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
+    BLANK_REPLY_CONTINUATION_MARKER,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +45,11 @@ class MemoryHookProvider(HookProvider):
 
         # Only process user messages that aren't tool results
         if not messages:
+            return
+
+        metadata = messages[-1].get("metadata") or {}
+        custom = metadata.get("custom") or {}  # type: ignore[attr-defined, unused-ignore]
+        if custom.get(BLANK_REPLY_CONTINUATION_MARKER):
             return
 
         if messages[-1]["role"] == "user" and "toolResult" not in messages[-1]["content"][0]:

@@ -44,7 +44,6 @@ def get_artifact_metadata_response(response_metadata):
             storedInAtxBucket=True,
         ),
         isS3ObjectPresent=abt.IsS3ObjectPresentTypeDef(publicBucket=True),
-        metadata=abt.MetadataContextTypeDef(),
         ResponseMetadata=response_metadata,
     )
 
@@ -235,7 +234,6 @@ class TestUploadArtifact:
                 artifactExpiryTimestamp=datetime.now(),
             ),
             isS3ObjectPresent=abt.IsS3ObjectPresentTypeDef(publicBucket=True),
-            metadata=abt.MetadataContextTypeDef(),
             ResponseMetadata=response_metadata,
         )
         artifact_store.client.create_artifact_upload_url.return_value = expected_response

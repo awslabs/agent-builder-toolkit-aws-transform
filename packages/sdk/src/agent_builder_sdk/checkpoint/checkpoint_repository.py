@@ -266,6 +266,14 @@ class CheckpointRepository:
         checkpoints.sort(key=self._checkpoint_recency_key, reverse=True)
         return checkpoints
 
+    def restore_checkpoint(self, artifact_id: str, destination_path: Optional[str] = None) -> None:
+        """Restore a specific past checkpoint by artifact id."""
+        restorable = {c["artifactId"] for c in self.list_restorable_checkpoints()}
+        if artifact_id not in restorable:
+            raise ValueError(f"{artifact_id} is not a restorable checkpoint for this agent")
+        self.retrieve_checkpoint(destination_path or self.checkpoint_location, artifact_id)
+        self._restore_verified = True
+
     def list_checkpoint(self, limit: Optional[int] = None) -> list[ArtifactTypeDef]:
         """STATE checkpoint artifacts for this agent, newest first.
 

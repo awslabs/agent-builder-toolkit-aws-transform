@@ -17,15 +17,21 @@ from agent_builder_sdk.utils import (
     A2A_CHAT_SUGGESTIONS_EXT,
     A2A_MESSAGE_TYPE_EXT,
     A2A_SOURCE_INFORMATION_EXT,
+    INTERRUPTED_TURN_TEXT,
     TransformEndpointConfig,
     build_agentic_api_endpoint_from_env,
     build_mcp_args_from_parsed_args,
     combine_tools,
     convert_queue_response_to_send_message_output,
     convert_subagent_response_to_send_message_output,
+    describe_agent_result,
+    extract_source_information,
     extract_text_from_strands_agent_response,
     get_prompt,
+    mcp_session_active,
     process_extension_handlers,
+    reconcile_dangling_tool_uses,
+    reconcile_unanswered_user_turns,
     write_content_to_file,
 )
 
@@ -39,6 +45,74 @@ def test_get_prompt():
 
         mock_read_text.assert_called_once_with("agent_builder_sdk.prompts", "system_prompt.md")
         assert result == "Test system prompt"
+
+
+@pytest.mark.parametrize(
+    ("result", "expected"),
+    (
+        (
+            AgentResult(
+                "end_turn",
+                Message(role="assistant", content=[{"text": "secret"}, {"toolUse": {}}]),
+                EventLoopMetrics(),
+                state={"force_stop_response": "secret"},
+            ),
+            "stop_reason=end_turn, content_blocks=[['text'], ['toolUse']], "
+            "state_keys=['force_stop_response']",
+        ),
+        (
+            AgentResult("end_turn", Message(role="assistant", content=[]), EventLoopMetrics(), {}),
+            "stop_reason=end_turn, content_blocks=[], state_keys=[]",
+        ),
+        (
+            type("Result", (), {"message": {"content": [{"text": "hi"}]}, "state": {}})(),
+            "stop_reason=None, content_blocks=[['text']], state_keys=[]",
+        ),
+        (
+            type("Result", (), {"message": {"content": "secret"}, "state": {}})(),
+            "stop_reason=None, content_blocks=str, state_keys=[]",
+        ),
+        (
+            type("Result", (), {"message": {"content": ["secret"]}, "state": {}})(),
+            "stop_reason=None, content_blocks=['str'], state_keys=[]",
+        ),
+        (None, "stop_reason=None, content_blocks=[], state_keys=None"),
+    ),
+    ids=["agent-result", "empty", "hand-built", "string-content", "string-blocks", "none"],
+)
+def test_describe_agent_result_never_includes_content(result, expected):
+    assert describe_agent_result(result) == expected
+
+
+def test_extract_text_does_not_log_non_text_blocks(caplog):
+    result = AgentResult(
+        "tool_use",
+        Message(role="assistant", content=[{"toolUse": {"input": {"q": "secret"}}}]),
+        EventLoopMetrics(),
+        state=None,
+    )
+
+    assert extract_text_from_strands_agent_response(result) == ""
+    assert "secret" not in caplog.text
+
+
+def test_describe_agent_result_never_raises():
+    class Broken:
+        @property
+        def message(self):
+            raise RuntimeError("boom")
+
+    class BrokenStr(Exception):
+        def __str__(self):
+            raise ValueError("inner")
+
+    class BrokenTwice:
+        @property
+        def message(self):
+            raise BrokenStr()
+
+    assert describe_agent_result(Broken()) == "undescribable Broken: RuntimeError"
+    assert describe_agent_result(BrokenTwice()) == "undescribable BrokenTwice: BrokenStr"
 
 
 @pytest.mark.parametrize(
@@ -78,6 +152,8 @@ class TestTransformEndpointConfig:
             ("us-west-2", "PDX"),
             ("eu-central-1", "FRA"),
             ("ap-southeast-1", "SIN"),
+            ("us-gov-west-1", "PDT"),
+            ("us-gov-east-1", "OSU"),
         ],
     )
     def test_get_airport_code_for_region_valid(self, region, expected_code):
@@ -114,6 +190,15 @@ class TestTransformEndpointConfig:
                 "eu-central-1",
                 "agenticapi",
                 "https://fra.gamma.agenticapi.elastic-gumby.ai.aws.dev",
+            ),
+            # GovCloud endpoints must resolve under the separate us-gov child zone; the commercial
+            # apex has no DNS record for them in the gov partition. Matches the Agentic API
+            # endpoint rules.
+            (
+                "prod",
+                "us-gov-west-1",
+                "agenticapi",
+                "https://pdt.prod.agenticapi.us-gov.elastic-gumby.ai.aws.dev",
             ),
         ],
     )
@@ -618,6 +703,68 @@ class TestBuildMcpArgsFromParsedArgs:
             build_mcp_args_from_parsed_args(mock_args)
 
 
+class TestMcpSessionActive:
+    """Tests for the mcp_session_active() wrapper around the private Strands API."""
+
+    def test_returns_true_when_active(self):
+        client = Mock()
+        client._is_session_active.return_value = True
+        assert mcp_session_active(client) is True
+
+    def test_returns_false_when_inactive(self):
+        client = Mock()
+        client._is_session_active.return_value = False
+        assert mcp_session_active(client) is False
+
+    def test_fails_safe_to_false_if_method_missing(self):
+        # If Strands ever removes the private method, we treat the client as not-open
+        # (so it gets entered) rather than crashing.
+        class NoMethod:
+            pass
+
+        assert mcp_session_active(NoMethod()) is False
+
+    def test_fails_safe_to_false_if_method_raises(self):
+        client = Mock()
+        client._is_session_active.side_effect = RuntimeError("boom")
+        assert mcp_session_active(client) is False
+
+
+class TestExtractSourceInformation:
+    """Tests for extract_source_information — the shared source-extraction helper."""
+
+    def _msg(self, extensions=None, metadata=None):
+        m = Mock()
+        m.extensions = extensions
+        m.metadata = metadata
+        return m
+
+    def test_extracts_when_extension_declared_and_present(self):
+        m = self._msg(
+            extensions=[A2A_SOURCE_INFORMATION_EXT],
+            metadata={
+                A2A_SOURCE_INFORMATION_EXT: {
+                    "onBehalfOfUser": "u1",
+                    "senderAgentInstanceId": "ATX_CHAT",
+                }
+            },
+        )
+        assert extract_source_information(m) == ("u1", "ATX_CHAT")
+
+    def test_ignored_when_extension_not_declared(self):
+        # Metadata present but the extension is NOT in message.extensions → ignored,
+        # matching extract_message_info's gate (an undeclared extension is not trusted).
+        m = self._msg(
+            extensions=[],
+            metadata={A2A_SOURCE_INFORMATION_EXT: {"onBehalfOfUser": "u1"}},
+        )
+        assert extract_source_information(m) == (None, None)
+
+    def test_none_when_no_metadata(self):
+        m = self._msg(extensions=[A2A_SOURCE_INFORMATION_EXT], metadata=None)
+        assert extract_source_information(m) == (None, None)
+
+
 class TestCombineTools:
     """Tests for the combine_tools function."""
 
@@ -707,6 +854,45 @@ class TestCombineTools:
             excluded_mcp_tool_names={"mcp_excluded"},
         )
         assert len(result) == 0
+
+    def test_combine_tools_inactive_client_is_entered(self):
+        """An inactive MCP client is entered/exited (with-block) to list its tools."""
+        mock_tool = Mock()
+        mock_tool.tool_name = "test_tool"
+
+        mock_client = Mock()
+        mock_client._is_session_active.return_value = False
+        mock_client.__enter__ = Mock(return_value=mock_client)
+        mock_client.__exit__ = Mock(return_value=None)
+        mock_client.list_tools_sync.return_value = [mock_tool]
+
+        result = combine_tools(mcp_clients=[mock_client])
+
+        assert result == [mock_tool]
+        # inactive → entered and exited exactly once
+        mock_client.__enter__.assert_called_once()
+        mock_client.__exit__.assert_called_once()
+        mock_client.list_tools_sync.assert_called_once()
+
+    def test_combine_tools_active_client_is_not_reentered(self):
+        """An already-active MCP client (e.g. a shared streaming client) is used
+        directly without re-entering — re-entering would raise / close it for others."""
+        mock_tool = Mock()
+        mock_tool.tool_name = "test_tool"
+
+        mock_client = Mock()
+        mock_client._is_session_active.return_value = True
+        mock_client.__enter__ = Mock(return_value=mock_client)
+        mock_client.__exit__ = Mock(return_value=None)
+        mock_client.list_tools_sync.return_value = [mock_tool]
+
+        result = combine_tools(mcp_clients=[mock_client])
+
+        assert result == [mock_tool]
+        # active → NOT re-entered, but tools still listed
+        mock_client.__enter__.assert_not_called()
+        mock_client.__exit__.assert_not_called()
+        mock_client.list_tools_sync.assert_called_once()
 
 
 class TestCleanupProcessSafely:
@@ -993,3 +1179,275 @@ class TestWriteContentToFile:
 
             # Verify directory was created
             assert os.path.exists(os.path.dirname(file_path))
+
+
+def _assert_tool_uses_immediately_resolved(messages):
+    for idx, message in enumerate(messages):
+        if message.get("role") != "assistant":
+            continue
+        tool_use_ids = [
+            block["toolUse"]["toolUseId"]
+            for block in message.get("content") or []
+            if isinstance(block, dict)
+            and isinstance(block.get("toolUse"), dict)
+            and "toolUseId" in block["toolUse"]
+        ]
+        if not tool_use_ids:
+            continue
+        assert idx + 1 < len(messages)
+        following_message = messages[idx + 1]
+        assert following_message["role"] == "user"
+        tool_result_ids = [
+            block["toolResult"]["toolUseId"]
+            for block in following_message.get("content") or []
+            if isinstance(block, dict)
+            and isinstance(block.get("toolResult"), dict)
+            and "toolUseId" in block["toolResult"]
+        ]
+        assert all(tool_use_id in tool_result_ids for tool_use_id in tool_use_ids)
+
+
+def test_reconcile_inserts_error_result_after_trailing_dangling_tool_use():
+    messages = [
+        {"role": "user", "content": [{"text": "run it"}]},
+        {
+            "role": "assistant",
+            "content": [{"toolUse": {"name": "execute", "toolUseId": "tool-1", "input": {}}}],
+        },
+    ]
+
+    result = reconcile_dangling_tool_uses(messages)
+
+    assert result[2] == {
+        "role": "user",
+        "content": [
+            {
+                "toolResult": {
+                    "toolUseId": "tool-1",
+                    "content": [{"text": "Tool did not complete; the turn was interrupted."}],
+                    "status": "error",
+                }
+            }
+        ],
+    }
+    assert len(messages) == 2
+    assert result[0] is messages[0]
+    assert result[1] is messages[1]
+    _assert_tool_uses_immediately_resolved(result)
+
+
+def test_reconcile_inserts_error_result_before_interior_following_message():
+    following_user_message = {"role": "user", "content": [{"text": "try something else"}]}
+    messages = [
+        {"role": "user", "content": [{"text": "run it"}]},
+        {
+            "role": "assistant",
+            "content": [{"toolUse": {"name": "execute", "toolUseId": "tool-1", "input": {}}}],
+        },
+        following_user_message,
+        {"role": "assistant", "content": [{"text": "Trying another approach."}]},
+    ]
+
+    result = reconcile_dangling_tool_uses(messages)
+
+    assert result[2]["content"][0]["toolResult"]["toolUseId"] == "tool-1"
+    assert result[3] is following_user_message
+    _assert_tool_uses_immediately_resolved(result)
+
+
+def test_reconcile_leaves_well_formed_history_unchanged():
+    messages = [
+        {"role": "user", "content": [{"text": "run it"}]},
+        {
+            "role": "assistant",
+            "content": [{"toolUse": {"name": "execute", "toolUseId": "tool-1", "input": {}}}],
+        },
+        {
+            "role": "user",
+            "content": [
+                {"toolResult": {"toolUseId": "tool-1", "content": [], "status": "success"}}
+            ],
+        },
+    ]
+
+    result = reconcile_dangling_tool_uses(messages)
+
+    assert result == messages
+    assert result is not messages
+    assert all(actual is original for actual, original in zip(result, messages))
+    _assert_tool_uses_immediately_resolved(result)
+
+
+def test_reconcile_repairs_multiple_orphans():
+    messages = [
+        {"role": "user", "content": [{"text": "run both"}]},
+        {
+            "role": "assistant",
+            "content": [
+                {"toolUse": {"name": "first", "toolUseId": "tool-1", "input": {}}},
+                {"toolUse": {"name": "second", "toolUseId": "tool-2", "input": {}}},
+            ],
+        },
+        {"role": "user", "content": [{"text": "continue"}]},
+        {
+            "role": "assistant",
+            "content": [{"toolUse": {"name": "third", "toolUseId": "tool-3", "input": {}}}],
+        },
+    ]
+
+    result = reconcile_dangling_tool_uses(messages)
+
+    assert [block["toolResult"]["toolUseId"] for block in result[2]["content"]] == [
+        "tool-1",
+        "tool-2",
+    ]
+    assert result[3] is messages[2]
+    assert result[5]["content"][0]["toolResult"]["toolUseId"] == "tool-3"
+    _assert_tool_uses_immediately_resolved(result)
+
+
+def test_reconcile_returns_empty_history_unchanged():
+    messages = []
+
+    assert reconcile_dangling_tool_uses(messages) is messages
+
+
+def test_reconcile_merges_missing_results_into_a_partially_resolved_turn():
+    partial_result_message = {
+        "role": "user",
+        "content": [{"toolResult": {"toolUseId": "tool-1", "content": [], "status": "success"}}],
+    }
+    messages = [
+        {"role": "user", "content": [{"text": "run both"}]},
+        {
+            "role": "assistant",
+            "content": [
+                {"toolUse": {"name": "first", "toolUseId": "tool-1", "input": {}}},
+                {"toolUse": {"name": "second", "toolUseId": "tool-2", "input": {}}},
+            ],
+        },
+        partial_result_message,
+    ]
+
+    result = reconcile_dangling_tool_uses(messages)
+
+    # Inserting a separate message would push tool-1's real result out of the adjacent position.
+    assert len(result) == 3
+    assert [block["toolResult"]["toolUseId"] for block in result[2]["content"]] == [
+        "tool-1",
+        "tool-2",
+    ]
+    assert result[2]["content"][1]["toolResult"]["status"] == "error"
+    assert result[2] is not partial_result_message
+    assert len(partial_result_message["content"]) == 1
+    _assert_tool_uses_immediately_resolved(result)
+
+
+def _placeholder():
+    return {"role": "assistant", "content": [{"text": INTERRUPTED_TURN_TEXT}]}
+
+
+def test_reconcile_unanswered_closes_a_trailing_user_message():
+    messages = [
+        {"role": "user", "content": [{"text": "first"}]},
+        {"role": "assistant", "content": [{"text": "reply"}]},
+        {"role": "user", "content": [{"text": "aborted"}]},
+    ]
+
+    assert reconcile_unanswered_user_turns(messages) == messages + [_placeholder()]
+
+
+def test_reconcile_unanswered_separates_back_to_back_user_messages():
+    first = {"role": "user", "content": [{"text": "aborted"}]}
+    second = {"role": "user", "content": [{"text": "next"}]}
+    reply = {"role": "assistant", "content": [{"text": "reply"}]}
+
+    assert reconcile_unanswered_user_turns([first, second, reply]) == [
+        first,
+        _placeholder(),
+        second,
+        reply,
+    ]
+
+
+def test_reconcile_unanswered_leaves_a_well_formed_history_unchanged():
+    messages = [
+        {"role": "user", "content": [{"text": "q"}]},
+        {"role": "assistant", "content": [{"text": "a"}]},
+    ]
+
+    result = reconcile_unanswered_user_turns(messages)
+
+    assert result == messages
+    assert result is not messages
+
+
+def _continuation():
+    return {
+        "role": "user",
+        "content": [{"text": "Please reply."}],
+        "metadata": {"custom": {"blank_reply_continuation": True}},
+    }
+
+
+def test_reconcile_unanswered_drops_an_unanswered_blank_reply_continuation():
+    messages = [{"role": "assistant", "content": []}, _continuation()]
+
+    assert reconcile_unanswered_user_turns(messages) == [{"role": "assistant", "content": []}]
+
+
+def test_reconcile_unanswered_closes_the_turn_an_unanswered_continuation_re_asked():
+    """The continuation is dropped first, so the turn it re-asked gets the placeholder."""
+    user = {"role": "user", "content": [{"text": "q"}]}
+    tool_use = {"role": "assistant", "content": [{"toolUse": {"toolUseId": "t1", "input": {}}}]}
+    tool_result = {"role": "user", "content": [{"toolResult": {"toolUseId": "t1", "content": []}}]}
+
+    assert reconcile_unanswered_user_turns([user, tool_use, tool_result, _continuation()]) == [
+        user,
+        tool_use,
+        tool_result,
+        _placeholder(),
+    ]
+
+
+def test_reconcile_unanswered_closes_a_re_asked_turn_followed_by_a_later_turn():
+    user = {"role": "user", "content": [{"text": "q"}]}
+    tool_use = {"role": "assistant", "content": [{"toolUse": {"toolUseId": "t1", "input": {}}}]}
+    tool_result = {"role": "user", "content": [{"toolResult": {"toolUseId": "t1", "content": []}}]}
+    user2 = {"role": "user", "content": [{"text": "q2"}]}
+    reply2 = {"role": "assistant", "content": [{"text": "a2"}]}
+
+    result = reconcile_unanswered_user_turns(
+        [user, tool_use, tool_result, _continuation(), user2, reply2]
+    )
+
+    assert result == [user, tool_use, tool_result, _placeholder(), user2, reply2]
+
+
+def test_history_load_passes_in_order_leave_alternating_turns():
+    """The repository's repair, then the hook's drop_unanswered_continuations, as on every load."""
+    from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
+        drop_unanswered_continuations,
+    )
+
+    user = {"role": "user", "content": [{"text": "q"}]}
+    tool_use = {"role": "assistant", "content": [{"toolUse": {"toolUseId": "t1", "input": {}}}]}
+    tool_result = {"role": "user", "content": [{"toolResult": {"toolUseId": "t1", "content": []}}]}
+
+    loaded = drop_unanswered_continuations(
+        reconcile_unanswered_user_turns([user, tool_use, tool_result, _continuation()])
+    )
+
+    assert [m["role"] for m in loaded] == ["user", "assistant", "user", "assistant"]
+
+
+def test_reconcile_unanswered_allows_a_continuation_right_after_a_user_message():
+    tool_result = {"role": "user", "content": [{"toolResult": {"toolUseId": "t1", "content": []}}]}
+    answer = {
+        "role": "assistant",
+        "content": [{"text": "Done."}],
+        "metadata": {"custom": {"blank_reply_continuation_answer": True}},
+    }
+    messages = [tool_result, _continuation(), answer]
+
+    assert reconcile_unanswered_user_turns(messages) == messages

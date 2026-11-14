@@ -275,7 +275,8 @@ class TestCheckpointServiceBackgroundTask:
         """The background task must run attempt_checkpoint OFF the loop thread.
 
         attempt_checkpoint() does CPU-bound zip + blocking S3 I/O; running it on
-        the event loop thread starves request pickup and /ping. This drives the REAL start_background_checkpointing() and records
+        the event loop thread starves request pickup and /ping (the production
+        bug). This drives the REAL start_background_checkpointing() and records
         which thread the manager call actually executes on.
 
         Regression guard: if the fix is reverted to a direct
@@ -312,9 +313,7 @@ class TestCheckpointServiceBackgroundTask:
             try:
                 await checkpoint_service._background_task
             except asyncio.CancelledError:
-                # The test stops the loop by raising CancelledError from the mocked
-                # sleep; reaching here is the expected shutdown path, nothing to assert.
-                pass
+                pass  # expected: the mocked second sleep cancels the loop to end the test
 
             mock_manager.attempt_checkpoint.assert_called_once()
             assert call_thread_ids, "attempt_checkpoint was never called"
@@ -322,7 +321,6 @@ class TestCheckpointServiceBackgroundTask:
                 "attempt_checkpoint ran on the event loop thread "
                 "(fix reverted: work is not offloaded via asyncio.to_thread)"
             )
-
 
 
 class TestCheckpointServiceShutdown:

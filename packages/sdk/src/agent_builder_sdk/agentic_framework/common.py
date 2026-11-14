@@ -16,6 +16,7 @@ import requests
 from botocore.exceptions import ClientError
 from defusedxml import ElementTree as DefusedElementTree
 from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 from agent_builder_sdk.errors import InternalBaseAgentError, UserBaseAgentError
 from agent_builder_types.type_defs import (
@@ -24,6 +25,30 @@ from agent_builder_types.type_defs import (
 )
 
 logger = logging.getLogger(__name__)
+
+# S3 signals a throttle with 503 SlowDown, which urllib3's default Retry does NOT retry
+# (its default status_forcelist is empty), so the transfer used to fail on the first
+# throttle. PUT and GET are already in the default allowed_methods, and both are
+# idempotent here. raise_on_status=False makes an exhausted retry return the final
+# response rather than raising RetryError, so raise_for_s3_error_response still
+# classifies the failure exactly as it does today.
+_PRESIGNED_URL_RETRY = Retry(
+    total=3,
+    status_forcelist=(429, 500, 502, 503, 504),
+    backoff_factor=0.5,
+    raise_on_status=False,
+)
+
+# (connect, read) seconds. requests applies no timeout by default, so a wedged socket
+# would otherwise block the caller forever. The upload read timeout is the wait for S3 to
+# acknowledge a PUT after the body has been sent, which for a large artifact runs longer
+# than any single read while streaming a download, so it is not held to the same bound.
+_PRESIGNED_UPLOAD_TIMEOUT = (5, 300)
+_PRESIGNED_DOWNLOAD_TIMEOUT = (5, 60)
+
+# ConnectTimeout subclasses ConnectionError, but ReadTimeout does not, so catching only
+# ConnectionError would let the timeouts above escape as an unhandled ReadTimeout.
+_TRANSPORT_ERRORS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 
 @dataclass
@@ -61,9 +86,14 @@ def upload_from_presigned_url(
 
     try:
         with requests.Session() as session:
-            session.mount("https://", HTTPAdapter(max_retries=3))
-            response = session.put(presigned_url_string, data=content, headers=headers)
-    except requests.exceptions.ConnectionError as e:
+            session.mount("https://", HTTPAdapter(max_retries=_PRESIGNED_URL_RETRY))
+            response = session.put(
+                presigned_url_string,
+                data=content,
+                headers=headers,
+                timeout=_PRESIGNED_UPLOAD_TIMEOUT,
+            )
+    except _TRANSPORT_ERRORS as e:
         raise InternalBaseAgentError("Artifact upload failed: connection error") from e
 
     raise_for_s3_error_response(response.status_code, response.text, is_managed_bucket)
@@ -92,9 +122,11 @@ def download_from_presigned_url(
         }
 
         with requests.Session() as session:
-            session.mount("https://", HTTPAdapter(max_retries=3))
-            response = session.get(presigned_url_string, headers=headers)
-    except requests.exceptions.ConnectionError as e:
+            session.mount("https://", HTTPAdapter(max_retries=_PRESIGNED_URL_RETRY))
+            response = session.get(
+                presigned_url_string, headers=headers, timeout=_PRESIGNED_DOWNLOAD_TIMEOUT
+            )
+    except _TRANSPORT_ERRORS as e:
         raise InternalBaseAgentError("Artifact download failed: connection error") from e
 
     raise_for_s3_error_response(

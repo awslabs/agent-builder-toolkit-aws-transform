@@ -794,6 +794,15 @@ class TestMultiCheckpoint:
 
         assert mock_artifact_store.upload_artifact.call_args.kwargs["label"] is None
 
+    def test_select_checkpoint_same_second_tiebreak_by_artifact_id(
+        self, multi_checkpoint_repository
+    ):
+        checkpoints = [_ts("a", 5), _ts("z", 5), _ts("m", 5)]
+
+        selected = multi_checkpoint_repository._select_checkpoint(checkpoints)
+
+        assert selected["artifactId"] == "z"
+
     def test_select_checkpoint_newest_in_single_mode(self, checkpoint_repository):
         # single mode also selects by recency now, so a downgrade cannot pick a stale artifact
         checkpoints = [_ts("first", 1), _ts("second", 3)]
@@ -814,6 +823,25 @@ class TestMultiCheckpoint:
 
         assert [c["artifactId"] for c in result] == ["c4", "c3", "c2"]
         assert mock_artifact_store.list_artifacts.call_args.kwargs["max_results"] == 3
+
+    def test_restore_checkpoint_by_id(self, multi_checkpoint_repository, mock_artifact_store):
+        mock_artifact_store.list_artifacts.return_value = {"artifacts": [_ts("artifact123", 1)]}
+        with patch.object(multi_checkpoint_repository, "retrieve_checkpoint") as mock_retrieve:
+            multi_checkpoint_repository.restore_checkpoint("artifact123", "/dest")
+
+        mock_retrieve.assert_called_once_with("/dest", "artifact123")
+        assert multi_checkpoint_repository.is_restore_verified is True
+
+    def test_restore_checkpoint_rejects_unknown_id(
+        self, multi_checkpoint_repository, mock_artifact_store
+    ):
+        mock_artifact_store.list_artifacts.return_value = {"artifacts": [_ts("known", 1)]}
+        with patch.object(multi_checkpoint_repository, "retrieve_checkpoint") as mock_retrieve:
+            with pytest.raises(ValueError):
+                multi_checkpoint_repository.restore_checkpoint("unknown")
+
+        mock_retrieve.assert_not_called()
+        assert multi_checkpoint_repository.is_restore_verified is False
 
     def test_retrieve_checkpoint_with_explicit_id_skips_list(
         self, multi_checkpoint_repository, mock_artifact_store
