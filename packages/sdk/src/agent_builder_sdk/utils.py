@@ -286,8 +286,8 @@ class _StripReplayedThinking(HookProvider):
 
     @staticmethod
     def _strip(event: BeforeInvocationEvent | AfterModelCallEvent) -> None:
-        # ponytail: also drops reasoning from append-only histories; keep it per conversation
-        # once the notification merge and the trimming are append-only.
+        # Unconditional: nothing here tells an append-only history from one that the notification
+        # merge or the trimming changed, so reasoning that would still replay safely goes too.
         messages = event.agent.messages
         for i, message in enumerate(messages):
             content = [block for block in message["content"] if "reasoningContent" not in block]
