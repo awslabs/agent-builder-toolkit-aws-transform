@@ -114,21 +114,33 @@ class TestShouldEnable:
         instance_manager.get_status.assert_not_called()
 
     def test_returns_false_for_healthcheck_type(
-        self, registry: Mock, context: AgentRuntimeContext
+        self, registry: Mock, context: AgentRuntimeContext, caplog: pytest.LogCaptureFixture
     ) -> None:
         registry.get_agent_configuration.return_value = {
             "monitoringType": MonitoringType.HEALTHCHECK.value
         }
-        assert HeartbeatService(context)._should_enable() is False
+        with caplog.at_level(logging.INFO, logger=MODULE):
+            assert HeartbeatService(context)._should_enable() is False
+
+        assert caplog.messages == ["Heartbeat disabled: monitoringType=HEALTHCHECK"]
 
     @pytest.mark.parametrize(
         "error", [Exception("connection error"), _client_error("ThrottlingException")]
     )
     def test_returns_none_on_transient_error(
-        self, error: Exception, registry: Mock, context: AgentRuntimeContext
+        self,
+        error: Exception,
+        registry: Mock,
+        context: AgentRuntimeContext,
+        caplog: pytest.LogCaptureFixture,
     ) -> None:
         registry.get_agent_configuration.side_effect = error
-        assert HeartbeatService(context)._should_enable() is None
+
+        with caplog.at_level(logging.INFO, logger=MODULE):
+            assert HeartbeatService(context)._should_enable() is None
+
+        assert [record.levelno for record in _logged(caplog)] == [logging.WARNING]
+        assert caplog.messages == [f"Failed to check monitoring type, will retry: {error}"]
 
     @pytest.mark.parametrize("code", PERMANENT_CODES)
     def test_returns_false_with_one_warning_on_permanent_error(
@@ -429,7 +441,10 @@ class TestHeartbeatLoop:
     """Test the background heartbeat loop."""
 
     @pytest.mark.asyncio
-    async def test_loop_survives_send_failure(self, context: AgentRuntimeContext) -> None:
+    async def test_loop_survives_send_failure(
+        self, context: AgentRuntimeContext, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A failed beat leaves one warning with its traceback, and the loop goes on."""
         service = HeartbeatService(context, interval_minutes=0)  # 0 for fast test
 
         call_count = 0
@@ -443,12 +458,15 @@ class TestHeartbeatLoop:
 
         with patch.object(service, "_should_enable", return_value=True), patch.object(
             service, "_send_heartbeat", side_effect=flaky_send
-        ):
+        ), caplog.at_level(logging.WARNING, logger=MODULE):
             await service.start()
             await _wait_until(lambda: call_count >= 2)
             await service.stop()
 
         assert call_count >= 2  # the loop kept beating after the first send raised
+        (record,) = _logged(caplog)
+        assert (record.levelno, record.getMessage()) == (logging.WARNING, "Heartbeat failed")
+        assert record.exc_info is not None and record.exc_info[0] is ClientError
 
     @pytest.mark.asyncio
     async def test_loop_ends_on_terminal_status(
