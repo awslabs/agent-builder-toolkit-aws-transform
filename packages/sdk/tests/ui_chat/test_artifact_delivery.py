@@ -346,7 +346,7 @@ def test_reply_is_untouched_when_nothing_valid_is_recorded(delivered: Any) -> No
 def test_reply_survives_a_failing_state_read(caplog: pytest.LogCaptureFixture) -> None:
     agent = _Agent(_State(error=RuntimeError("boom")))
     with caplog.at_level(logging.ERROR):
-        assert reply_with_artifact_deeplinks("Done.", agent) == "Done."
+        assert _outside_a_turn("Done.", agent) == "Done."
     assert "Failed to append artifact deeplinks" in caplog.text
 
 

@@ -4,13 +4,17 @@
 Unit tests for the messages handler.
 """
 
+import asyncio
+import contextvars
 import json
 import logging
-from unittest.mock import Mock, create_autospec, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, create_autospec, patch
 
 import pytest
+from strands.agent import AgentResult
+from strands.agent.state import AgentState
 
-from agent_builder_sdk.custom_types.common_types import InvocationRequest
+from agent_builder_sdk.custom_types.common_types import A2AMessage, InvocationRequest
 from agent_builder_sdk.extensions.acknowledgments.acknowledgment_handler import (
     AcknowledgmentHandler,
 )
@@ -18,6 +22,7 @@ from agent_builder_sdk.interfaces import AsyncBaseAgent, BaseAgent
 from agent_builder_sdk.message_queue import QueueResponse
 from agent_builder_sdk.message_queue.interface import RequestPriority
 from agent_builder_sdk.messages.message_handler import MessageHandler
+from agent_builder_sdk.ui_chat.artifact_delivery import DELIVERED_ARTIFACTS_STATE_KEY
 
 
 @pytest.fixture(autouse=True)
@@ -241,6 +246,31 @@ async def test_send_message_with_agent(
     assert response.result.parts == [{"text": "test agent result", "kind": "text"}]
     assert "Agent result: stop_reason=end_turn" in caplog.text
     assert "test agent result" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "stop_reason,expected",
+    [
+        ("end_turn", "test agent result\n\n[Report](aws-transform://~/artifacts/art-1)"),
+        ("guardrail_intervened", "test agent result"),
+    ],
+)
+async def test_direct_reply_links_the_turns_delivered_artifacts(
+    a2a_message: A2AMessage, agent_result: AgentResult, stop_reason: str, expected: str
+) -> None:
+    agent_result.stop_reason = stop_reason  # type: ignore[assignment]
+    agent = MagicMock()
+    agent.process_message_async = AsyncMock(return_value=agent_result)
+    agent.state = AgentState()
+    agent.state.set(DELIVERED_ARTIFACTS_STATE_KEY, [{"artifact_id": "art-1", "title": "Report"}])
+    handler = MessageHandler(agent=agent)
+
+    response = await asyncio.create_task(
+        handler.send_message(InvocationRequest(a2a_message)), context=contextvars.Context()
+    )
+
+    assert response.result is not None
+    assert response.result.parts == [{"text": expected, "kind": "text"}]
 
 
 async def test_send_message_with_acknowledgment_extension(mock_convert, handler, a2a_message):

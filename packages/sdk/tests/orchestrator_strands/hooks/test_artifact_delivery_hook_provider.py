@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for ArtifactDeliveryHookProvider: turn-scoped collection of delivered artifacts."""
 
+import contextvars
 import json
 import logging
+from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, AsyncGenerator, Dict, List, NoReturn, Optional
+from typing import Any, AsyncGenerator, Callable, Dict, List, NoReturn, Optional
 
 import pytest
 from strands import Agent, tool
@@ -14,7 +16,12 @@ from strands.hooks.events import AfterToolCallEvent, BeforeInvocationEvent
 from strands.hooks.registry import HookRegistry
 from strands.models.model import Model
 
+from agent_builder_sdk.interfaces import StreamingCapable
+from agent_builder_sdk.orchestrator_strands.conversation.file_repository import (
+    FileMultiSourceConversationRepository,
+)
 from agent_builder_sdk.orchestrator_strands.hooks import ArtifactDeliveryHookProvider
+from agent_builder_sdk.server.agent_runtime_server import AgentRuntimeServer
 from agent_builder_sdk.ui_chat.artifact_delivery import (
     DELIVERED_ARTIFACTS_STATE_KEY,
     reply_with_artifact_deeplinks,
@@ -170,6 +177,12 @@ def fetch_page() -> dict:
     return {"delivered": {"artifact_id": "agent-scratch-7", "title": "URGENT"}}
 
 
+def _reply(reply: str, agent: Agent) -> str:
+    """The reply as a funnel outside the turn sees it: no source ContextVar, which other test
+    modules leave set in this thread."""
+    return contextvars.Context().run(reply_with_artifact_deeplinks, reply, agent)
+
+
 def _scripted_agent(*turns: List[Dict[str, Any]]) -> Agent:
     return Agent(
         model=_ScriptedModel(list(turns)),
@@ -192,13 +205,13 @@ def test_a_real_strands_turn_records_the_verified_deliverable_and_ignores_relaye
     assert agent.state.get(DELIVERED_ARTIFACTS_STATE_KEY) == [
         {"artifact_id": "art-7", "title": "Report"}
     ]
-    assert reply_with_artifact_deeplinks("Your report is ready.", agent) == (
+    assert _reply("Your report is ready.", agent) == (
         "Your report is ready.\n\n[Report](aws-transform://~/artifacts/art-7)"
     )
 
     agent("thanks")
 
-    assert reply_with_artifact_deeplinks("Anything else?", agent) == "Anything else?"
+    assert _reply("Anything else?", agent) == "Anything else?"
 
 
 def test_an_agent_without_the_hook_adds_no_links() -> None:
@@ -209,4 +222,44 @@ def test_an_agent_without_the_hook_adds_no_links() -> None:
     agent("deliver")
 
     assert agent.state.get(DELIVERED_ARTIFACTS_STATE_KEY) is None
-    assert reply_with_artifact_deeplinks("Your report is ready.", agent) == "Your report is ready."
+    assert _reply("Your report is ready.", agent) == "Your report is ready."
+
+
+_DEV_GUIDE = (
+    Path(__file__).resolve().parents[4]
+    / "mcp-server/src/agent_builder_mcp/knowledge/data/dev_guide.md"
+)
+
+
+def _dev_guide_agent_factory() -> Callable[..., Any]:
+    """The ``agent_factory`` of the dev guide's "Artifact Links in Replies" example."""
+    section = _DEV_GUIDE.read_text(encoding="utf-8").split("#### Artifact Links in Replies", 1)[1]
+    code = section.split("```python\n", 1)[1].split("```", 1)[0]
+    namespace: Dict[str, Any] = {}
+    exec(code, namespace)
+    return namespace["agent_factory"]
+
+
+def test_the_dev_guide_factory_takes_the_servers_keywords_and_can_stream(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if not _DEV_GUIDE.exists():
+        pytest.skip("dev guide not in this checkout")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    repository = FileMultiSourceConversationRepository(storage_dir=str(tmp_path / "conversations"))
+    server = SimpleNamespace(
+        context=SimpleNamespace(workspace_id="ws", job_id="job", agent_instance_id="instance"),
+        _hitl_notifier=None,
+        task_manager=None,
+        _shared_conversation_repository=repository,
+        _shared_memory_manager=None,
+    )
+    agent_params = AgentRuntimeServer._get_agent_params(server)  # type: ignore[arg-type]
+
+    agent = _dev_guide_agent_factory()(None, str(tmp_path), **agent_params)
+
+    assert isinstance(agent, StreamingCapable)
+    callbacks = agent.hooks.get_callbacks_for(BeforeInvocationEvent(agent=agent))
+    assert any(
+        isinstance(getattr(cb, "__self__", None), ArtifactDeliveryHookProvider) for cb in callbacks
+    )

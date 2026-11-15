@@ -2849,16 +2849,22 @@ Bedrock guardrails provide content filtering and safety controls for your agent 
 The SDK can also add these links for you. `ArtifactDeliveryHookProvider` records each customer file that a turn verifies, and the reply of that turn gets a link to each file that it does not link yet. The feature is off until you add the hook to each orchestrator agent that answers users:
 
 ```python
-from agent_builder_sdk.agent_factory import create_default_orchestrator
+from agent_builder_sdk.agent_factory import create_default_async_orchestrator
 from agent_builder_sdk.orchestrator_strands.hooks import ArtifactDeliveryHookProvider
 
 def agent_factory(mcp_client, storage_dir, **kwargs):
-    orchestrator = create_default_orchestrator(
-        mcp_client=mcp_client, storage_dir=storage_dir, system_prompt="...", **kwargs
+    orchestrator = create_default_async_orchestrator(
+        mcp_client=mcp_client,
+        storage_dir=storage_dir,
+        system_prompt="...",
+        conversation_repository=kwargs.get("conversation_repository"),
+        memory_manager=kwargs.get("memory_manager"),
     )
     orchestrator.hooks.add_hook(ArtifactDeliveryHookProvider())
     return orchestrator
 ```
+
+The server also passes `workspace_id`, `job_id` and other keywords to the factory, so do not forward `**kwargs` to `create_default_async_orchestrator` as a whole; it does not accept them. The async orchestrator also serves `message/stream` turns.
 
 If you construct your own orchestrator, you can pass `ArtifactDeliveryHookProvider()` in `hooks=[...]` instead.
 
@@ -2866,6 +2872,7 @@ If you construct your own orchestrator, you can pass `ArtifactDeliveryHookProvid
 |---|---|
 | What is linked | An artifact for which a `get_artifact_metadata` tool result in the same turn shows `artifactType.categoryType` `CUSTOMER_OUTPUT` and `isS3ObjectPresent.publicBucket` `true`. A completed upload alone is not enough, so tell the model to call `get_artifact_metadata` after it uploads a customer file. |
 | Tool name | Must be exactly `get_artifact_metadata`. If your MCP client adds a prefix to tool names, the hook records nothing. |
+| Servers | `AgentRuntimeServer` (`message/send` and `message/stream`) and `StatelessAgentRuntimeServer` (`message/send`). |
 | Which replies | Replies to user turns only. Replies to subagents and notifications, and guardrail refusals, get no links. |
 | No duplicates | A file that the reply already links (a Markdown link or a `<...>` autolink to its `aws-transform://` deeplink) is not linked again. |
 | Link text | The artifact label, or else the file name, with Markdown characters escaped. The link URL contains only the `artifactId`. |

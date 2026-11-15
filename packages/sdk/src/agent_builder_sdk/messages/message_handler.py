@@ -17,6 +17,7 @@ from agent_builder_sdk.agentic_framework.client_factory import get_agentic_api_c
 from agent_builder_sdk.constants import (
     DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS,
     DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS,
+    GUARDRAIL_STOP_REASONS,
     validate_send_message_timeout,
 )
 from agent_builder_sdk.custom_types.common_types import (
@@ -34,6 +35,7 @@ from agent_builder_sdk.interfaces import AnyBaseAgent
 from agent_builder_sdk.message_queue import QueueResponse, QueueService
 from agent_builder_sdk.message_queue.interface import RequestPriority
 from agent_builder_sdk.task.task_manager import TaskManager
+from agent_builder_sdk.ui_chat.artifact_delivery import reply_with_artifact_deeplinks
 from agent_builder_sdk.utils import (
     convert_queue_response_to_send_message_output,
     convert_subagent_response_to_send_message_output,
@@ -217,6 +219,11 @@ class MessageHandler:
                 logger.info("Agent result text is empty")
             else:
                 logger.debug("Agent result text: %s", extracted_agent_response)
+
+            if getattr(agent_response, "stop_reason", None) not in GUARDRAIL_STOP_REASONS:
+                extracted_agent_response = reply_with_artifact_deeplinks(
+                    extracted_agent_response, agent
+                )
 
             return convert_subagent_response_to_send_message_output(
                 context_id, request.message, response=extracted_agent_response
