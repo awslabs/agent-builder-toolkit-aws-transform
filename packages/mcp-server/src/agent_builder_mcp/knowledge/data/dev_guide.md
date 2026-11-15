@@ -102,6 +102,7 @@
       - [Optional Environment Variables](#optional-environment-variables)
       - [Bedrock Guardrails](#bedrock-guardrails)
       - [Available Tools & Integrations](#available-tools-integrations)
+        - [Experimental: write_file for an agent without a shell](#experimental-write_file-for-an-agent-without-a-shell)
   - [AWS Transform Agentic API Specification](#aws-transform-agentic-api-specification)
     - [Common Error Responses](#common-error-responses)
     - [Data Types and Constraints](#data-types-and-constraints)
@@ -2844,6 +2845,37 @@ Bedrock guardrails provide content filtering and safety controls for your agent 
 #### Available Tools & Integrations
 
 Your agent automatically has access to AWS Transform tools via MCP integration (AWS Transform MCP).
+
+##### Experimental: write_file for an agent without a shell
+
+`write_file` lets the model author a text file (a report, HTML, a config) in the agent container
+when the agent has no shell tool. It is off by default. Add it with `custom_tools`:
+
+```python
+from agent_builder_sdk.agent_factory import create_default_async_orchestrator
+from agent_builder_sdk.experimental.write_file import write_file
+
+agent = create_default_async_orchestrator(mcp_client, storage_dir, custom_tools=[write_file])
+```
+
+| Rule | Value |
+|---|---|
+| Root | `/tmp` only; the path must be absolute |
+| Size | 256 KiB per call; the model writes long files one section per call with `append=True` |
+| Write | Atomic: the tool writes a temp file, then renames it over the target |
+| Refused | Paths outside `/tmp`, `..` components, NUL bytes, symlinks, directories, and the agent's own runtime state |
+
+Runtime state is the SDK's default state locations under `/tmp` (for example `/tmp/agent_runtime`,
+`/tmp/orchestrator_agent`, `/tmp/agent_state` and the agentic MCP server log files), plus every
+`storage_dir` that `AgentRuntimeServer` or `StatelessAgentRuntimeServer` gets and every checkpoint
+location. If your agent keeps other state under `/tmp`, call
+`agent_builder_sdk.util.paths.protect(path)` for it before the agent starts.
+
+To keep credentials out of text that your own tools return to the model or write to logs, use
+`agent_builder_sdk.util.redact.scrub(text, secrets)`. It is best effort: it removes AWS access-key
+ids, literal values of secret-named keys (`password`, `api_key`, `client_secret`, `session_token`
+and similar) in JSON, env-file and YAML text, and the exact `secrets` values you pass. A secret
+under any other name passes unless you pass its value.
 
 ## AWS Transform Agentic API Specification
 
