@@ -7,12 +7,15 @@ Tests the StatelessAgentRuntimeServer class which provides compatibility with mu
 agent execution environments through JSON-RPC endpoints.
 """
 
+from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import pytest
 
 from agent_builder_sdk.custom_types.common_types import A2AMessage
 from agent_builder_sdk.server.stateless_agent_runtime_server import StatelessAgentRuntimeServer
+from agent_builder_sdk.util import paths
 
 
 @pytest.fixture
@@ -45,6 +48,17 @@ def stateless_agent_runtime_server(mock_subagent_factory):
             storage_dir="/tmp/test_storage",
         )
         return server
+
+
+def test_storage_dir_is_refused_to_file_tools(
+    mock_subagent_factory: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(paths, "_protected", set())
+    with mock.patch("agent_builder_sdk.server.stateless_agent_runtime_server.MessageHandler"):
+        StatelessAgentRuntimeServer(agent_factory=mock_subagent_factory, storage_dir=str(tmp_path / "agent"))
+
+    assert "runtime state" in (paths.unwritable(str(tmp_path / "agent" / "conversations.json"), [str(tmp_path)]) or "")
+    assert paths.unwritable(str(tmp_path / "report.md"), [str(tmp_path)]) is None
 
 
 class TestStatelessAgentRuntimeServer:

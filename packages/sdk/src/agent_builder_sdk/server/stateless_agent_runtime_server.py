@@ -38,6 +38,7 @@ from agent_builder_sdk.server.base_server import BaseServer
 from agent_builder_sdk.server.request_context import RequestContextMiddleware
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 from agent_builder_sdk.task_handler import TaskHandler
+from agent_builder_sdk.util import paths
 from agent_builder_sdk.utils import build_agentic_api_endpoint_from_env
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,7 @@ class StatelessAgentRuntimeServer(BaseServer):
         self.port = port
         self.binary_location = binary_location
         self.storage_dir = storage_dir
+        paths.protect(storage_dir)
         self.auto_transition_job_to_executing = auto_transition_job_to_executing
 
         # Agent state
