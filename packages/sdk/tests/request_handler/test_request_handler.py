@@ -3,11 +3,15 @@
 """Tests for message processing module."""
 
 import asyncio
+import contextvars
 import unittest
-from typing import List, Optional
+from types import SimpleNamespace
+from typing import Any, List, Optional
 from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
 import pytest
+from strands.agent import AgentResult
+from strands.agent.state import AgentState
 
 from agent_builder_sdk.interfaces import AsyncBaseAgent, BaseAgent
 from agent_builder_sdk.message_queue import (
@@ -17,9 +21,17 @@ from agent_builder_sdk.message_queue import (
     RequestStatus,
     ResponseStore,
 )
+from agent_builder_sdk.orchestrator_strands.conversation.constants import (
+    CURRENT_SOURCE_TYPE_KEY,
+    MessageSourceType,
+)
+from agent_builder_sdk.orchestrator_strands.conversation.repository import (
+    conversation_source_type,
+)
 from agent_builder_sdk.request_handler import RequestHandler
 from agent_builder_sdk.request_handler.context import RequestContext
 from agent_builder_sdk.request_handler.queue_handler import QueueRequestHandler
+from agent_builder_sdk.ui_chat.artifact_delivery import DELIVERED_ARTIFACTS_STATE_KEY
 
 
 class TestRequestHandler(unittest.TestCase):
@@ -157,6 +169,143 @@ async def test_processing(queue_request_handler, agent_result, agent_class, proc
     assert response.context_id == "context-id"
     assert response.message == "test agent result"
     assert response.status is RequestStatus.COMPLETED
+
+
+NEW_LINK = "[Report](aws-transform://~/artifacts/new)"
+
+
+def _agent_with_a_delivered_artifact(
+    result: Any, source: Optional[MessageSourceType] = MessageSourceType.USER, sync: bool = False
+) -> MagicMock:
+    """An agent whose turn returns ``result`` with one verified deliverable on its state."""
+    agent = MagicMock()
+    if sync:
+        del agent.process_message_async
+        agent.process_message = MagicMock(return_value=result)
+    else:
+        agent.process_message_async = AsyncMock(return_value=result)
+    agent.state = AgentState()
+    if source is not None:
+        agent.state.set(CURRENT_SOURCE_TYPE_KEY, source)
+    agent.state.set(DELIVERED_ARTIFACTS_STATE_KEY, [{"artifact_id": "new", "title": "Report"}])
+    return agent
+
+
+async def _stored_reply(
+    handler: QueueRequestHandler, agent: Any, turn_source: Optional[MessageSourceType] = None
+) -> QueueResponse:
+    """Run one turn in a fresh context, so no source ContextVar set elsewhere leaks in;
+    ``turn_source`` is the ContextVar value the orchestrator would have set for the turn."""
+    request = QueueRequest(context=dict(context_id="context-id"))
+    handler.request_queue.dequeue.side_effect = [request, asyncio.CancelledError()]
+    context = contextvars.Context()
+    if turn_source is not None:
+        context.run(conversation_source_type.set, turn_source)
+    await asyncio.create_task(
+        handler.start_processing(AsyncMock(return_value=agent)), context=context
+    )
+    response = await handler.response_store.get_response(request.request_id)
+    assert response is not None
+    assert response.status is RequestStatus.COMPLETED
+    return response
+
+
+async def test_reply_links_the_turns_delivered_artifacts_it_does_not_link_yet(
+    queue_request_handler: QueueRequestHandler, agent_result: AgentResult
+) -> None:
+    agent_result.message["content"] = [{"text": "Done. See [it](aws-transform://~/artifacts/old)."}]
+    agent = _agent_with_a_delivered_artifact(agent_result)
+    agent.state.set(
+        DELIVERED_ARTIFACTS_STATE_KEY,
+        [{"artifact_id": "old", "title": "L"}, {"artifact_id": "new", "title": "Report"}],
+    )
+
+    response = await _stored_reply(queue_request_handler, agent)
+
+    assert response.message == f"Done. See [it](aws-transform://~/artifacts/old).\n\n{NEW_LINK}"
+
+
+async def test_a_sync_agents_reply_is_linked_from_the_state_copy_of_the_source(
+    queue_request_handler: QueueRequestHandler, agent_result: AgentResult
+) -> None:
+    """A sync agent runs on another thread, so the turn's ContextVar is not visible here."""
+    for source, expected in (
+        (MessageSourceType.USER, f"test agent result\n\n{NEW_LINK}"),
+        (MessageSourceType.SUBAGENT, "test agent result"),
+    ):
+        agent = _agent_with_a_delivered_artifact(agent_result, source, sync=True)
+        response = await _stored_reply(queue_request_handler, agent)
+        assert response.message == expected, source
+
+
+async def test_a_force_stop_reply_is_linked(
+    queue_request_handler: QueueRequestHandler, agent_result: AgentResult
+) -> None:
+    agent_result.state = {"force_stop_response": "All set."}
+
+    response = await _stored_reply(
+        queue_request_handler, _agent_with_a_delivered_artifact(agent_result)
+    )
+
+    assert response.message == f"All set.\n\n{NEW_LINK}"
+
+
+async def test_a_result_without_a_stop_reason_is_stored_with_its_links(
+    queue_request_handler: QueueRequestHandler,
+) -> None:
+    """A partner's own result object may carry only ``message`` and ``state``."""
+    result = SimpleNamespace(message={"content": [{"text": "Done."}]}, state={})
+
+    response = await _stored_reply(
+        queue_request_handler, _agent_with_a_delivered_artifact(result, source=None)
+    )
+
+    assert response.message == f"Done.\n\n{NEW_LINK}"
+
+
+@pytest.mark.parametrize("stop_reason", ["guardrail_intervened", "content_filtered"])
+async def test_a_guardrail_refusal_is_not_given_artifact_links(
+    queue_request_handler: QueueRequestHandler, agent_result: AgentResult, stop_reason: str
+) -> None:
+    agent_result.stop_reason = stop_reason  # type: ignore[assignment]
+
+    response = await _stored_reply(
+        queue_request_handler, _agent_with_a_delivered_artifact(agent_result)
+    )
+
+    assert response.message == "test agent result"
+
+
+async def test_a_user_turns_reply_is_linked_and_a_subagents_is_not(
+    queue_request_handler: QueueRequestHandler, agent_result: AgentResult
+) -> None:
+    """The turn's ContextVar decides, even when the shared state copy says otherwise."""
+    for source, other, linked in (
+        (MessageSourceType.USER, MessageSourceType.SUBAGENT, True),
+        (MessageSourceType.SUBAGENT, MessageSourceType.USER, False),
+    ):
+        response = await _stored_reply(
+            queue_request_handler, _agent_with_a_delivered_artifact(agent_result, other), source
+        )
+        assert (NEW_LINK in response.message) is linked, source
+
+
+async def test_reply_is_stored_when_the_artifact_state_cannot_be_read(
+    queue_request_handler: QueueRequestHandler, agent_result: AgentResult
+) -> None:
+    agent = MagicMock()
+    agent.process_message_async = AsyncMock(return_value=agent_result)
+
+    def read(key: str) -> Any:
+        if key == DELIVERED_ARTIFACTS_STATE_KEY:
+            raise RuntimeError("state unavailable")
+        return MessageSourceType.USER
+
+    agent.state.get.side_effect = read
+
+    response = await _stored_reply(queue_request_handler, agent)
+
+    assert response.message == "test agent result"
 
 
 @pytest.mark.asyncio

@@ -44,6 +44,7 @@ from agent_builder_sdk.constants import GUARDRAIL_STOP_REASONS
 from agent_builder_sdk.custom_types.common_types import A2AMessage
 from agent_builder_sdk.env_var import get_agent_context_from_env
 from agent_builder_sdk.streaming.config import StreamingConfig
+from agent_builder_sdk.ui_chat.artifact_delivery import reply_with_artifact_deeplinks
 from agent_builder_sdk.util.suggestions_manager import get_and_consume_suggestions
 from agent_builder_sdk.utils import (
     A2A_CHAT_SUGGESTIONS_EXT,
@@ -209,6 +210,7 @@ class StreamingResponsePersistHook(HookProvider):
             # _on_after_model_call, so chips render live and on reload (parity with the buffered
             # path, which attaches suggestions on every final response).
             force_stop_message_id = stream_state.ensure_force_stop_message_id()
+            force_stop_text = reply_with_artifact_deeplinks(force_stop_text, event.agent)
             suggestions = get_and_consume_suggestions()
             persisted = await self._persist_final(
                 stream_state,
@@ -301,6 +303,8 @@ class StreamingResponsePersistHook(HookProvider):
             # final_message_id, the id of the text block the adapter streamed in this call. A
             # tool-only step (no narration) has no text and persists nothing here.
             text = _extract_assistant_text(message)
+            if text and not is_partial and not is_guardrail:
+                text = reply_with_artifact_deeplinks(text, event.agent)
             if text:
                 text_id = getattr(stream_state, "final_message_id", None) or str(uuid.uuid4())
                 if is_partial or stream_state is None:
