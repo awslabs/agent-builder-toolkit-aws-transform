@@ -30,6 +30,7 @@ from agent_builder_sdk.request_handler import RequestHandler
 from agent_builder_sdk.request_handler.context import RequestContext
 from agent_builder_sdk.request_handler.queue_handler import QueueRequestHandler
 from agent_builder_sdk.util.suggestions_manager import (
+    add_suggestions,
     clear_suggestions,
     get_and_consume_suggestions,
 )
@@ -325,13 +326,15 @@ async def test_a_user_turn_that_ends_with_a_note_stores_the_note_as_its_reply(
     """A note left for the exception that ends the turn, raised as is or inside the
     EventLoopException Strands raises after a tool call, is stored with its chip as a completed
     reply; the raw exception text reaches nobody. The chip rides on the stored reply, not on the
-    shared suggestion holder, so a reply nobody reads cannot put it on the next one."""
+    shared suggestion holder, so a reply nobody reads cannot put it on the next one. Chips a tool
+    left pending in the failed turn are dropped: they belong to a step the model never showed."""
     clear_suggestions()
     handler = _user_handler()
     request = _chat_user_request()
     failure = RuntimeError('Read timeout on endpoint URL: "https://bedrock-runtime..."')
 
     async def process(_request: Any) -> AgentResult:
+        add_suggestions(["Approve", "Reject"])
         note = turn_error_note.get()
         assert note is not None
         note.text, note.suggestions, note.exception = "Reply Continue.", ["Continue"], failure
@@ -346,7 +349,8 @@ async def test_a_user_turn_that_ends_with_a_note_stores_the_note_as_its_reply(
     assert response.message == "Reply Continue."
     assert response.error_message is None
     assert get_and_consume_suggestions() is None
-    output = convert_queue_response_to_send_message_output(response, A2AMessage(role="user", parts=[], messageId="m", kind="message"))
+    request_message = A2AMessage(role="user", parts=[], messageId="m", kind="message")
+    output = convert_queue_response_to_send_message_output(response, request_message)
     assert output.result is not None
     assert output.result.metadata[A2A_CHAT_SUGGESTIONS_EXT] == ["Continue"]
     assert A2A_CHAT_SUGGESTIONS_EXT in output.result.extensions

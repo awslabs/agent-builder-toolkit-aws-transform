@@ -35,6 +35,7 @@ from ..orchestrator_strands.conversation.repository import (
     turn_deadline,
     turn_error_note,
 )
+from ..util.suggestions_manager import clear_suggestions
 from ..utils import (
     A2A_CHAT_SUGGESTIONS_EXT,
     describe_agent_result,
@@ -334,6 +335,9 @@ class QueueRequestHandler(RequestHandler):
                         logger.error(f"Error processing request: {e}")
                         note = turn_error_note.get()
                         if note is not None and note.text is not None and note.explains(e):
+                            # Chips a tool left pending belong to a step the model never showed,
+                            # and the reply converter would put them in place of the note's chip.
+                            clear_suggestions()
                             await self.store_response(note.text, suggestions=note.suggestions)
                         else:
                             await self.handle_request_error(e)
