@@ -270,12 +270,13 @@ def _chat_user_request() -> QueueRequest:
     return QueueRequest(context=dict(context_id="c", user_id="user-1", sender="ATX_CHAT"))
 
 
-@pytest.mark.parametrize(["sender", "remaining"], [("ATX_CHAT", 78), (None, 3)])
+@pytest.mark.parametrize(["sender", "remaining"], [("ATX_CHAT", 50), (None, 3)])
 async def test_a_user_turn_runs_with_the_reply_deadline_counted_from_its_arrival(
     agent_result: AgentResult, sender: Optional[str], remaining: float
 ) -> None:
-    """The deadline is the request's arrival plus the synchronous wait, plus the delayed wait when
-    a sender gets the late reply, so time spent in the queue counts against it."""
+    """The deadline is the request's arrival plus the delayed wait when a sender gets the late
+    reply, else plus the synchronous wait, so time spent in the queue counts against it. The
+    delayed wait alone holds when an extension handler acknowledges the request at once."""
     handler = _user_handler(timeout=28, delayed_timeout=300)
     request = QueueRequest(
         context=dict(context_id="c", user_id="user-1", sender=sender),

@@ -68,10 +68,11 @@ class QueueRequestHandler(RequestHandler):
             response_store: Response store to save processed results
             timeout: Seconds the server waits for a reply before it acknowledges the request
             delayed_timeout: Seconds after that acknowledgement during which the server still
-                delivers the reply. A user turn runs with ``turn_deadline`` at the end of this
-                window, counted from the request's arrival (only ``timeout`` when the request has
-                no sender to deliver a late reply to), so hooks can skip work that would end
-                after it.
+                delivers the reply. A user turn runs with ``turn_deadline`` set ``delayed_timeout``
+                seconds after the request's arrival (``timeout`` when the request has no sender
+                to deliver a late reply to), so hooks can skip work that would end after it. The
+                deadline leaves out ``timeout`` because an extension handler can acknowledge the
+                request at once, which starts the delayed wait at arrival.
         """
         self.request_queue = request_queue
         self.response_store = response_store
@@ -228,7 +229,7 @@ class QueueRequestHandler(RequestHandler):
         """time.monotonic() value at which the reply window of a request that arrived at
         ``created_at`` (an ISO 8601 time with offset; None for now) ends."""
         arrival = datetime.fromisoformat(created_at).timestamp() if created_at else time.time()
-        window = self.timeout + (self.delayed_timeout if has_sender else 0.0)
+        window = self.delayed_timeout if has_sender else self.timeout
         return time.monotonic() + (arrival + window - time.time())
 
     async def start_processing(

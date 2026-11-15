@@ -376,11 +376,19 @@ async def test_throttling_and_transient_budgets_are_independent(note: TurnErrorN
     orchestrator = _orchestrator(
         [ModelThrottledException("slow")] * 5 + [_read_timeout(), _read_timeout(), _text("Done.")]
     )
+    throttle_events: list[float] = []
+
+    def callback_handler(**kwargs: Any) -> None:
+        if "event_loop_throttled_delay" in kwargs:
+            throttle_events.append(kwargs["event_loop_throttled_delay"])
+
+    orchestrator.callback_handler = callback_handler
 
     result = await orchestrator.invoke_async("Go", invocation_state={"a2a_context": _CONTEXT})
 
     assert extract_text_from_strands_agent_response(result) == "Done."
     assert orchestrator.model.stream.call_count == 8
+    assert len(throttle_events) == 5
 
 
 @pytest.mark.parametrize(

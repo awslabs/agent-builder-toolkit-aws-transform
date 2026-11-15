@@ -172,6 +172,9 @@ class TransientRetryStrategy(ModelRetryStrategy):
             self._leave_resume_note(event, exception)
 
     async def _retry_transient(self, event: AfterModelCallEvent, exception: Exception) -> None:
+        # Strands yields this throttle event after every failed call; only the inherited handler,
+        # which this path skips, clears it.
+        self._backwards_compatible_event_to_yield = None
         stream_state: Optional["StreamState"] = event.invocation_state.get("stream_state")
         if stream_state is not None and stream_state.content_streamed:
             logger.warning(
