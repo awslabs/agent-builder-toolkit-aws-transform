@@ -562,15 +562,23 @@
     "module": "agent_builder_sdk.agentic_framework.artifact_store",
     "docstring": "Manages artifact storage operations.",
     "signature": "ArtifactStore()",
-    "description": "Extends: AgenticApiHelper\n\nMethods:\n  list_artifacts(agent_instance_id: str, category: CategoryType | None = None, next_token: str | None = None, max_results: int | None = None) -> abt.ListArtifactsResponseTypeDef\n  upload_artifact(content: bytes, digest: str, artifact_id: str | None = None, category_type: CategoryTypeType | None = None, file_type: FileTypeType | None = None, plan_step_id: str | None = None, label: str | None = None) -> str\n  download_artifact(artifact_id: str, destination_file_path: str) -> None"
+    "description": "Extends: AgenticApiHelper\n\nMethods:\n  list_artifacts(agent_instance_id: str, category: CategoryType | None = None, next_token: str | None = None, max_results: int | None = None) -> abt.ListArtifactsResponseTypeDef\n  upload_artifact(content: bytes, digest: str, artifact_id: str | None = None, category_type: CategoryTypeType | None = None, file_type: FileTypeType | None = None, plan_step_id: str | None = None, label: str | None = None, *, source_file_path: str | None = None, file_name: str | None = None, description: str | None = None, visibility: VisibilityType = 'INTERNAL', schema_type: str | None = None) -> str\n  get_artifact_metadata(artifact_id: str) -> abt.GetArtifactMetadataResponseTypeDef\n  download_artifact(artifact_id: str, destination_file_path: str, *, visibility: VisibilityType | None = None) -> None"
   },
   {
     "name": "ArtifactStore.download_artifact",
     "kind": "method",
     "file": "agent_builder_sdk/agentic_framework/artifact_store.py",
     "module": "agent_builder_sdk.agentic_framework.artifact_store",
-    "docstring": "Download artifact by ID and put to the destination file path.",
-    "signature": "download_artifact(artifact_id: str, destination_file_path: str) -> None"
+    "docstring": "Download artifact by ID and put to the destination file path.\n\nSee download_from_presigned_url for how the file is written. ``visibility`` is sent\nwith the request only when given.",
+    "signature": "download_artifact(artifact_id: str, destination_file_path: str, *, visibility: VisibilityType | None = None) -> None"
+  },
+  {
+    "name": "ArtifactStore.get_artifact_metadata",
+    "kind": "method",
+    "file": "agent_builder_sdk/agentic_framework/artifact_store.py",
+    "module": "agent_builder_sdk.agentic_framework.artifact_store",
+    "docstring": "Get the metadata of an artifact by ID.",
+    "signature": "get_artifact_metadata(artifact_id: str) -> abt.GetArtifactMetadataResponseTypeDef"
   },
   {
     "name": "ArtifactStore.list_artifacts",
@@ -585,8 +593,17 @@
     "kind": "method",
     "file": "agent_builder_sdk/agentic_framework/artifact_store.py",
     "module": "agent_builder_sdk.agentic_framework.artifact_store",
-    "docstring": "Upload artifact with specified category and return its ID.",
-    "signature": "upload_artifact(content: bytes, digest: str, artifact_id: str | None = None, category_type: CategoryTypeType | None = None, file_type: FileTypeType | None = None, plan_step_id: str | None = None, label: str | None = None) -> str"
+    "docstring": "Upload artifact with specified category and return its ID.\n\n``digest`` is the base64 SHA-256 of the bytes sent: calculate_digest(content), or\ncalculate_file_digest(source_file_path).\n\n``source_file_path`` uploads that file, streamed from disk, in place of ``content``,\nwhich must then be empty. ``file_name`` is stored as the artifact's file path (at most\n838 characters), so a download can restore it (see artifact_file_name), and\n``description`` (at most 4000 characters) is stored with it. ``schema_type`` is stored\nwith the type of a new artifact.",
+    "signature": "upload_artifact(content: bytes, digest: str, artifact_id: str | None = None, category_type: CategoryTypeType | None = None, file_type: FileTypeType | None = None, plan_step_id: str | None = None, label: str | None = None, *, source_file_path: str | None = None, file_name: str | None = None, description: str | None = None, visibility: VisibilityType = 'INTERNAL', schema_type: str | None = None) -> str"
+  },
+  {
+    "name": "artifact_file_name",
+    "kind": "function",
+    "file": "agent_builder_sdk/agentic_framework/artifact_store.py",
+    "module": "agent_builder_sdk.agentic_framework.artifact_store",
+    "docstring": "A local file name for the artifact: the last part of its stored file path, else of its\nlabel, else its ID.\n\nOnly a last part is used, so joining the name to a directory stays in that directory.",
+    "signature": "artifact_file_name(metadata: abt.GetArtifactMetadataResponseTypeDef) -> str",
+    "description": "Parameters:\n  metadata: abt.GetArtifactMetadataResponseTypeDef (required)"
   },
   {
     "name": "create_agentic_api_client",
@@ -651,11 +668,20 @@
     "description": "Parameters:\n  content: bytes (required)"
   },
   {
+    "name": "calculate_file_digest",
+    "kind": "function",
+    "file": "agent_builder_sdk/agentic_framework/common.py",
+    "module": "agent_builder_sdk.agentic_framework.common",
+    "docstring": "calculate_digest of the file at ``file_path``, read 1 MiB at a time.",
+    "signature": "calculate_file_digest(file_path: str) -> str",
+    "description": "Parameters:\n  file_path: str (required)"
+  },
+  {
     "name": "download_from_presigned_url",
     "kind": "function",
     "file": "agent_builder_sdk/agentic_framework/common.py",
     "module": "agent_builder_sdk.agentic_framework.common",
-    "docstring": "",
+    "docstring": "Download to ``destination_file_path``, streamed to disk 1 MiB at a time.\n\nThe file is written in full or not at all: the body goes to a temp file in the same\ndirectory, which then replaces the destination. A new file gets the mode the umask\nallows; an existing file keeps its mode. A destination that is a symlink is refused, and a\nbody over 5 GiB fails the download.",
     "signature": "download_from_presigned_url(create_download_url_response: Union[CreateArtifactDownloadUrlResponseTypeDef, dict], destination_file_path: str, is_managed_bucket: bool = True) -> None",
     "description": "Parameters:\n  create_download_url_response: Union[CreateArtifactDownloadUrlResponseTypeDef, dict] (required)\n  destination_file_path: str (required)\n  is_managed_bucket: bool (default=True)"
   },
@@ -678,13 +704,22 @@
     "description": "Parameters:\n  status: int (required)\n  text: str (required)\n  is_managed_bucket: bool (default=True)"
   },
   {
+    "name": "upload_file_to_presigned_url",
+    "kind": "function",
+    "file": "agent_builder_sdk/agentic_framework/common.py",
+    "module": "agent_builder_sdk.agentic_framework.common",
+    "docstring": "upload_from_presigned_url for the file at ``file_path``, streamed from disk.\n\nA retry rewinds the file and sends it again from its start.",
+    "signature": "upload_file_to_presigned_url(create_upload_url_response: CreateArtifactUploadUrlResponseTypeDef, file_path: str, is_managed_bucket: bool = True) -> None",
+    "description": "Parameters:\n  create_upload_url_response: CreateArtifactUploadUrlResponseTypeDef (required)\n  file_path: str (required)\n  is_managed_bucket: bool (default=True)"
+  },
+  {
     "name": "upload_from_presigned_url",
     "kind": "function",
     "file": "agent_builder_sdk/agentic_framework/common.py",
     "module": "agent_builder_sdk.agentic_framework.common",
     "docstring": "",
-    "signature": "upload_from_presigned_url(create_upload_url_response: CreateArtifactUploadUrlResponseTypeDef, content: bytes, is_managed_bucket: bool = True) -> None",
-    "description": "Parameters:\n  create_upload_url_response: CreateArtifactUploadUrlResponseTypeDef (required)\n  content: bytes (required)\n  is_managed_bucket: bool (default=True)"
+    "signature": "upload_from_presigned_url(create_upload_url_response: CreateArtifactUploadUrlResponseTypeDef, content: Union[bytes, BinaryIO], is_managed_bucket: bool = True) -> None",
+    "description": "Parameters:\n  create_upload_url_response: CreateArtifactUploadUrlResponseTypeDef (required)\n  content: Union[bytes, BinaryIO] (required)\n  is_managed_bucket: bool (default=True)"
   },
   {
     "name": "HitlClient",
