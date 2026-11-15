@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the ConversationHookProvider class."""
 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -209,7 +210,7 @@ def test_force_stopped_turn_is_stored_with_its_answer(tmp_path):
     assert INTERRUPTED_TURN_TEXT not in str(second_input)
 
 
-async def test_a_fold_by_the_conversation_manager_shortens_the_next_turns(tmp_path) -> None:
+async def test_a_fold_by_the_conversation_manager_shortens_the_next_turns(tmp_path: Path) -> None:
     """The messages a manager reads from ``agent.messages`` are the stored ones, so the fold it
     asks for is found in the store and the next turn starts from the summary."""
     from strands.agent.conversation_manager import ConversationManager
