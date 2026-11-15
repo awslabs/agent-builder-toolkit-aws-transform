@@ -18,6 +18,8 @@ _SHAPES = {
     "json": f"'\"password\": \"' + '\\\\' * {_N} + 'abc def\\n'",
     "env": f"'API_SECRET=\"' + '\\\\' * {_N} + 'abc def\\n'",
     "yaml": f"'password: \"' + '\\\\' * {_N} + 'abc def\\n'",
+    "nested json": f"__import__('json').dumps('{{\"password\": \"' + '\\\\' * {_N} + 'abc def')",
+    "backslash run before a key": f"'\\\\' * {_N} + '\"password'",
     "windows path in a tool result": (
         f"str([{{'type': 'text', 'text': '\"password\": \"C:' + ('\\\\' * 2 + 'dir') * {_N // 5} + ' (cut)\\n'}}])"
     ),

@@ -2863,7 +2863,8 @@ agent = create_default_async_orchestrator(mcp_client, storage_dir, custom_tools=
 | Root | `/tmp` only; the path must be absolute |
 | Size | 256 KiB per call; the model writes long files one section per call with `append=True` |
 | Write | Atomic: the tool writes a temp file, then renames it over the target |
-| Refused | Paths outside `/tmp`, `..` components, NUL bytes, symlinks, directories, and the agent's own runtime state |
+| File mode | A new file gets `0666` less the umask (usually `0644`); an overwrite keeps the old mode |
+| Refused | Paths outside `/tmp`, `..` components, NUL bytes, symlinks, directories, FIFOs, sockets, devices, and the agent's own runtime state |
 
 Runtime state is the SDK's default state locations under `/tmp` (for example `/tmp/agent_runtime`,
 `/tmp/orchestrator_agent`, `/tmp/agent_state` and the agentic MCP server log files), plus every
@@ -2875,7 +2876,8 @@ To keep credentials out of text that your own tools return to the model or write
 `agent_builder_sdk.util.redact.scrub(text, secrets)`. It is best effort: it removes AWS access-key
 ids, literal values of keys whose name ends in `client_secret`, `api_secret`, `api_key`,
 `secret_access_key`, `session_token` or `password` (after a prefix of letters and `_`, such as
-`aws_` or `db_`) in JSON, env-file, INI (such as `~/.aws/credentials`) and YAML text, and the
+`aws_` or `db_`) in JSON (also JSON nested in a JSON string, such as a Secrets Manager
+`SecretString`), env-file, INI (such as `~/.aws/credentials`) and YAML text, and the
 exact `secrets` values you pass (one string or a list). A secret under any other name (for example `token`, `secret`,
 `access_token` or `private_key`), or in a URL or a header, passes unless you pass its value.
 

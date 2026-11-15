@@ -5,7 +5,8 @@
 The patterns catch AWS access-key ids and literal values of keys whose name ends in
 ``client_secret``, ``api_secret``, ``api_key``, ``secret_access_key``, ``session_token`` or
 ``password`` (case-insensitive, ``_`` or ``-`` optional, after a prefix of letters and ``_`` such
-as ``aws_``) in JSON, env-file, INI (such as ``~/.aws/credentials``) and YAML text.
+as ``aws_``) in JSON (also JSON nested in a JSON string), env-file, INI (such as
+``~/.aws/credentials``) and YAML text (LF or CRLF line ends).
 A secret under any other name (for example ``token``, ``secret``, ``access_token`` or
 ``private_key``), or in any other shape, passes unless the caller hands its exact value to
 :func:`scrub`. Matching runs in time linear in the text length, and this module never
@@ -51,9 +52,12 @@ def _quoted(group: str) -> str:
 
 CREDENTIAL_RE = re.compile(
     r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"
-    + r"|[\"']"
+    # The key quotes are escaped in JSON nested in a JSON string (a Secrets Manager SecretString).
+    # A match starts only at the first backslash of a run, so a long run is read once, not once
+    # per backslash.
+    + r"|(?<!\\)\\*[\"']"
     + _SECRET_KEY
-    + r"[\"']\s*:\s*(?:"
+    + r"\\*[\"']\s*:\s*(?:"
     + _quoted("json")
     + r"|[\"'][^\"'\s]{8,}[\"'])"
     # env or INI file (key=value, key = value): unindented, so an indented keyword argument
@@ -83,7 +87,7 @@ CREDENTIAL_RE = re.compile(
     + _QUOTE
     + r"(?:(?!\\n)[^\s$#\"'{}\[\]]){8,}"
     + _QUOTE
-    + r"[ \t]*(?=$|\\n|#|[\"']))",
+    + r"[ \t]*(?=\r?$|\\n|#|[\"']))",
     re.IGNORECASE | re.MULTILINE,
 )
 

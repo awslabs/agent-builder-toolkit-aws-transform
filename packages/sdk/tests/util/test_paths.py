@@ -76,6 +76,11 @@ def test_unwritable_refuses_a_symlink_and_a_directory(tmp_path: Path) -> None:
     assert "directory" in (paths.unwritable(str(tmp_path / "new") + os.sep, [str(tmp_path)]) or "")
 
 
+def test_unwritable_refuses_a_fifo(tmp_path: Path) -> None:
+    os.mkfifo(tmp_path / "pipe")
+    assert "not a regular file" in (paths.unwritable(str(tmp_path / "pipe"), [str(tmp_path)]) or "")
+
+
 @pytest.mark.parametrize(
     ("suffix", "reason"),
     [("a/../b.txt", "'..' component"), ("a\0b.txt", "NUL byte")],

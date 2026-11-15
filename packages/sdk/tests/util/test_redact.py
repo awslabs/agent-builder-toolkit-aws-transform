@@ -280,6 +280,27 @@ def test_a_quoted_secret_that_ends_with_an_escaped_backslash_is_redacted(text: s
     assert "abc def" not in scrub(text)
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        json.dumps({"Name": "db", "SecretString": json.dumps({"username": "admin", "password": "Sup3rS3cretPw!"})}),
+        json.dumps({"body": json.dumps({"password": "Sup3rS3cretPw!"})}),
+        json.dumps(json.dumps({"api_key": 'Sup3rS3cretPw!"'})),
+    ],
+    ids=["SecretString", "JSON body", "JSON in JSON in JSON"],
+)
+def test_a_secret_in_json_nested_in_a_json_string_is_redacted(text: str) -> None:
+    out = scrub(text)
+    assert "Sup3rS3cretPw" not in out
+    # The escaped key quote goes with the match: no stray backslash before the marker.
+    assert REDACTED in out and "\\" + REDACTED not in out
+
+
+@pytest.mark.parametrize("value", ["hunter2hunter2", "'hunter2hunter2'"], ids=["unquoted", "quoted"])
+def test_a_yaml_secret_in_a_crlf_file_is_redacted(value: str) -> None:
+    assert scrub(f"password: {value}\r\nnext: 1\r\n") == f"{REDACTED}\r\nnext: 1\r\n"
+
+
 def test_ordinary_output_is_untouched() -> None:
     text = (
         "sha256 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\n"

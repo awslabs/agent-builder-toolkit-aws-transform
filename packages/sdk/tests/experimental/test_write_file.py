@@ -70,6 +70,26 @@ def test_an_overwrite_keeps_the_file_mode_and_leaves_no_temp_file(tmp_path: Path
     assert os.listdir(tmp_path) == ["run.sh"]
 
 
+@pytest.mark.parametrize(("umask", "mode"), [(0o022, 0o644), (0o027, 0o640)])
+def test_a_new_file_gets_the_umask_default_mode(tmp_path: Path, umask: int, mode: int) -> None:
+    target = tmp_path / "report.html"
+    old = os.umask(umask)
+    try:
+        write_file(path=str(target), content="x")
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE(target.stat().st_mode) == mode
+
+
+def test_a_fifo_at_the_path_is_refused_and_kept(tmp_path: Path) -> None:
+    target = tmp_path / "pipe"
+    os.mkfifo(target)
+    # Overwrite first: without the check it replaces the FIFO and fails here, not hanging below.
+    assert "not a regular file" in write_file(path=str(target), content="x")
+    assert "not a regular file" in write_file(path=str(target), content="x", append=True)
+    assert stat.S_ISFIFO(target.stat().st_mode)
+
+
 def test_a_failed_write_leaves_the_old_file_whole(tmp_path: Path) -> None:
     target = tmp_path / "report.txt"
     target.write_text("old content")

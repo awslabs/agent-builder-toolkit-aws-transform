@@ -4,15 +4,17 @@
 
 An agent with no shell tool authors its files with it. The tool is opt-in: pass it in
 ``custom_tools``. It refuses a path outside /tmp, a relative path, a path with a ``..`` component or
-a NUL byte, a symlink or directory at the path, and the agent's own runtime state (see
-:mod:`agent_builder_sdk.util.paths`). It writes at most 256 KiB per call, and each write is atomic.
+a NUL byte, a symlink, directory or other non-regular file (FIFO, socket, device) at the path, and
+the agent's own runtime state (see :mod:`agent_builder_sdk.util.paths`). It writes at most 256 KiB
+per call, and each write is atomic. A new file gets mode 0666 less the umask; an overwrite keeps the
+old file's mode.
 """
 
 import logging
 import os
 import shutil
-import tempfile
 import threading
+import uuid
 
 from strands.tools import tool
 
@@ -34,7 +36,9 @@ _write_lock = threading.Lock()
 def _replace(target: str, data: bytes, append: bool) -> int:
     """Write ``data`` (after the current bytes of ``target`` when ``append``) to a temp file in the
     same directory, then rename it over ``target``. Returns the new size of ``target`` in bytes."""
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(target), prefix=".write_file-")
+    tmp = os.path.join(os.path.dirname(target), f".write_file-{uuid.uuid4().hex}")
+    # Not mkstemp: its fixed 0600 would make a new file owner-only whatever the umask is.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
     try:
         with os.fdopen(fd, "wb") as out:
             if os.path.exists(target):
@@ -67,7 +71,8 @@ def write_file(path: str, content: str, append: bool = False) -> str:
     Args:
         path: Absolute file path under /tmp. Parent directories are created.
             Refused: paths outside /tmp, '..' components, symlinks,
-            directories, and the agent's own runtime state.
+            directories, other special files (FIFOs, sockets, devices),
+            and the agent's own runtime state.
         content: The exact text to write, encoded as UTF-8.
         append: Append to the file instead of replacing it. Defaults to False.
 

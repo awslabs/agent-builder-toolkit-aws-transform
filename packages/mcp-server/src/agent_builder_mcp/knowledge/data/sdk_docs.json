@@ -1993,7 +1993,7 @@
     "kind": "function",
     "file": "agent_builder_sdk/experimental/write_file.py",
     "module": "agent_builder_sdk.experimental.write_file",
-    "docstring": "Write text content to a file in the agent's container.\n\nUse this to author files (reports, HTML, scripts, configs). The content\nis written as-is, so quotes and special characters need no escaping.\n\nWrite a long document one section per call: the first call creates the\nfile, and each later call passes append=True. Do not compose a whole\nreport in one call. The content is streamed to this tool while you\ngenerate it; past a few thousand words the call can time out before this\ntool runs, and the file is not written. At most 256 KiB per call.\n\nArgs:\n    path: Absolute file path under /tmp. Parent directories are created.\n        Refused: paths outside /tmp, '..' components, symlinks,\n        directories, and the agent's own runtime state.\n    content: The exact text to write, encoded as UTF-8.\n    append: Append to the file instead of replacing it. Defaults to False.\n\nReturns:\n    The bytes written and the resulting file size, or an error message.",
+    "docstring": "Write text content to a file in the agent's container.\n\nUse this to author files (reports, HTML, scripts, configs). The content\nis written as-is, so quotes and special characters need no escaping.\n\nWrite a long document one section per call: the first call creates the\nfile, and each later call passes append=True. Do not compose a whole\nreport in one call. The content is streamed to this tool while you\ngenerate it; past a few thousand words the call can time out before this\ntool runs, and the file is not written. At most 256 KiB per call.\n\nArgs:\n    path: Absolute file path under /tmp. Parent directories are created.\n        Refused: paths outside /tmp, '..' components, symlinks,\n        directories, other special files (FIFOs, sockets, devices),\n        and the agent's own runtime state.\n    content: The exact text to write, encoded as UTF-8.\n    append: Append to the file instead of replacing it. Defaults to False.\n\nReturns:\n    The bytes written and the resulting file size, or an error message.",
     "signature": "write_file(path: str, content: str, append: bool = False) -> str",
     "description": "Parameters:\n  path: str (required) - Absolute file path under /tmp. Parent directories are created.\n  content: str (required) - The exact text to write, encoded as UTF-8.\n  append: bool (default=False) - Append to the file instead of replacing it. Defaults to False."
   },
@@ -4864,7 +4864,7 @@
     "kind": "function",
     "file": "agent_builder_sdk/util/paths.py",
     "module": "agent_builder_sdk.util.paths",
-    "docstring": "Why a file tool must not write ``path`` (None if it may): the checks of :func:`unreadable`,\nand ``path`` must not be a directory, end in a separator or be a symlink itself.",
+    "docstring": "Why a file tool must not write ``path`` (None if it may): the checks of :func:`unreadable`,\nand ``path`` must not end in a separator or be a symlink itself, and must be a regular file if\nit exists (not a directory, FIFO, socket or device).",
     "signature": "unwritable(path: str, roots: Sequence[str]) -> Optional[str]",
     "description": "Parameters:\n  path: str (required)\n  roots: Sequence[str] (required)"
   },

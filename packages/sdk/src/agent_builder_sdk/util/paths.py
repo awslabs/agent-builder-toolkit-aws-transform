@@ -71,7 +71,8 @@ def unreadable(path: str, roots: Sequence[str]) -> Optional[str]:
 
 def unwritable(path: str, roots: Sequence[str]) -> Optional[str]:
     """Why a file tool must not write ``path`` (None if it may): the checks of :func:`unreadable`,
-    and ``path`` must not be a directory, end in a separator or be a symlink itself."""
+    and ``path`` must not end in a separator or be a symlink itself, and must be a regular file if
+    it exists (not a directory, FIFO, socket or device)."""
     why = unreadable(path, roots)
     if why:
         return why
@@ -79,4 +80,7 @@ def unwritable(path: str, roots: Sequence[str]) -> Optional[str]:
         return f"{path} is a symlink"
     if os.path.isdir(path) or path.endswith(os.sep):
         return f"{path} is a directory, not a file"
+    # Opening a FIFO blocks until a writer appears; a socket or device is another process's.
+    if os.path.exists(path) and not os.path.isfile(path):
+        return f"{path} is not a regular file"
     return None
