@@ -18,9 +18,10 @@ without ``InvokeWebSearch``, a URL that is not https or holds user info) logs on
 returns None. No network call happens before the first search.
 
 Search results are untrusted text. The tool returns them between two markers with a notice that
-they are data, and cuts every field to a fixed length. Every field is one line: each run of
-whitespace, line breaks included, becomes one space, so text in a result cannot start a line that
-reads as a further result or its URL. In every field it also drops control and format characters
+they are data, and cuts every field to a fixed length. Every field is one line after a fixed
+label (``[n]``, ``URL:``, ``Published:``, ``Text:``): each run of whitespace, line breaks included,
+becomes one space, so text in a result cannot start a line that reads as a further result or its
+URL. In every field it also drops control and format characters
 and unpaired surrogates (Unicode categories Cc, Cf, Cs) and combining marks (Mn, Me) that follow a
 bracket, and puts a space between the brackets of each run of three or more ``<`` or ``>`` (ASCII,
 fullwidth or small form), so neither marker can appear in a result and the output always encodes
@@ -309,11 +310,11 @@ class _GatewayWebSearch:
         with self._lock:
             self._tool_name = None
 
-    def search(self, query: str, max_results: int) -> list[dict[str, Any]]:
+    def search(self, query: str, max_results: int, deadline: float) -> list[dict[str, Any]]:
         """Run one search; return the hits as ``{title, url, text, publishedDate}`` dicts.
-        Its own deadline stops body reads and further requests, so a call that ``_within`` gave
-        up on does not go on to the next request."""
-        deadline = time.monotonic() + TOTAL_TIMEOUT_SECONDS
+        ``deadline`` (a ``time.monotonic()`` value, the one ``_within`` waits for) stops body reads
+        and further requests, so a call that ``_within`` gave up on does not go on to the next
+        request."""
         try:
             result = self._call(
                 "tools/call",
@@ -342,8 +343,9 @@ class _GatewayWebSearch:
 _IN_FLIGHT = threading.BoundedSemaphore(MAX_IN_FLIGHT)
 
 
-def _within(call: Callable[[], Any]) -> Any:
-    """``call()`` on a daemon thread, or ``_WebSearchError`` once ``TOTAL_TIMEOUT_SECONDS`` pass.
+def _within(call: Callable[[float], Any]) -> Any:
+    """``call(deadline)`` on a daemon thread, or ``_WebSearchError`` once ``TOTAL_TIMEOUT_SECONDS``
+    pass; ``deadline`` is the ``time.monotonic()`` value of that moment, set before the slot wait.
     Only a wall clock bounds a search: a socket timeout starts again on every byte received, in
     reply headers as in a body, and credential lookup can wait on a metadata endpoint or a
     credential process. The abandoned call cannot be stopped; as a daemon it never holds up
@@ -361,7 +363,7 @@ def _within(call: Callable[[], Any]) -> Any:
 
     def run() -> None:
         try:
-            outcome["value"] = call()
+            outcome["value"] = call(deadline)
         except Exception as exc:
             outcome["error"] = exc
         finally:
@@ -422,8 +424,9 @@ class _ApiWebSearch:
         detail = f": {message}" if message else ""
         return f"web_search failed: {code or 'API error'}{detail}"
 
-    def search(self, query: str, max_results: int) -> list[dict[str, Any]]:
-        """Run one search; return the hits as ``{title, url, text, publishedDate}`` dicts."""
+    def search(self, query: str, max_results: int, deadline: float) -> list[dict[str, Any]]:
+        """Run one search; return the hits as ``{title, url, text, publishedDate}`` dicts.
+        ``deadline`` is not used; ``_within`` alone bounds this path."""
         try:
             response = self._get_client().invoke_web_search(
                 webSearchId=WEB_SEARCH_ID, searchQuery=query, maxResults=max_results
@@ -462,11 +465,11 @@ _WebSearcher = Union[_ApiWebSearch, _GatewayWebSearch]
 def _field(value: Any, limit: int) -> str:
     """A hit field as one line of at most ``limit`` characters plus the truncation mark. Each
     run of whitespace (line and paragraph separators included) is one space, so no part of a field
-    starts a line of the tool output. The field holds no control or format character and no
-    unpaired surrogate (Unicode categories Cc, Cf, Cs), so it encodes as UTF-8; no combining mark
-    (Mn, Me) directly after a bracket; and no run of three ``<`` or ``>`` in ASCII, fullwidth or
-    small form, so neither marker can appear in it, also not split by such characters. Any other
-    character between two brackets stays."""
+    starts a line of the tool output; the line's own label comes first. The field holds no control
+    or format character and no unpaired surrogate (Unicode categories Cc, Cf, Cs), so it encodes as
+    UTF-8; no combining mark (Mn, Me) directly after a bracket; and no run of three ``<`` or ``>``
+    in ASCII, fullwidth or small form, so neither marker can appear in it, also not split by such
+    characters. Any other character between two brackets stays."""
     kept: list[str] = []
     for ch in " ".join(str(value or "").translate(_BRACKET_FORMS).split()):
         category = unicodedata.category(ch)
@@ -490,7 +493,7 @@ def _format_results(query: str, hits: list[dict[str, Any]]) -> str:
         lines.append(f"URL: {_field(hit.get('url'), RESULT_URL_MAX_CHARS)}")
         if hit.get("publishedDate"):
             lines.append(f"Published: {_field(hit['publishedDate'], RESULT_DATE_MAX_CHARS)}")
-        lines.append(_field(hit.get("text"), RESULT_TEXT_MAX_CHARS))
+        lines.append(f"Text: {_field(hit.get('text'), RESULT_TEXT_MAX_CHARS)}")
         lines.append("")
     lines.append(UNTRUSTED_END)
     return "\n".join(lines)
@@ -609,7 +612,7 @@ def create_web_search_tool() -> Optional[AgentTool]:
             return f"Error: query is {len(query)} characters; the limit is {QUERY_MAX_CHARS}."
         try:
             count = max(1, min(int(max_results or DEFAULT_MAX_RESULTS), MAX_RESULTS_CEILING))
-            hits = _within(lambda: searcher.search(query, count))[:count]
+            hits = _within(lambda deadline: searcher.search(query, count, deadline))[:count]
         except _WebSearchError as exc:
             # Remote detail can hold unpaired surrogates (json.loads keeps them); UTF-8 cannot
             # encode those, so each becomes "?".
