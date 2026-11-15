@@ -9,8 +9,8 @@ from strands.hooks.events import AfterToolCallEvent, BeforeInvocationEvent
 from strands.hooks.registry import HookProvider, HookRegistry
 
 from agent_builder_sdk.ui_chat.artifact_delivery import (
-    DELIVERED_ARTIFACTS_STATE_KEY,
-    delivered_artifacts_in_tool_result,
+    _DELIVERED_ARTIFACTS_STATE_KEY,
+    _delivered_artifacts_in_tool_result,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,14 +32,14 @@ class ArtifactDeliveryHookProvider(HookProvider):
         registry.add_callback(AfterToolCallEvent, self._on_tool_result)
 
     def _reset(self, event: BeforeInvocationEvent) -> None:
-        event.agent.state.set(DELIVERED_ARTIFACTS_STATE_KEY, [])
+        event.agent.state.set(_DELIVERED_ARTIFACTS_STATE_KEY, [])
 
     def _on_tool_result(self, event: AfterToolCallEvent) -> None:
         try:
-            verified = delivered_artifacts_in_tool_result(event.tool_use["name"], event.result)
+            verified = _delivered_artifacts_in_tool_result(event.tool_use["name"], event.result)
             if not verified:
                 return
-            recorded = event.agent.state.get(DELIVERED_ARTIFACTS_STATE_KEY)
+            recorded = event.agent.state.get(_DELIVERED_ARTIFACTS_STATE_KEY)
             delivered = (
                 [item for item in recorded if isinstance(item, dict)]
                 if isinstance(recorded, list)
@@ -50,7 +50,7 @@ class ArtifactDeliveryHookProvider(HookProvider):
                 if item["artifact_id"] not in seen:
                     delivered.append(item)
                     seen.add(item["artifact_id"])
-            event.agent.state.set(DELIVERED_ARTIFACTS_STATE_KEY, delivered)
+            event.agent.state.set(_DELIVERED_ARTIFACTS_STATE_KEY, delivered)
             logger.info("Turn delivered %d user-visible artifact(s)", len(delivered))
         except Exception:
             logger.exception("Failed to record a delivered artifact; the turn continues")

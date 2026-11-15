@@ -31,7 +31,7 @@ from agent_builder_sdk.orchestrator_strands.conversation.repository import (
 from agent_builder_sdk.request_handler import RequestHandler
 from agent_builder_sdk.request_handler.context import RequestContext
 from agent_builder_sdk.request_handler.queue_handler import QueueRequestHandler
-from agent_builder_sdk.ui_chat.artifact_delivery import DELIVERED_ARTIFACTS_STATE_KEY
+from agent_builder_sdk.ui_chat.artifact_delivery import _DELIVERED_ARTIFACTS_STATE_KEY
 
 
 class TestRequestHandler(unittest.TestCase):
@@ -187,7 +187,7 @@ def _agent_with_a_delivered_artifact(
     agent.state = AgentState()
     if source is not None:
         agent.state.set(CURRENT_SOURCE_TYPE_KEY, source)
-    agent.state.set(DELIVERED_ARTIFACTS_STATE_KEY, [{"artifact_id": "new", "title": "Report"}])
+    agent.state.set(_DELIVERED_ARTIFACTS_STATE_KEY, [{"artifact_id": "new", "title": "Report"}])
     return agent
 
 
@@ -216,7 +216,7 @@ async def test_reply_links_the_turns_delivered_artifacts_it_does_not_link_yet(
     agent_result.message["content"] = [{"text": "Done. See [it](aws-transform://~/artifacts/old)."}]
     agent = _agent_with_a_delivered_artifact(agent_result)
     agent.state.set(
-        DELIVERED_ARTIFACTS_STATE_KEY,
+        _DELIVERED_ARTIFACTS_STATE_KEY,
         [{"artifact_id": "old", "title": "L"}, {"artifact_id": "new", "title": "Report"}],
     )
 
@@ -297,7 +297,7 @@ async def test_reply_is_stored_when_the_artifact_state_cannot_be_read(
     agent.process_message_async = AsyncMock(return_value=agent_result)
 
     def read(key: str) -> Any:
-        if key == DELIVERED_ARTIFACTS_STATE_KEY:
+        if key == _DELIVERED_ARTIFACTS_STATE_KEY:
             raise RuntimeError("state unavailable")
         return MessageSourceType.USER
 

@@ -23,7 +23,7 @@ from ..custom_types.orchestrator_agent_types import (
 )
 from ..interfaces import AnyBaseAgent
 from ..message_queue import QueueRequest, QueueResponse, RequestQueue, RequestStatus, ResponseStore
-from ..ui_chat.artifact_delivery import reply_with_artifact_deeplinks
+from ..ui_chat.artifact_delivery import _reply_with_artifact_deeplinks
 from ..utils import describe_agent_result, extract_text_from_strands_agent_response
 from .context import RequestContext
 from .interface import RequestHandler
@@ -269,7 +269,7 @@ class QueueRequestHandler(RequestHandler):
                             logger.debug("Agent result text: %s", extracted_text)
 
                         if getattr(result, "stop_reason", None) not in GUARDRAIL_STOP_REASONS:
-                            extracted_text = reply_with_artifact_deeplinks(extracted_text, agent)
+                            extracted_text = _reply_with_artifact_deeplinks(extracted_text, agent)
 
                         await self.store_response(extracted_text)
 

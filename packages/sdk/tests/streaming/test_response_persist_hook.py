@@ -34,7 +34,7 @@ from agent_builder_sdk.streaming.response_persist_hook import (
     _format_tool_uses,
     persist_stream_error,
 )
-from agent_builder_sdk.ui_chat.artifact_delivery import DELIVERED_ARTIFACTS_STATE_KEY
+from agent_builder_sdk.ui_chat.artifact_delivery import _DELIVERED_ARTIFACTS_STATE_KEY
 from agent_builder_sdk.utils import (
     A2A_CHAT_SUGGESTIONS_EXT,
     A2A_MESSAGE_TYPE_EXT,
@@ -51,7 +51,7 @@ class FakeAgent:
     def __init__(self, delivered: Optional[List[Dict[str, Any]]] = None) -> None:
         self.state = AgentState()
         if delivered is not None:
-            self.state.set(DELIVERED_ARTIFACTS_STATE_KEY, delivered)
+            self.state.set(_DELIVERED_ARTIFACTS_STATE_KEY, delivered)
 
 
 def make_event(

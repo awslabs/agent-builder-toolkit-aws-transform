@@ -4700,33 +4700,6 @@
     "description": "Parameters:\n  model_id: str (required)\n  prompt: str (required) - The prompt to apply tool use prompts to"
   },
   {
-    "name": "append_artifact_deeplinks",
-    "kind": "function",
-    "file": "agent_builder_sdk/ui_chat/artifact_delivery.py",
-    "module": "agent_builder_sdk.ui_chat.artifact_delivery",
-    "docstring": "Append a deeplink for each delivered artifact the reply does not link yet.\n\n``delivered`` holds ``{\"artifact_id\", \"title\"}`` items; an item without a valid id is skipped\nand a repeated id is linked once. Only a Markdown link or an autolink whose target is the\nartifact's deeplink counts as already linked; prose that names the id, a path or the bare URI\nstill gets its link. A blank reply is returned unchanged, with no links.",
-    "signature": "append_artifact_deeplinks(reply_text: str, delivered: List[Any]) -> str",
-    "description": "Parameters:\n  reply_text: str (required)\n  delivered: List[Any] (required)"
-  },
-  {
-    "name": "delivered_artifacts_in_tool_result",
-    "kind": "function",
-    "file": "agent_builder_sdk/ui_chat/artifact_delivery.py",
-    "module": "agent_builder_sdk.ui_chat.artifact_delivery",
-    "docstring": "The customer deliverables a successful ``get_artifact_metadata`` result verifies, as\n``{\"artifact_id\": str, \"title\": Optional[str]}`` items.\n\nAn artifact counts when its ``artifactType.categoryType`` is ``CUSTOMER_OUTPUT`` and\n``isS3ObjectPresent.publicBucket`` is true; a completed upload or the category alone does not\nprove that the customer can download the file. A lookup of an earlier upload counts the same as\na fresh one. The tool-name match is exact, so an MCP client mounted with a tool prefix records\nnothing. Results of other tools are not parsed; failed results and malformed payloads yield\n``[]``.",
-    "signature": "delivered_artifacts_in_tool_result(tool_name: str, result: Any) -> List[Dict[str, Any]]",
-    "description": "Parameters:\n  tool_name: str (required)\n  result: Any (required)"
-  },
-  {
-    "name": "reply_with_artifact_deeplinks",
-    "kind": "function",
-    "file": "agent_builder_sdk/ui_chat/artifact_delivery.py",
-    "module": "agent_builder_sdk.ui_chat.artifact_delivery",
-    "docstring": "The reply with deeplinks for the artifacts recorded on ``agent.state``, for a turn the user\nsent; a reply to a subagent or a notification is read by a machine and goes out unchanged.\n\nThe turn's source is the ``conversation_source_type`` ContextVar, which the orchestrator sets\nper turn. The ``agent.state`` copy serves a caller outside the turn's context, such as the queue\nworker after a sync orchestrator ran on another thread. A turn with no recorded source counts\nas a user turn. An agent whose ``state`` has no ``get`` method gets the reply unchanged, with no\nlog line. Any other failure is logged and the reply goes out unchanged.",
-    "signature": "reply_with_artifact_deeplinks(reply_text: str, agent: Any) -> str",
-    "description": "Parameters:\n  reply_text: str (required)\n  agent: Any (required)"
-  },
-  {
     "name": "Deeplinks",
     "kind": "class",
     "file": "agent_builder_sdk/ui_chat/deeplinks.py",

@@ -4,7 +4,7 @@
 
 ``ArtifactDeliveryHookProvider`` records each artifact a ``get_artifact_metadata`` result shows as
 ready for the customer on ``agent.state``; the reply funnels call
-``reply_with_artifact_deeplinks`` to append a ``Deeplinks.artifact`` link for each one the reply
+``_reply_with_artifact_deeplinks`` to append a ``Deeplinks.artifact`` link for each one the reply
 does not link yet.
 """
 
@@ -25,7 +25,7 @@ from agent_builder_sdk.ui_chat.deeplinks import Deeplinks
 
 logger = logging.getLogger(__name__)
 
-DELIVERED_ARTIFACTS_STATE_KEY = "agent_builder_sdk.delivered_artifacts"
+_DELIVERED_ARTIFACTS_STATE_KEY = "agent_builder_sdk.delivered_artifacts"
 
 _DEFAULT_TITLE = "View file"
 _CUSTOMER_OUTPUT = "CUSTOMER_OUTPUT"
@@ -37,7 +37,7 @@ _INVISIBLE = re.compile(r"[\u061c\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\
 _MARKDOWN_SPECIAL = re.compile(r"([\\\[\]`<>])")
 
 
-def delivered_artifacts_in_tool_result(tool_name: str, result: Any) -> List[Dict[str, Any]]:
+def _delivered_artifacts_in_tool_result(tool_name: str, result: Any) -> List[Dict[str, Any]]:
     """The customer deliverables a successful ``get_artifact_metadata`` result verifies, as
     ``{"artifact_id": str, "title": Optional[str]}`` items.
 
@@ -124,7 +124,7 @@ def _link_text(title: Any) -> str:
     return _MARKDOWN_SPECIAL.sub(r"\\\1", text) if text else _DEFAULT_TITLE
 
 
-def append_artifact_deeplinks(reply_text: str, delivered: List[Any]) -> str:
+def _append_artifact_deeplinks(reply_text: str, delivered: List[Any]) -> str:
     """Append a deeplink for each delivered artifact the reply does not link yet.
 
     ``delivered`` holds ``{"artifact_id", "title"}`` items; an item without a valid id is skipped
@@ -148,7 +148,7 @@ def append_artifact_deeplinks(reply_text: str, delivered: List[Any]) -> str:
     return f"{reply_text}\n\n{block}"
 
 
-def reply_with_artifact_deeplinks(reply_text: str, agent: Any) -> str:
+def _reply_with_artifact_deeplinks(reply_text: str, agent: Any) -> str:
     """The reply with deeplinks for the artifacts recorded on ``agent.state``, for a turn the user
     sent; a reply to a subagent or a notification is read by a machine and goes out unchanged.
 
@@ -167,10 +167,10 @@ def reply_with_artifact_deeplinks(reply_text: str, agent: Any) -> str:
             source = state.get(CURRENT_SOURCE_TYPE_KEY)
         if source is not None and source != MessageSourceType.USER:
             return reply_text
-        delivered = state.get(DELIVERED_ARTIFACTS_STATE_KEY)
+        delivered = state.get(_DELIVERED_ARTIFACTS_STATE_KEY)
         if not isinstance(delivered, list) or not delivered:
             return reply_text
-        return append_artifact_deeplinks(reply_text, delivered)
+        return _append_artifact_deeplinks(reply_text, delivered)
     except Exception:
         logger.exception("Failed to append artifact deeplinks; the reply goes out without them")
         return reply_text

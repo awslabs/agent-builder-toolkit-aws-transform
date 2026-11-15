@@ -23,8 +23,8 @@ from agent_builder_sdk.orchestrator_strands.conversation.file_repository import 
 from agent_builder_sdk.orchestrator_strands.hooks import ArtifactDeliveryHookProvider
 from agent_builder_sdk.server.agent_runtime_server import AgentRuntimeServer
 from agent_builder_sdk.ui_chat.artifact_delivery import (
-    DELIVERED_ARTIFACTS_STATE_KEY,
-    reply_with_artifact_deeplinks,
+    _DELIVERED_ARTIFACTS_STATE_KEY,
+    _reply_with_artifact_deeplinks,
 )
 
 
@@ -73,7 +73,7 @@ def test_collects_customer_outputs_once_each_and_ignores_other_categories() -> N
     )
     hook._on_tool_result(_after_tool(agent, "get_artifact_metadata", _verified_result("c")))
 
-    assert agent.state.get(DELIVERED_ARTIFACTS_STATE_KEY) == [
+    assert agent.state.get(_DELIVERED_ARTIFACTS_STATE_KEY) == [
         {"artifact_id": "a", "title": "a"},
         {"artifact_id": "c", "title": "c"},
     ]
@@ -84,7 +84,7 @@ def test_a_hook_added_mid_turn_starts_its_own_list() -> None:
     agent = _agent()
     hook._on_tool_result(_after_tool(agent, "get_artifact_metadata", _verified_result("a")))
 
-    assert agent.state.get(DELIVERED_ARTIFACTS_STATE_KEY) == [{"artifact_id": "a", "title": "a"}]
+    assert agent.state.get(_DELIVERED_ARTIFACTS_STATE_KEY) == [{"artifact_id": "a", "title": "a"}]
 
 
 def test_each_invocation_starts_empty() -> None:
@@ -94,7 +94,7 @@ def test_each_invocation_starts_empty() -> None:
     hook._on_tool_result(_after_tool(agent, "get_artifact_metadata", _verified_result("a")))
     hook._reset(BeforeInvocationEvent(agent=agent))
 
-    assert agent.state.get(DELIVERED_ARTIFACTS_STATE_KEY) == []
+    assert agent.state.get(_DELIVERED_ARTIFACTS_STATE_KEY) == []
 
 
 def _raise(*args: Any) -> NoReturn:
@@ -180,7 +180,7 @@ def fetch_page() -> dict:
 def _reply(reply: str, agent: Agent) -> str:
     """The reply as a funnel outside the turn sees it: no source ContextVar, which other test
     modules leave set in this thread."""
-    return contextvars.Context().run(reply_with_artifact_deeplinks, reply, agent)
+    return contextvars.Context().run(_reply_with_artifact_deeplinks, reply, agent)
 
 
 def _scripted_agent(*turns: List[Dict[str, Any]]) -> Agent:
@@ -202,7 +202,7 @@ def test_a_real_strands_turn_records_the_verified_deliverable_and_ignores_relaye
 
     agent("deliver")
 
-    assert agent.state.get(DELIVERED_ARTIFACTS_STATE_KEY) == [
+    assert agent.state.get(_DELIVERED_ARTIFACTS_STATE_KEY) == [
         {"artifact_id": "art-7", "title": "Report"}
     ]
     assert _reply("Your report is ready.", agent) == (
@@ -221,7 +221,7 @@ def test_an_agent_without_the_hook_adds_no_links() -> None:
 
     agent("deliver")
 
-    assert agent.state.get(DELIVERED_ARTIFACTS_STATE_KEY) is None
+    assert agent.state.get(_DELIVERED_ARTIFACTS_STATE_KEY) is None
     assert _reply("Your report is ready.", agent) == "Your report is ready."
 
 
