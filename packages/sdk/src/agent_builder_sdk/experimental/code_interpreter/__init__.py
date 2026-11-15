@@ -4,8 +4,9 @@
 
 The sandbox is a managed environment (Python 3.12 with pyarrow, pandas, numpy
 preinstalled) — use it for computation over data. With the default interpreter it has
-no AWS credentials and NO network egress: AWS APIs, customer buckets, and PyPI are
-unreachable from inside. A custom interpreter selected with ``ATX_CODE_INTERPRETER_ID``
+no AWS credentials and no internet access (no PyPI, no public endpoints). The AgentCore
+documentation says that Sandbox network mode can reach Amazon S3, so do not treat the
+sandbox as a place from which data cannot leave. A custom interpreter selected with ``ATX_CODE_INTERPRETER_ID``
 has the network access and the credentials it was created with. Data moves in with
 ``stage_file_to_sandbox`` and out through the tool's readFiles action; fetching from and
 pushing to AWS stays in the agent container.

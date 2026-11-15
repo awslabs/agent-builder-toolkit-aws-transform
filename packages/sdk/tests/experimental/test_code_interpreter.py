@@ -64,11 +64,11 @@ def _file(tmp_path: Path, name: str, data: bytes = b"a,b\n1,2\n") -> Path:
 
 
 class TestToolDescription:
-    def test_default_interpreter_is_described_as_offline(self, sandbox: FakeSandbox) -> None:
+    def test_default_interpreter_is_described_without_internet_or_credentials(self, sandbox: FakeSandbox) -> None:
         tools = _tools()
         _list_files(tools)
         assert sandbox.started[0]["identifier"] == "aws.codeinterpreter.v1"
-        assert "NO network access" in _description(tools)
+        assert "NO internet access and NO AWS credentials" in _description(tools)
 
     def test_custom_interpreter_is_not_described_as_online(self, sandbox: FakeSandbox) -> None:
         # A custom interpreter can be in any network mode; the model must not be told it has
@@ -78,7 +78,7 @@ class TestToolDescription:
         assert sandbox.started[0]["identifier"] == _CUSTOM_ID
         description = _description(tools)
         assert "depend on how that interpreter was set up" in description
-        assert "NO network access" not in description
+        assert "NO internet access" not in description
         assert "HAS" not in description
 
     @pytest.mark.parametrize("env", [{}, {CODE_INTERPRETER_ID_ENV_VAR: _CUSTOM_ID}])
@@ -93,7 +93,7 @@ class TestToolDescription:
         first = _tools()
         _tools({CODE_INTERPRETER_ID_ENV_VAR: _CUSTOM_ID})
         assert _description(first).count("IMPORTANT ENVIRONMENT NOTES") == 1
-        assert "NO network access" in _description(first)
+        assert "NO internet access" in _description(first)
 
 
 class TestSessionTimeout:
@@ -146,6 +146,17 @@ class TestStageFileToSandbox:
         with patch.object(code_interpreter_tool, "_MAX_STAGE_BYTES", 4):
             result = _stage(_tools(), _file(tmp_path, "big.csv", b"12345"), "big.csv")
         assert "transfer limit" in result
+        assert sandbox.started == []
+
+    def test_limit_holds_for_a_file_whose_stat_size_is_not_its_content(
+        self, sandbox: FakeSandbox, tmp_path: Path
+    ) -> None:
+        # procfs files report a size of 0, and a file can grow after the stat.
+        path = _file(tmp_path, "growing.log", b"12345")
+        with patch.object(code_interpreter_tool, "_MAX_STAGE_BYTES", 4), patch("os.path.getsize", return_value=0):
+            result = _stage(_tools(), path, "growing.log")
+        assert result.startswith("Error: "), result
+        assert "transfer limit of 4 bytes" in result
         assert sandbox.started == []
 
     def test_file_bytes_are_written_to_the_sandbox_path(self, sandbox: FakeSandbox, tmp_path: Path) -> None:

@@ -436,7 +436,9 @@ def create_default_async_orchestrator_with_subagent(
             tools (code_interpreter + stage_file_to_sandbox). Off by default. Runs
             computation in a managed Python sandbox with pyarrow/pandas/numpy
             preinstalled; data moves in via stage_file_to_sandbox. The default interpreter
-            (aws.codeinterpreter.v1) is network-isolated. Setting ATX_CODE_INTERPRETER_ID
+            (aws.codeinterpreter.v1) has no internet access and no AWS credentials (the
+            AgentCore documentation says that Sandbox network mode can reach Amazon S3, so
+            data can still leave it). Setting ATX_CODE_INTERPRETER_ID
             selects a custom interpreter instead; its network access depends on its network
             mode, and the tool tells the model not to assume either way. Each sandbox
             session ends ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS (default 900, max

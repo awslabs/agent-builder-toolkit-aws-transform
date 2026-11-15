@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for experimental shell execution support."""
 
+import itertools
+import math
 import os
 import random
 import shutil
@@ -51,7 +53,7 @@ _OUT_AND_ERR = """awk 'BEGIN { print "out"; print "err" > "/dev/stderr" }'"""
 def _accepted(command: str, cwd: Optional[str] = None) -> bool:
     """Whether the command is in the grammar, on the allowlist and within the option rules."""
     try:
-        _parse_command(command, cwd or _EMPTY_DIRECTORY.name)
+        _parse_command(command, cwd or _EMPTY_DIRECTORY.name, math.inf)
     except _Rejected:
         return False
     return True
@@ -221,7 +223,8 @@ class TestExecuteShellTool:
             warnings.simplefilter("ignore", FutureWarning)
             result = execute_shell(command="true", working_directory="/tmp", timeout_seconds=requested)
         assert result == "[exit code: 0]"
-        assert finished.call_args.args[2] == used
+        # The command gets what is left of the timeout after the parse and pattern expansion.
+        assert used - 1 < finished.call_args.args[2] < used
 
     def test_command_does_not_read_the_agents_stdin(self) -> None:
         # With the agent's stdin an open pipe, a command that reads stdin would wait
@@ -338,6 +341,11 @@ class TestExecuteShellTool:
             ("ls 'a", "Error: The command has an unterminated quote."),
             ("ls \\", "Error: The command ends with a backslash."),
             ("ls a\0b", "Error: The command contains a NUL character."),
+            ('echo ["!"a]', "Error: a quoted or escaped character inside an unquoted [...] is not supported."),
+            ("echo [b'*'", "Error: a quoted or escaped character inside an unquoted [...] is not supported."),
+            ('echo [a"]"b]', "Error: a quoted or escaped character inside an unquoted [...] is not supported."),
+            ("echo [a\\]b]", "Error: a quoted or escaped character inside an unquoted [...] is not supported."),
+            ("echo [[:digit:]]*", "Error: a character class inside [...] ([[:digit:]], [[.a.]], [[=a=]]) is not"),
             ("curl x", "Error: Command 'curl' is not allowed. Allowed commands: [, awk, basename,"),
         ],
     )
@@ -353,6 +361,18 @@ class TestExecuteShellTool:
             assert _run("echo *.txt", tmp_path) == (
                 "Error: A file-name pattern matches more than 2 names. Narrow the pattern."
             )
+
+    def test_pattern_expansion_stops_at_the_deadline(self, tmp_path: Path) -> None:
+        for name in ("d1", "d2", "d3"):
+            (tmp_path / name).mkdir()
+            (tmp_path / name / "x").write_text("")
+        clock = mock.Mock()
+        # The deadline (5) passes after the read of the working directory and of d1.
+        clock.monotonic.side_effect = itertools.chain([0.0, 0.0], itertools.repeat(10.0))
+        with mock.patch(f"{_TOOL_MODULE}.time", clock):
+            with pytest.raises(_Rejected, match="A file-name pattern took too long to expand"):
+                _parse_command("ls */x", str(tmp_path), 5.0)
+        assert clock.monotonic.call_count == 3
 
     @pytest.mark.parametrize(
         "command, result",
@@ -385,6 +405,8 @@ class TestExecuteShellTool:
             ("echo '*.txt' \\*.txt \"*.txt\" 'a'*", "*.txt *.txt *.txt a.txt\n\n[exit code: 0]"),
             ("echo *.none [x", "*.none [x\n\n[exit code: 0]"),
             ("echo '?'.t* \\[ab].t*", "?.t* [ab].t*\n\n[exit code: 0]"),
+            # Quotes after the ] that closes a bracket; a ] first in a bracket is a member.
+            ("echo [ab]'.txt' []a].txt [!]a].txt [x/'*'", "a.txt b.txt a.txt b.txt [x/*\n\n[exit code: 0]"),
             ("echo *", "a.txt b.txt sub\n\n[exit code: 0]"),
             ("[ -d sub ]", "[exit code: 0]"),
             # The three redirections, in the order written.

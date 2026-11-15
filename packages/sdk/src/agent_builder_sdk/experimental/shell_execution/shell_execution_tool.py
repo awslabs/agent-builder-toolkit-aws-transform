@@ -19,7 +19,9 @@ below and starts each program itself with the argument list it read:
   character is literal).
 - An unquoted ``*``, ``?`` or ``[`` makes the word a file-name pattern. It is replaced
   by the sorted matches of Python's ``glob`` in the working directory, or left as
-  written when nothing matches. There is no other expansion.
+  written when nothing matches. There is no other expansion. A quoted or escaped
+  character inside an unquoted ``[...]``, and a class such as ``[[:digit:]]``, are
+  rejected: ``glob`` would read them differently from a shell.
 - ``|`` connects the stdout of a stage to the stdin of the next with an OS pipe. The
   exit code is that of the last stage.
 - A redirection is a word of its own (``> /dev/null`` with a space is read too) and is
@@ -45,9 +47,10 @@ This tool adds application-level defense-in-depth:
    endpoint are switched off, so a subprocess boto3 client has no ambient credential
    chain and must use connector-vended temporary credentials instead.
 3. Timeout + output limits — a command is killed, with the process group of every
-   stage, after its timeout (30 seconds by default, 120 at most). At most 20 KB of
-   stdout and 10 KB of stderr are kept, in the agent's memory as well as in the result:
-   the rest is read and dropped, so a high-volume command cannot grow the agent process.
+   stage, after its timeout (30 seconds by default, 120 at most), which counts from
+   before pattern expansion. At most 20 KB of stdout and 10 KB of stderr are kept, in
+   the agent's memory as well as in the result: the rest is read and dropped, so a
+   high-volume command cannot grow the agent process.
 
 The allowlist is not a sandbox. awk, sed and python start other programs from their
 own scripts by design. Treat the tool as able to run any program the container user
@@ -65,7 +68,7 @@ import signal
 import subprocess
 import threading
 import time
-from typing import IO, Dict, FrozenSet, List, NamedTuple, Optional, Sequence, Tuple
+from typing import IO, Dict, FrozenSet, Iterator, List, NamedTuple, Optional, Sequence, Tuple
 
 from strands.tools import tool
 
@@ -309,6 +312,7 @@ class _Stage(NamedTuple):
     redirections: List[_Redirection]
 
 
+_MAGIC = re.compile("[*?[]")  # the characters that make glob read a pattern
 _REDIRECTION = re.compile(r"(?:2>&1|([12]?)>[ \t]*/dev/null)(?=[ \t|]|\Z)")
 
 # Unquoted characters that a shell acts on and this tool does not; `$` and the backtick
@@ -349,20 +353,25 @@ def _split_stages(command: str) -> List[Tuple[List[_Word], List[_Redirection]]]:
     pattern: List[str] = []
     in_word = is_pattern = False
     quote = ""
+    # The members after an unquoted [ that no unquoted ] has closed yet. glob.escape writes a
+    # quoted *, ? or [ as [c], which inside a bracket would close it, and a quoted ! or ] bare.
+    bracket: Optional[str] = None
 
     def end_word() -> None:
-        nonlocal in_word, is_pattern
+        nonlocal in_word, is_pattern, bracket
         if in_word:
             stages[-1][0].append(_Word("".join(text), "".join(pattern) if is_pattern else None))
         text.clear()
         pattern.clear()
         in_word = is_pattern = False
+        bracket = None
 
     i = 0
     while i < len(command):
         ch, following = command[i], command[i + 1 : i + 2]
         i += 1
         literal = ""
+        plain = False
         if ch == quote:
             quote = ""
         elif quote == "'" or (quote and ch not in "\\$`"):
@@ -396,12 +405,25 @@ def _split_stages(command: str) -> List[Tuple[List[_Word], List[_Redirection]]]:
         elif ch in "#~" and not in_word:
             raise _unsupported("a word that starts with '#' (a comment) or '~' (a home directory)")
         elif ch in "*?[":
+            if bracket is not None and ch == "[" and following in (":", ".", "="):
+                raise _unsupported("a character class inside [...] ([[:digit:]], [[.a.]], [[=a=]])")
+            if bracket is not None:
+                bracket += ch
+            elif ch == "[":
+                bracket = ""
             in_word = is_pattern = True
             text.append(ch)
             pattern.append(ch)
         else:
             literal = ch
+            plain = True
         if literal:
+            if bracket is not None:
+                if not plain:
+                    raise _unsupported("a quoted or escaped character inside an unquoted [...]")
+                # A ] first in the bracket is a member ([]a], [!]a]); glob does not read one across a /.
+                closes = literal == "/" or (literal == "]" and bracket not in ("", "!"))
+                bracket = None if closes else bracket + literal
             in_word = True
             text.append(literal)
             pattern.append(glob.escape(literal))
@@ -416,17 +438,37 @@ def _split_stages(command: str) -> List[Tuple[List[_Word], List[_Redirection]]]:
     return stages
 
 
-def _expand(word: _Word, cwd: str) -> List[str]:
-    """The sorted file names that match the word's pattern; the word itself without a pattern or a match."""
+def _expand(word: _Word, cwd: str, deadline: float) -> List[str]:
+    """The sorted file names that match the word's pattern; the word itself without a pattern or a match.
+
+    Raises:
+        _Rejected: More than ``_MAX_PATTERN_MATCHES`` names match, or ``time.monotonic()``
+            passes ``deadline`` before every directory that the pattern names has been read.
+    """
     if word.pattern is None:
         return [word.text]
-    matches = list(itertools.islice(glob.iglob(word.pattern, root_dir=cwd), _MAX_PATTERN_MATCHES + 1))
+    matches = list(itertools.islice(_glob(word.pattern, cwd, deadline), _MAX_PATTERN_MATCHES + 1))
     if len(matches) > _MAX_PATTERN_MATCHES:
         raise _Rejected(
             f"Error: A file-name pattern matches more than {_MAX_PATTERN_MATCHES} names. Narrow the pattern.",
             "pattern with too many matches",
         )
     return sorted(matches) or [word.text]
+
+
+def _glob(pattern: str, cwd: str, deadline: float) -> Iterator[str]:
+    """The matches of ``glob.iglob(pattern, root_dir=cwd)``, with ``deadline`` checked before each directory read."""
+    # One iglob call reads every directory of a pattern such as /*/*/*/x before it yields
+    # a name, and cannot be stopped; one call per directory of the parent pattern can be.
+    parent, name = os.path.split(pattern)
+    parents = _glob(parent, cwd, deadline) if parent != pattern and _MAGIC.search(parent) else [parent]
+    for directory in parents:
+        if time.monotonic() > deadline:
+            raise _Rejected(
+                "Error: A file-name pattern took too long to expand. Narrow the pattern.",
+                "pattern expansion timed out",
+            )
+        yield from glob.iglob(os.path.join(glob.escape(directory), name), root_dir=cwd)
 
 
 # Options of otherwise-useful, allowlisted commands that run the program named in
@@ -479,19 +521,21 @@ def _tar_short_option_runs_program(args: List[str]) -> bool:
     return any(_TAR_EXEC_SHORT_OPTION.match(arg) for arg in args)
 
 
-def _parse_command(command: str, cwd: str) -> List[_Stage]:
+def _parse_command(command: str, cwd: str, deadline: float) -> List[_Stage]:
     """The stages of ``command``, each with the exact argument list its program gets.
 
     Reads the command in the grammar of the module docstring, expands file-name patterns
-    in ``cwd``, and then checks every stage: the program name is on the allowlist and has
-    no path, and the arguments hold none of the options in ``_EXEC_OPTIONS``, abbreviated
-    or bundled, nor tar's -T / --files-from, which can bring them in from a file.
+    in ``cwd`` until ``deadline`` (a ``time.monotonic()`` value), and then checks every
+    stage: the program name is on the allowlist and has no path, and the arguments hold
+    none of the options in ``_EXEC_OPTIONS``, abbreviated or bundled, nor tar's -T /
+    --files-from, which can bring them in from a file.
 
     Note: python3/awk/sed are Turing-complete and can spawn subprocesses from
     their own scripts; the allowlist trusts them by design.
 
     Raises:
-        _Rejected: The command is outside the grammar, the allowlist or the option rules.
+        _Rejected: The command is outside the grammar, the allowlist or the option rules, or a
+            pattern has too many matches or is not expanded by the deadline.
     """
     if "\0" in command:
         raise _Rejected("Error: The command contains a NUL character.", "unsupported shell syntax")
@@ -499,7 +543,7 @@ def _parse_command(command: str, cwd: str) -> List[_Stage]:
 
     stages: List[_Stage] = []
     for words, redirections in _split_stages(command):
-        argv = [argument for word in words for argument in _expand(word, cwd)]
+        argv = [argument for word in words for argument in _expand(word, cwd, deadline)]
         name, args = argv[0], argv[1:]
         if "=" in name:
             raise _Rejected(
@@ -620,7 +664,8 @@ def execute_shell(
     - 'single quotes' (every character literal), "double quotes" and backslash
       escapes.
     - An unquoted *, ? or [...] is matched against file names in the working
-      directory (sorted; left as written when nothing matches).
+      directory (sorted; left as written when nothing matches). Inside an unquoted
+      [...], quotes, backslashes and classes such as [[:digit:]] are rejected.
     - 2>&1, >/dev/null and 2>/dev/null, each as a word of its own.
 
     Everything else that a shell would act on is rejected and nothing runs:
@@ -644,7 +689,8 @@ def execute_shell(
     Args:
         command: The programs to run, in the syntax above. Only allowlisted programs are permitted.
         working_directory: Working directory for the command. Defaults to /tmp.
-        timeout_seconds: Maximum execution time in seconds (1-120). Defaults to 30.
+        timeout_seconds: Maximum execution time in seconds (1-120), file-name pattern
+            expansion included. Defaults to 30.
 
     Returns:
         Command output (stdout/stderr) and exit code. A program that a signal ended has
@@ -672,8 +718,9 @@ def execute_shell(
         directory for directory in env.get("PATH", os.defpath).split(os.pathsep) if os.path.isabs(directory)
     )
     start_time = time.monotonic()
+    deadline = start_time + timeout
     try:
-        stages = _parse_command(command, cwd)
+        stages = _parse_command(command, cwd, deadline)
         programs: List[str] = []
         for stage in stages:
             program = shutil.which(stage.argv[0], path=search_path)
@@ -690,7 +737,7 @@ def execute_shell(
         )
         procs, stdout_reader, stderr_reader = _start(stages, programs, cwd, env)
         readers = (stdout_reader, stderr_reader)
-        if not _finished(procs, readers, timeout):
+        if not _finished(procs, readers, deadline - time.monotonic()):
             _kill(procs)
             # Bound the reap: a descendant that escaped its group (setsid/double-fork)
             # could hold a pipe open forever, reintroducing the very hang the timeout

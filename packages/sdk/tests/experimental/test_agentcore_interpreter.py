@@ -2,15 +2,18 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the AgentCore interpreter: action mapping, session handling and results."""
 
+import datetime
 import importlib
 import sys
 import threading
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict
+from typing import Any, Dict, List
 from unittest.mock import patch
 
 import pytest
+from bedrock_agentcore.tools.code_interpreter_client import CodeInterpreter
 from botocore.exceptions import ClientError, EndpointConnectionError
+from botocore.stub import Stubber
 
 from agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter import (
     NEW_SESSION_NOTICE,
@@ -203,3 +206,46 @@ def test_import_error_names_the_extra() -> None:
         del sys.modules[name]
         with pytest.raises(ImportError, match=r"bedrock-agentcore.*\[code-interpreter\]"):
             importlib.import_module(name)
+
+
+def test_calls_pass_the_request_validation_of_the_real_client() -> None:
+    # Ties the stand-in of conftest.py to bedrock-agentcore: the real client, with a stub
+    # for its data plane, so a renamed operation, argument or attribute fails here.
+    created = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
+    clients: List[CodeInterpreter] = []
+    stubbers: List[Stubber] = []
+
+    def client(region: str) -> CodeInterpreter:
+        real = CodeInterpreter(region=region)
+        # A stubbed response cannot hold an event stream; the events go in after validation.
+        real.data_plane_client.meta.events.register(
+            "after-call.bedrock-agentcore.InvokeCodeInterpreter",
+            lambda parsed, **_: parsed.update(stream=[{"result": {"content": "ok", "isError": False}}]),
+        )
+        stubber = Stubber(real.data_plane_client)
+        session_id = f"aws-session-{len(clients) + 1}"
+        session = {"codeInterpreterIdentifier": "aws.codeinterpreter.v1", "sessionId": session_id}
+        stubber.add_response("start_code_interpreter_session", {**session, "createdAt": created})
+        invoke = {**session, "name": "executeCode", "arguments": {"code": "1", "language": "python"}}
+        if not clients:
+            stubber.add_client_error("invoke_code_interpreter", "ValidationException", expected_params=invoke)
+            ended = {**session, "createdAt": created, "status": "TERMINATED"}
+            stubber.add_response("get_code_interpreter_session", ended, session)
+        else:
+            stubber.add_response("invoke_code_interpreter", {"sessionId": session_id, "stream": {}}, invoke)
+            stubber.add_response("stop_code_interpreter_session", {**session, "lastUpdatedAt": created}, session)
+        stubber.activate()
+        clients.append(real)
+        stubbers.append(stubber)
+        return real
+
+    interpreter = _interpreter()
+    target = "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter.CodeInterpreterClient"
+    with patch(target, client):
+        result = interpreter.invoke(None, "executeCode", {"code": "1", "language": "python"})
+        interpreter.stop_all_sessions()
+    assert result == {"status": "success", "content": [{"text": NEW_SESSION_NOTICE}, {"text": "ok"}]}
+    for stubber in stubbers:
+        stubber.assert_no_pending_responses()
+    # Older clients read data-plane responses with botocore's default of 60 seconds.
+    assert clients[0].data_plane_client.meta.config.read_timeout == 300

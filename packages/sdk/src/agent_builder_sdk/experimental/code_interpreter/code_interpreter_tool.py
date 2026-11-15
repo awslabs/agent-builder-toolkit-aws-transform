@@ -10,10 +10,11 @@ Two tools come out of :func:`create_code_interpreter_tool`:
   preinstalled.
 - ``stage_file_to_sandbox`` — copies a file from the agent container's filesystem
   into the sandbox. This exists because the sandbox of the default interpreter has no AWS
-  credentials and NO network egress (no S3, no PyPI, no AWS APIs): data must be fetched in
-  the agent container first and then staged across. Passing file bytes through the model's
-  own tool arguments would put megabytes of base64 into the context window; this tool
-  moves them process-to-sandbox directly.
+  credentials and no internet access (no PyPI, no public endpoints): data must be fetched
+  in the agent container first and then staged across. (The AgentCore documentation says
+  that Sandbox network mode can reach Amazon S3, so data can still leave the sandbox.)
+  Passing file bytes through the model's own tool arguments would put megabytes of base64
+  into the context window; this tool moves them process-to-sandbox directly.
 
 Needs the ``code-interpreter`` extra:
 ``pip install 'agent-builder-sdk-aws-transform[code-interpreter]'``.
@@ -53,11 +54,11 @@ _DESCRIPTION = (
 
 _ISOLATED_NOTE = (
     "\n\nIMPORTANT ENVIRONMENT NOTES:\n"
-    "- The sandbox has NO network access and NO AWS credentials: no S3, no AWS APIs, no pip "
-    "installs. Get data into the agent container first, then move it in with the "
-    "stage_file_to_sandbox tool.\n"
-    "- Preinstalled: Python 3.12 with pyarrow, pandas, numpy, boto3 (unusable "
-    "offline), requests (unusable offline).\n"
+    "- The sandbox has NO internet access and NO AWS credentials: no pip installs, no public "
+    "endpoints, no calls to S3 or other AWS APIs. Get data into the agent container first, "
+    "then move it in with the stage_file_to_sandbox tool.\n"
+    "- Preinstalled: Python 3.12 with pyarrow, pandas, numpy, boto3 (no credentials), "
+    "requests (no internet).\n"
     "- Results you need outside the sandbox: print them, or write files and use "
     "the readFiles action."
 )
@@ -74,8 +75,8 @@ _CUSTOM_NOTE = (
     "the readFiles action."
 )
 
-# The default is the managed interpreter, which is network-isolated. A deployment that
-# needs more (for example PyPI access, through an interpreter created with PUBLIC network
+# The default is the managed interpreter: no internet access, no credentials. A deployment
+# that needs more (for example PyPI access, through an interpreter created with PUBLIC network
 # mode) sets this env var to the identifier of its own interpreter resource.
 CODE_INTERPRETER_ID_ENV_VAR = "ATX_CODE_INTERPRETER_ID"
 
@@ -138,7 +139,9 @@ def create_code_interpreter_tool(
     belong to this pair, so two agents in one process never share a sandbox session,
     even when their models pick the same session name.
 
-    The default interpreter (``aws.codeinterpreter.v1``) is network-isolated. Set
+    The default interpreter (``aws.codeinterpreter.v1``) has no internet access and no AWS
+    credentials (the AgentCore documentation says that Sandbox network mode can reach
+    Amazon S3, so data can still leave it). Set
     ``ATX_CODE_INTERPRETER_ID`` to a custom interpreter's identifier to use it instead.
     Whether a custom interpreter has internet access depends on its network mode, so
     the tool description then tells the model not to assume either way.
@@ -210,15 +213,17 @@ def create_code_interpreter_tool(
         """
         if not os.path.isfile(local_path):
             return f"Error: no such file in the agent container: {local_path}"
-        size = os.path.getsize(local_path)
+        # The limit is checked on the bytes read, not on the file's stat size: procfs files
+        # report 0, and a file can grow between the stat and the read.
+        with open(local_path, "rb") as f:
+            data = f.read(_MAX_STAGE_BYTES + 1)
+        size = len(data)
         if size > _MAX_STAGE_BYTES:
             return (
-                f"Error: {local_path} is {size} bytes; the sandbox transfer limit is "
-                f"{_MAX_STAGE_BYTES}. Sample or split the data first (e.g. copy only "
-                f"the ranges you need), then stage the smaller file."
+                f"Error: {local_path} is over the sandbox transfer limit of {_MAX_STAGE_BYTES} "
+                f"bytes. Sample or split the data first (e.g. copy only the ranges you need), "
+                f"then stage the smaller file."
             )
-        with open(local_path, "rb") as f:
-            data = f.read()
 
         result = interpreter.invoke(session_name, "writeFiles", {"content": [{"path": sandbox_path, "blob": data}]})
         *notices, answer = [block["text"] for block in result["content"]]
