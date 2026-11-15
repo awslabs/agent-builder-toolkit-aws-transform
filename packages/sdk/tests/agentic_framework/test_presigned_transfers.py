@@ -18,6 +18,7 @@ from urllib3.response import HTTPResponse
 from agent_builder_sdk.agentic_framework import common
 from agent_builder_sdk.errors import InternalBaseAgentError
 
+_SLOW_DOWN = (503, b"<Error><Code>SlowDown</Code><RequestId>1</RequestId></Error>")
 _NO_SUCH_KEY = (404, b"<Error><Code>NoSuchKey</Code><RequestId>1</RequestId></Error>")
 
 
@@ -68,6 +69,52 @@ def s3(monkeypatch: pytest.MonkeyPatch) -> Iterator[_LoopbackS3]:
     yield server
     server.shutdown()
     server.server_close()
+
+
+@pytest.fixture
+def fast_backoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        common, "_PRESIGNED_URL_RETRY", common._PRESIGNED_URL_RETRY.new(backoff_factor=0)
+    )
+
+
+@pytest.mark.parametrize("size", [0, 1, 3 * common._STREAM_BLOCK_BYTES + 7])
+def test_calculate_file_digest_matches_calculate_digest(tmp_path: Path, size: int) -> None:
+    content = os.urandom(size)
+    (tmp_path / "f").write_bytes(content)
+
+    assert common.calculate_file_digest(str(tmp_path / "f")) == common.calculate_digest(content)
+
+
+def test_upload_file_resends_the_whole_file_after_a_throttle(
+    s3: _LoopbackS3, tmp_path: Path, fast_backoff: None
+) -> None:
+    content = os.urandom(common._STREAM_BLOCK_BYTES + 3)
+    (tmp_path / "f").write_bytes(content)
+    s3.responses = [_SLOW_DOWN, (200, b"")]
+
+    common.upload_file_to_presigned_url(s3.presigned, str(tmp_path / "f"))
+
+    assert s3.received == [(str(len(content)), None, content)] * 2
+
+
+def test_upload_of_an_empty_file_sends_content_length_not_chunked(
+    s3: _LoopbackS3, tmp_path: Path
+) -> None:
+    (tmp_path / "f").write_bytes(b"")
+    s3.responses = [(200, b"")]
+
+    common.upload_file_to_presigned_url(s3.presigned, str(tmp_path / "f"))
+
+    assert s3.received == [("0", None, b"")]
+
+
+def test_upload_file_raises_the_s3_error(s3: _LoopbackS3, tmp_path: Path) -> None:
+    (tmp_path / "f").write_bytes(b"x")
+    s3.responses = [(403, b"<Error><Code>AccessDenied</Code><RequestId>1</RequestId></Error>")]
+
+    with pytest.raises(InternalBaseAgentError, match="AccessDenied"):
+        common.upload_file_to_presigned_url(s3.presigned, str(tmp_path / "f"))
 
 
 def test_download_streams_a_multi_block_body(s3: _LoopbackS3, tmp_path: Path) -> None:

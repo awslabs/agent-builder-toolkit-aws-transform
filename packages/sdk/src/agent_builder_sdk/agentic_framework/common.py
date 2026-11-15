@@ -12,7 +12,7 @@ import os
 import stat
 import uuid
 from dataclasses import dataclass
-from typing import Iterable, Iterator, Optional, Union, cast
+from typing import BinaryIO, Iterable, Iterator, Optional, Union, cast
 from xml.etree import ElementTree
 
 import requests
@@ -94,9 +94,18 @@ def calculate_digest(content: bytes) -> str:
         raise
 
 
+def calculate_file_digest(file_path: str) -> str:
+    """calculate_digest of the file at ``file_path``, read 1 MiB at a time."""
+    sha256 = hashlib.sha256()
+    with open(file_path, "rb") as file:
+        for block in iter(lambda: file.read(_STREAM_BLOCK_BYTES), b""):
+            sha256.update(block)
+    return base64.b64encode(sha256.digest()).decode("utf-8")
+
+
 def upload_from_presigned_url(
     create_upload_url_response: CreateArtifactUploadUrlResponseTypeDef,
-    content: bytes,
+    content: Union[bytes, BinaryIO],
     is_managed_bucket: bool = True,
 ) -> None:
     presigned_url_string = create_upload_url_response["s3preSignedUrl"]
@@ -117,6 +126,22 @@ def upload_from_presigned_url(
     raise_for_s3_error_response(response.status_code, response.text, is_managed_bucket)
 
     logger.info("File uploaded successfully!")
+
+
+def upload_file_to_presigned_url(
+    create_upload_url_response: CreateArtifactUploadUrlResponseTypeDef,
+    file_path: str,
+    is_managed_bucket: bool = True,
+) -> None:
+    """upload_from_presigned_url for the file at ``file_path``, streamed from disk.
+
+    A retry rewinds the file and sends it again from its start.
+    """
+    with open(file_path, "rb") as file:
+        # requests sends an empty file object chunked, which S3 rejects; empty bytes go out
+        # with Content-Length: 0.
+        content = file if os.fstat(file.fileno()).st_size else b""
+        upload_from_presigned_url(create_upload_url_response, content, is_managed_bucket)
 
 
 def download_from_presigned_url(
