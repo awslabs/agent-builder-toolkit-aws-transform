@@ -82,15 +82,20 @@ class ArtifactStore(AgenticApiHelper):
         calculate_file_digest(source_file_path).
 
         ``source_file_path`` uploads that file, streamed from disk, in place of ``content``,
-        which must then be empty. ``file_name`` is stored as the artifact's file path (at most
-        838 characters), so a download can restore it (see artifact_file_name), and
-        ``description`` (at most 4000 characters) is stored with it. ``schema_type`` is stored
-        with the type of a new artifact.
+        which must then be empty; a file that cannot be opened raises OSError before any request.
+        ``file_name`` is stored as the artifact's file path (at most 838 characters), so a
+        download can restore it (see artifact_file_name), and ``description`` (at most 4000
+        characters) is stored with it. ``schema_type`` is stored with the type of a new artifact.
         """
         if content and source_file_path is not None:
             raise ValueError("Cannot provide both content and source_file_path")
         if description and not file_name:
             raise ValueError("description is stored with file_name; provide both")
+        if source_file_path is not None:
+            # A missing or unreadable file must fail before an artifact is created that would
+            # never be completed.
+            with open(source_file_path, "rb"):
+                pass
         artifact_reference: abt.ArtifactReferenceTypeDef
         if artifact_id is not None:
             if category_type is not None or file_type is not None:

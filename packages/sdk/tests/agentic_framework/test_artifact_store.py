@@ -3,6 +3,7 @@
 import os
 import tempfile
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Optional
 from unittest import mock
 
@@ -455,12 +456,30 @@ class TestUploadKeywords:
         mock_upload: mock.Mock,
         uploading_store: ArtifactStore,
         upload_url_response: dict[str, Any],
+        tmp_path: Path,
     ) -> None:
-        uploading_store.upload_artifact(b"", "d", artifact_id="a1", source_file_path="/data/f.csv")
+        source = tmp_path / "f.csv"
+        source.write_bytes(b"a,b")
 
-        mock_file_upload.assert_called_once_with(upload_url_response, "/data/f.csv", True)
+        uploading_store.upload_artifact(b"", "d", artifact_id="a1", source_file_path=str(source))
+
+        mock_file_upload.assert_called_once_with(upload_url_response, str(source), True)
         mock_upload.assert_not_called()
         uploading_store.client.complete_artifact_upload.assert_called_once()
+
+    def test_unreadable_source_file_sends_no_request(
+        self, artifact_store: ArtifactStore, tmp_path: Path
+    ) -> None:
+        with pytest.raises(FileNotFoundError):
+            artifact_store.upload_artifact(
+                b"",
+                "d",
+                category_type="CUSTOMER_OUTPUT",
+                file_type="CSV",
+                source_file_path=str(tmp_path / "typo.csv"),
+            )
+
+        artifact_store.client.create_artifact_upload_url.assert_not_called()
 
     @pytest.mark.parametrize(
         ("kwargs", "message"),
