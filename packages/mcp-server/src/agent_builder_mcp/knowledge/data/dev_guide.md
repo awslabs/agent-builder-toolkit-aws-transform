@@ -101,6 +101,7 @@
       - [Required Environment Variables](#required-environment-variables)
       - [Optional Environment Variables](#optional-environment-variables)
       - [Bedrock Guardrails](#bedrock-guardrails)
+      - [Artifact Links in Replies](#artifact-links-in-replies)
       - [Available Tools & Integrations](#available-tools-integrations)
   - [AWS Transform Agentic API Specification](#aws-transform-agentic-api-specification)
     - [Common Error Responses](#common-error-responses)
@@ -2840,6 +2841,35 @@ Bedrock guardrails provide content filtering and safety controls for your agent 
 - Setup: Guardrails must be created via CDK deployment - see AWS CDK Bedrock Guardrail documentation
 - Configuration: Set BEDROCK_GUARDRAIL_ID and BEDROCK_GUARDRAIL_VERSION environment variables
 - Optional: Guardrails are optional - agents will work without them but won't have content filtering
+
+#### Artifact Links in Replies
+
+`Deeplinks.artifact(display_text, artifact_id, job_id=None, workspace_id=None)` builds a Markdown link to an artifact. The last segment of the link is the artifact's `artifactId`, not its file name or label. The earlier keyword `artifact_name=` still works and takes the same ID.
+
+The SDK can also add these links for you. `ArtifactDeliveryHookProvider` records each customer file that a turn verifies, and the reply of that turn gets a link to each file that it does not link yet. The feature is off until you add the hook to each orchestrator agent that answers users:
+
+```python
+from agent_builder_sdk.agent_factory import create_default_orchestrator
+from agent_builder_sdk.orchestrator_strands.hooks import ArtifactDeliveryHookProvider
+
+def agent_factory(mcp_client, storage_dir, **kwargs):
+    orchestrator = create_default_orchestrator(
+        mcp_client=mcp_client, storage_dir=storage_dir, system_prompt="...", **kwargs
+    )
+    orchestrator.hooks.add_hook(ArtifactDeliveryHookProvider())
+    return orchestrator
+```
+
+If you construct your own orchestrator, you can pass `ArtifactDeliveryHookProvider()` in `hooks=[...]` instead.
+
+| Rule | Detail |
+|---|---|
+| What is linked | An artifact for which a `get_artifact_metadata` tool result in the same turn shows `artifactType.categoryType` `CUSTOMER_OUTPUT` and `isS3ObjectPresent.publicBucket` `true`. A completed upload alone is not enough, so tell the model to call `get_artifact_metadata` after it uploads a customer file. |
+| Tool name | Must be exactly `get_artifact_metadata`. If your MCP client adds a prefix to tool names, the hook records nothing. |
+| Which replies | Replies to user turns only. Replies to subagents and notifications, and guardrail refusals, get no links. |
+| No duplicates | A file that the reply already links (a Markdown link or a `<...>` autolink to its `aws-transform://` deeplink) is not linked again. |
+| Link text | The artifact label, or else the file name, with Markdown characters escaped. The link URL contains only the `artifactId`. |
+| Streamed turns | On a `message/stream` turn, the link is added to the copy of the reply that is stored in the chat, not to the live stream. The user sees it after a reload. |
 
 #### Available Tools & Integrations
 

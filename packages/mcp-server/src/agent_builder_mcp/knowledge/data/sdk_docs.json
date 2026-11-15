@@ -3466,6 +3466,23 @@
     "signature": "emit_metrics(strands_metrics_summary, eval_output: EvaluationOutput)"
   },
   {
+    "name": "ArtifactDeliveryHookProvider",
+    "kind": "class",
+    "file": "agent_builder_sdk/orchestrator_strands/hooks/artifact_delivery_hook_provider.py",
+    "module": "agent_builder_sdk.orchestrator_strands.hooks.artifact_delivery_hook_provider",
+    "docstring": "Collects the customer deliverables the turn verifies on ``agent.state`` for the replies.\n\n``agent.state`` outlives the turn on a reused agent, so the list is reset at the start of each\ninvocation. The queue request handler and the streaming persist hook read it and append\ndeeplinks to the reply of a user turn; without this hook they add nothing.\n\nInstall it on every orchestrator agent that answers users. The tool-name match is exact\n(``get_artifact_metadata``), so an MCP client mounted with a tool prefix records nothing.",
+    "signature": "ArtifactDeliveryHookProvider()",
+    "description": "Extends: HookProvider\n\nMethods:\n  register_hooks(registry: HookRegistry, **kwargs: Any) -> None"
+  },
+  {
+    "name": "ArtifactDeliveryHookProvider.register_hooks",
+    "kind": "method",
+    "file": "agent_builder_sdk/orchestrator_strands/hooks/artifact_delivery_hook_provider.py",
+    "module": "agent_builder_sdk.orchestrator_strands.hooks.artifact_delivery_hook_provider",
+    "docstring": "",
+    "signature": "register_hooks(registry: HookRegistry, **kwargs: Any) -> None"
+  },
+  {
     "name": "BlankReplyHookProvider",
     "kind": "class",
     "file": "agent_builder_sdk/orchestrator_strands/hooks/blank_reply_hook_provider.py",
@@ -4683,13 +4700,40 @@
     "description": "Parameters:\n  model_id: str (required)\n  prompt: str (required) - The prompt to apply tool use prompts to"
   },
   {
+    "name": "append_artifact_deeplinks",
+    "kind": "function",
+    "file": "agent_builder_sdk/ui_chat/artifact_delivery.py",
+    "module": "agent_builder_sdk.ui_chat.artifact_delivery",
+    "docstring": "Append a deeplink for each delivered artifact the reply does not link yet.\n\n``delivered`` holds ``{\"artifact_id\", \"title\"}`` items; an item without a valid id is skipped\nand a repeated id is linked once. Only a Markdown link or an autolink whose target is the\nartifact's deeplink counts as already linked; prose that names the id, a path or the bare URI\nstill gets its link. A blank reply is returned unchanged, with no links.",
+    "signature": "append_artifact_deeplinks(reply_text: str, delivered: List[Any]) -> str",
+    "description": "Parameters:\n  reply_text: str (required)\n  delivered: List[Any] (required)"
+  },
+  {
+    "name": "delivered_artifacts_in_tool_result",
+    "kind": "function",
+    "file": "agent_builder_sdk/ui_chat/artifact_delivery.py",
+    "module": "agent_builder_sdk.ui_chat.artifact_delivery",
+    "docstring": "The customer deliverables a successful ``get_artifact_metadata`` result verifies, as\n``{\"artifact_id\": str, \"title\": Optional[str]}`` items.\n\nAn artifact counts when its ``artifactType.categoryType`` is ``CUSTOMER_OUTPUT`` and\n``isS3ObjectPresent.publicBucket`` is true; a completed upload or the category alone does not\nprove that the customer can download the file. A lookup of an earlier upload counts the same as\na fresh one. The tool-name match is exact, so an MCP client mounted with a tool prefix records\nnothing. Results of other tools are not parsed; failed results and malformed payloads yield\n``[]``.",
+    "signature": "delivered_artifacts_in_tool_result(tool_name: str, result: Any) -> List[Dict[str, Any]]",
+    "description": "Parameters:\n  tool_name: str (required)\n  result: Any (required)"
+  },
+  {
+    "name": "reply_with_artifact_deeplinks",
+    "kind": "function",
+    "file": "agent_builder_sdk/ui_chat/artifact_delivery.py",
+    "module": "agent_builder_sdk.ui_chat.artifact_delivery",
+    "docstring": "The reply with deeplinks for the artifacts recorded on ``agent.state``, for a turn the user\nsent; a reply to a subagent or a notification is read by a machine and goes out unchanged.\n\nThe turn's source is the ``conversation_source_type`` ContextVar, which the orchestrator sets\nper turn. The ``agent.state`` copy serves a caller outside the turn's context, such as the queue\nworker after a sync orchestrator ran on another thread. A turn with no recorded source counts\nas a user turn. Any failure is logged and the reply goes out unchanged.",
+    "signature": "reply_with_artifact_deeplinks(reply_text: str, agent: Any) -> str",
+    "description": "Parameters:\n  reply_text: str (required)\n  agent: Any (required)"
+  },
+  {
     "name": "Deeplinks",
     "kind": "class",
     "file": "agent_builder_sdk/ui_chat/deeplinks.py",
     "module": "agent_builder_sdk.ui_chat.deeplinks",
     "docstring": "Unified deeplink generator that creates both static and dynamic URLs.\n\nEach method accepts optional workspace_id and job_id parameters:\n- If workspace_id is provided: creates static deeplink (aws-transform://)\n- If workspace_id is None: creates dynamic deeplink (aws-transform://~/)\n\nThis approach consolidates all functionality into single methods that handle\nboth static and dynamic contexts automatically.",
     "signature": "Deeplinks()",
-    "description": "Methods:\n  workspace(display_text: str, workspace_id: str) -> str\n  job(display_text: str, job_id: str, workspace_id: str | None = None) -> str\n  dashboard(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  task(display_text: str, task_id: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  tasks_tab(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  artifact(display_text: str, artifact_name: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  artifacts_list(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  approvals(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  worklogs(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str"
+    "description": "Methods:\n  workspace(display_text: str, workspace_id: str) -> str\n  job(display_text: str, job_id: str, workspace_id: str | None = None) -> str\n  dashboard(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  task(display_text: str, task_id: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  tasks_tab(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  artifact(display_text: str, artifact_id: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  artifact(display_text: str, *, artifact_name: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  artifact(display_text: str, artifact_id: str | None = None, job_id: str | None = None, workspace_id: str | None = None, *, artifact_name: str | None = None) -> str\n  artifacts_list(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  approvals(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  worklogs(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str"
   },
   {
     "name": "Deeplinks.approvals",
@@ -4704,8 +4748,24 @@
     "kind": "method",
     "file": "agent_builder_sdk/ui_chat/deeplinks.py",
     "module": "agent_builder_sdk.ui_chat.deeplinks",
-    "docstring": "Generate a deeplink to navigate to a specific artifact.\n\nArgs:\n    display_text: Text to display in markdown link\n    artifact_name: The name of the artifact\n    job_id: Optional job ID. Required if workspace_id is provided.\n    workspace_id: Optional workspace ID. If provided (with job_id), creates static deeplink.\n                 If None, creates dynamic deeplink using current context.\n\nReturns:\n    Markdown-formatted deeplink to the artifact\n\nRaises:\n    ValueError: If workspace_id is provided without job_id\n\nExample:\n    >>> Deeplinks.artifact(\"View Report\", artifact_name=\"report.json\", job_id=\"job-67890\", workspace_id=\"ws-12345\")\n    '[View Report](aws-transform://workspaces/ws-12345/jobs/job-67890/artifacts/report.json)'\n    >>> Deeplinks.artifact(\"View Report\", artifact_name=\"report.json\", job_id=\"job-67890\")\n    '[View Report](aws-transform://~/jobs/job-67890/artifacts/report.json)'\n    >>> Deeplinks.artifact(\"View Report\", artifact_name=\"report.json\")\n    '[View Report](aws-transform://~/artifacts/report.json)'",
-    "signature": "artifact(display_text: str, artifact_name: str, job_id: str | None = None, workspace_id: str | None = None) -> str"
+    "docstring": "",
+    "signature": "artifact(display_text: str, artifact_id: str, job_id: str | None = None, workspace_id: str | None = None) -> str"
+  },
+  {
+    "name": "Deeplinks.artifact",
+    "kind": "method",
+    "file": "agent_builder_sdk/ui_chat/deeplinks.py",
+    "module": "agent_builder_sdk.ui_chat.deeplinks",
+    "docstring": "",
+    "signature": "artifact(display_text: str, *, artifact_name: str, job_id: str | None = None, workspace_id: str | None = None) -> str"
+  },
+  {
+    "name": "Deeplinks.artifact",
+    "kind": "method",
+    "file": "agent_builder_sdk/ui_chat/deeplinks.py",
+    "module": "agent_builder_sdk.ui_chat.deeplinks",
+    "docstring": "Generate a deeplink to navigate to a specific artifact.\n\nThe final ``artifacts/<...>`` segment is the artifact ID: AWS Transform chat looks the\nartifact up by it, so a link built from a file name or a label does not open.\n\nArgs:\n    display_text: Text to display in markdown link\n    artifact_id: The artifact's ``artifactId``\n    job_id: Optional job ID. Required if workspace_id is provided.\n    workspace_id: Optional workspace ID. If provided (with job_id), creates static deeplink.\n                 If None, creates dynamic deeplink using current context.\n    artifact_name: Earlier name of ``artifact_id``, kept for keyword callers; it is the\n        artifact ID too. Give one of the two, not both.\n\nReturns:\n    Markdown-formatted deeplink to the artifact\n\nRaises:\n    TypeError: If neither or both of artifact_id and artifact_name are given\n    ValueError: If workspace_id is provided without job_id\n\nExample:\n    >>> Deeplinks.artifact(\"View Report\", artifact_id=\"a1b2c3d4\", job_id=\"job-67890\", workspace_id=\"ws-12345\")\n    '[View Report](aws-transform://workspaces/ws-12345/jobs/job-67890/artifacts/a1b2c3d4)'\n    >>> Deeplinks.artifact(\"View Report\", artifact_id=\"a1b2c3d4\", job_id=\"job-67890\")\n    '[View Report](aws-transform://~/jobs/job-67890/artifacts/a1b2c3d4)'\n    >>> Deeplinks.artifact(\"View Report\", artifact_id=\"a1b2c3d4\")\n    '[View Report](aws-transform://~/artifacts/a1b2c3d4)'",
+    "signature": "artifact(display_text: str, artifact_id: str | None = None, job_id: str | None = None, workspace_id: str | None = None, *, artifact_name: str | None = None) -> str"
   },
   {
     "name": "Deeplinks.artifacts_list",
