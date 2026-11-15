@@ -10,7 +10,7 @@ import os
 import re
 import uuid
 from contextvars import ContextVar
-from typing import AbstractSet, Any, FrozenSet, List, Optional
+from typing import AbstractSet, Any, FrozenSet, List, Optional, Sequence
 
 from strands.hooks import AfterToolCallEvent
 from strands.plugins import hook
@@ -24,9 +24,10 @@ DEFAULT_MAX_RESULT_TOKENS = 12_500
 DEFAULT_PREVIEW_TOKENS = 1_000
 # json.loads, which checks that the text is JSON, takes several times the memory of the text.
 MAX_INDENTED_JSON_CHARS = 5_000_000
-# Deeper levels get no more indentation, so deep nesting cannot multiply the size of the text.
 _MAX_INDENT_DEPTH = 20
 _INDENTS = ["\n" + "  " * depth for depth in range(_MAX_INDENT_DEPTH + 1)]
+# Indentation adds up to 41 chars per token, so small values nested deeply grow about 21 times.
+_MAX_INDENTED_GROWTH = 3
 # A JSON string with its escapes, a structural character, or a number or literal name.
 _JSON_TOKEN = re.compile(r'"[^"\\]*(?:\\.[^"\\]*)*"|[{}\[\],:]|[^\s{}\[\],:"]+')
 
@@ -53,26 +54,40 @@ def _is_offloadable(block: ToolResultContent) -> bool:
 
 
 def _relined_json(text: str) -> str:
-    """Return valid JSON ``text`` with each value on its own line; literals stay byte-for-byte."""
+    """Return valid JSON ``text`` with each value on its own line; literals stay byte-for-byte.
+
+    Lines are indented by two spaces per level, up to ``_MAX_INDENT_DEPTH`` levels. When that makes
+    the result longer than ``_MAX_INDENTED_GROWTH`` times ``text``, the lines are not indented, and
+    the result is at most twice as long as ``text``.
+    """
+    parts = _relined_json_parts(text, _INDENTS)
+    if sum(map(len, parts)) > _MAX_INDENTED_GROWTH * len(text):
+        parts = _relined_json_parts(text, ["\n"])
+    return "".join(parts)
+
+
+def _relined_json_parts(text: str, indents: Sequence[str]) -> List[str]:
+    """Return the tokens of ``text`` with ``indents[depth]`` (the last one when deeper) between."""
     parts: List[str] = []
     depth = 0
+    deepest = len(indents) - 1
     for match in _JSON_TOKEN.finditer(text):
         token = match.group()
         opened = bool(parts) and parts[-1] in ("{", "[")
         if token in ("}", "]"):
             depth -= 1
             if not opened:
-                parts.append(_INDENTS[min(depth, _MAX_INDENT_DEPTH)])
+                parts.append(indents[min(depth, deepest)])
         elif opened:
-            parts.append(_INDENTS[min(depth, _MAX_INDENT_DEPTH)])
+            parts.append(indents[min(depth, deepest)])
         parts.append(token)
         if token in ("{", "["):
             depth += 1
         elif token == ",":
-            parts.append(_INDENTS[min(depth, _MAX_INDENT_DEPTH)])
+            parts.append(indents[min(depth, deepest)])
         elif token == ":":
             parts.append(" ")
-    return "".join(parts)
+    return parts
 
 
 def _with_json_on_short_lines(block: ToolResultContent) -> ToolResultContent:
@@ -109,14 +124,16 @@ class ToolOutputOffloader(ContextOffloader):
 
     Retrieval by line range or pattern works on lines and returns at most ``max_result_tokens * 4``
     characters. A text block that holds a JSON object or array is therefore stored indented, one
-    value per line. Only the whitespace between tokens changes: numbers, strings, escapes, repeated
-    keys and key order stay as the tool wrote them. The indenting runs in a worker thread. JSON text
-    is not indented when it is longer than ``MAX_INDENTED_JSON_CHARS`` (5,000,000) characters or
-    when ``json.loads`` rejects it. That text, and any other text, is stored as the tool returned
-    it: of a single line longer than the retrieval limit, only the start is readable by line range
-    or pattern, and the rest only by a whole retrieval. The pattern is a regular expression that
-    the model writes. Strands runs it on the event loop, line by line, with no time limit: a
-    pattern that backtracks heavily on a long line blocks the loop until the search ends.
+    value per line. When indentation would make it more than 3 times as long as the text, the lines
+    are not indented, so the stored text is at most twice as long. Only the whitespace between
+    tokens changes: numbers, strings, escapes, repeated keys and key order stay as the tool wrote
+    them. The indenting runs in a worker thread. JSON text is not indented when it is longer than
+    ``MAX_INDENTED_JSON_CHARS`` (5,000,000) characters or when ``json.loads`` rejects it. That
+    text, and any other text, is stored as the tool returned it: of a single line longer than the
+    retrieval limit, only the start is readable by line range or pattern, and the rest only by a
+    whole retrieval. The pattern is a regular expression that the model writes. Strands runs it on
+    the event loop, line by line, with no time limit: a pattern that backtracks heavily on a long
+    line blocks the loop until the search ends.
 
     Files are never evicted, so a reference stays valid for as long as the directory exists: for
     another agent whose offloader uses the same ``storage_dir``, and after a checkpoint restore of

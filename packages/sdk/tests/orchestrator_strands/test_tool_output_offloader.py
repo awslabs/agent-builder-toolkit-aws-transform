@@ -332,6 +332,20 @@ def test_json_text_gets_the_layout_of_json_dumps_with_indent_2() -> None:
     assert offloader_module._with_json_on_short_lines(block) == {"text": json.dumps(value, indent=2)}
 
 
+async def test_deeply_nested_json_text_is_stored_at_most_twice_as_long_without_indentation(
+    tmp_path: Path,
+) -> None:
+    agent, offloader = _agent(tmp_path)
+    text = "[" * 25 + ",".join(["0"] * 2000) + "]" * 25
+
+    result = await _after_tool_call(agent, [{"text": text}])
+
+    stored = await _retrieve(offloader, agent, _reference(result["content"][0]["text"]))
+    assert _without_whitespace_outside_strings(stored) == text
+    assert len(stored.splitlines()) > 2000
+    assert len(stored) <= 2 * len(text)
+
+
 @pytest.mark.parametrize(
     "text",
     [
