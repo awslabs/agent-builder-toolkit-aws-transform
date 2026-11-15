@@ -5,6 +5,7 @@
 import json
 import textwrap
 from pathlib import Path
+from types import ModuleType
 
 
 def _write_module(pkg: Path, name: str, content: str) -> Path:
@@ -185,6 +186,44 @@ class TestClassExtraction:
         )
         entries = generate_sdk_docs.extract_sdk(tmp_sdk)
         assert "Extends: BaseAgent, Mixin" in entries[0]["description"]
+
+    def test_skips_overload_stubs(self, generate_sdk_docs: ModuleType, tmp_sdk: Path) -> None:
+        _write_module(
+            tmp_sdk,
+            "overloads.py",
+            '''\
+            import typing
+            from typing import overload
+
+            class Links:
+                """Links."""
+
+                @overload
+                @staticmethod
+                def link(text: str, link_id: str) -> str: ...
+
+                @typing.overload
+                @staticmethod
+                def link(text: str, *, old_id: str) -> str: ...
+
+                @staticmethod
+                def link(text: str, link_id: str = "", *, old_id: str = "") -> str:
+                    """Build a link."""
+                    return text
+
+            @overload
+            def parse(value: str) -> str: ...
+
+            def parse(value: str) -> str:
+                """Parse a value."""
+                return value
+            ''',
+        )
+        entries = generate_sdk_docs.extract_sdk(tmp_sdk)
+        functions = [(e["name"], e["docstring"]) for e in entries if e["kind"] != "class"]
+        assert functions == [("Links.link", "Build a link."), ("parse", "Parse a value.")]
+        links = next(e for e in entries if e["name"] == "Links")
+        assert links["description"].count("link(") == 1
 
 
 class TestSignatureFormatting:

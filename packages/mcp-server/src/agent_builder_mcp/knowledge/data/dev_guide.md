@@ -2871,6 +2871,7 @@ If you construct your own orchestrator, you can pass `ArtifactDeliveryHookProvid
 | Rule | Detail |
 |---|---|
 | What is linked | An artifact for which a `get_artifact_metadata` tool result in the same turn shows `artifactType.categoryType` `CUSTOMER_OUTPUT` and `isS3ObjectPresent.publicBucket` `true`. A completed upload alone is not enough, so tell the model to call `get_artifact_metadata` after it uploads a customer file. |
+| Upload settings | Upload the file with `categoryType` `CUSTOMER_OUTPUT` and `visibility="EXTERNAL"` (the `visibility` argument of `create_artifact_upload_url`). The default visibility is `INTERNAL`, and `ArtifactStore` always uploads as `INTERNAL`. An `INTERNAL` upload is not visible to the user and gets no link. |
 | Tool name | Must be exactly `get_artifact_metadata`. If your MCP client adds a prefix to tool names, the hook records nothing. |
 | Servers | `AgentRuntimeServer` (`message/send` and `message/stream`). `StatelessAgentRuntimeServer` does not add links. |
 | Which replies | Replies to user turns only. Replies to subagents and notifications, and guardrail refusals, get no links. |

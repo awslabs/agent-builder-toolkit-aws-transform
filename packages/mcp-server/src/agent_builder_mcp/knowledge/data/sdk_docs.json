@@ -4733,7 +4733,7 @@
     "module": "agent_builder_sdk.ui_chat.deeplinks",
     "docstring": "Unified deeplink generator that creates both static and dynamic URLs.\n\nEach method accepts optional workspace_id and job_id parameters:\n- If workspace_id is provided: creates static deeplink (aws-transform://)\n- If workspace_id is None: creates dynamic deeplink (aws-transform://~/)\n\nThis approach consolidates all functionality into single methods that handle\nboth static and dynamic contexts automatically.",
     "signature": "Deeplinks()",
-    "description": "Methods:\n  workspace(display_text: str, workspace_id: str) -> str\n  job(display_text: str, job_id: str, workspace_id: str | None = None) -> str\n  dashboard(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  task(display_text: str, task_id: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  tasks_tab(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  artifact(display_text: str, artifact_id: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  artifact(display_text: str, *, artifact_name: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  artifact(display_text: str, artifact_id: str | None = None, job_id: str | None = None, workspace_id: str | None = None, *, artifact_name: str | None = None) -> str\n  artifacts_list(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  approvals(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  worklogs(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str"
+    "description": "Methods:\n  workspace(display_text: str, workspace_id: str) -> str\n  job(display_text: str, job_id: str, workspace_id: str | None = None) -> str\n  dashboard(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  task(display_text: str, task_id: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  tasks_tab(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  artifact(display_text: str, artifact_id: str | None = None, job_id: str | None = None, workspace_id: str | None = None, *, artifact_name: str | None = None) -> str\n  artifacts_list(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  approvals(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str\n  worklogs(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str"
   },
   {
     "name": "Deeplinks.approvals",
@@ -4742,22 +4742,6 @@
     "module": "agent_builder_sdk.ui_chat.deeplinks",
     "docstring": "Generate a deeplink to navigate to the approvals page.\n\nArgs:\n    display_text: Text to display in markdown link\n    job_id: Optional job ID. Required if workspace_id is provided.\n    workspace_id: Optional workspace ID. If provided (with job_id), creates static deeplink.\n                 If None, creates dynamic deeplink using current context.\n\nReturns:\n    Markdown-formatted deeplink to the approvals page\n\nRaises:\n    ValueError: If workspace_id is provided without job_id\n\nExample:\n    >>> Deeplinks.approvals(\"View Approvals\", job_id=\"job-67890\", workspace_id=\"ws-12345\")\n    '[View Approvals](aws-transform://workspaces/ws-12345/jobs/job-67890/approvals)'\n    >>> Deeplinks.approvals(\"View Approvals\", job_id=\"job-67890\")\n    '[View Approvals](aws-transform://~/jobs/job-67890/approvals)'\n    >>> Deeplinks.approvals(\"View Approvals\")\n    '[View Approvals](aws-transform://~/tab/approvals)'",
     "signature": "approvals(display_text: str, job_id: str | None = None, workspace_id: str | None = None) -> str"
-  },
-  {
-    "name": "Deeplinks.artifact",
-    "kind": "method",
-    "file": "agent_builder_sdk/ui_chat/deeplinks.py",
-    "module": "agent_builder_sdk.ui_chat.deeplinks",
-    "docstring": "",
-    "signature": "artifact(display_text: str, artifact_id: str, job_id: str | None = None, workspace_id: str | None = None) -> str"
-  },
-  {
-    "name": "Deeplinks.artifact",
-    "kind": "method",
-    "file": "agent_builder_sdk/ui_chat/deeplinks.py",
-    "module": "agent_builder_sdk.ui_chat.deeplinks",
-    "docstring": "",
-    "signature": "artifact(display_text: str, *, artifact_name: str, job_id: str | None = None, workspace_id: str | None = None) -> str"
   },
   {
     "name": "Deeplinks.artifact",
