@@ -3,6 +3,7 @@
 import asyncio
 import io
 import os
+import stat
 import threading
 from pathlib import Path
 from typing import Any
@@ -99,6 +100,34 @@ def test_a_named_pipe_is_an_error_and_is_never_opened(
     os.mkfifo(pipe)
     monkeypatch.setattr("builtins.open", Mock(side_effect=AssertionError("opened")))
     assert _error_text(_read(image_path=str(pipe))) == "Error reading file: not a regular file"
+
+
+@pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs named pipes")
+def test_a_named_pipe_swapped_in_after_the_check_is_an_error_without_blocking(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = _save(tmp_path / "a.png")
+    real_stat = os.stat
+
+    def stat_then_swap(file_path: Any, *args: Any, **kwargs: Any) -> os.stat_result:
+        result = real_stat(file_path, *args, **kwargs)
+        if file_path == str(path) and stat.S_ISREG(result.st_mode):
+            os.remove(file_path)
+            os.mkfifo(file_path)
+        return result
+
+    monkeypatch.setattr(image_reader_module.os, "stat", stat_then_swap)
+    outcome: list[str] = []
+    reader = threading.Thread(
+        target=lambda: outcome.append(_error_text(_read(image_path=str(path)))), daemon=True
+    )
+    reader.start()
+    reader.join(timeout=5)
+    if reader.is_alive():
+        # Opening the write end releases an open() that blocks on the read end.
+        os.close(os.open(path, os.O_WRONLY | os.O_NONBLOCK))
+        reader.join(timeout=5)
+    assert outcome == ["Error reading file: not a regular file"]
 
 
 def test_a_file_over_the_size_limit_is_an_error_and_is_never_decoded(

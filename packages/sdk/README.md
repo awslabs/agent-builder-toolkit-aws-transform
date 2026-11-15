@@ -215,7 +215,7 @@ A class built on `BaseOrchestrator` or `BaseSubagent` takes the same two objects
 
 **The 1568 px edge**: this is not a Converse limit (that is 8000 px). It is the edge above which, by Anthropic's vision guidance, a Claude model resizes an image before it reads it. The edge is fixed. With the hook on, a larger image from any tool is downscaled, and becomes a JPEG (quality 85) unless it has transparency, also for a model that could read it at full size.
 
-**Memory and time**: a conversion can take about 370 MB, and two run at a time. The EXIF orientation is not applied. A caller waits at most 30 s for a conversion and then gets the error or note. A conversion that is still running keeps its thread until Pillow returns, so while two such conversions run, every image becomes a note after 30 s. The CPU time that a crafted image can cost inside Pillow is not limited.
+**Memory and time**: a conversion can take about 370 MB, and two run at a time. The EXIF orientation is not applied. A caller waits at most 30 s for a conversion and then gets the error or note. A conversion that is still running keeps its thread until Pillow returns, so while two such conversions run, every image becomes a note after 30 s. A process exit also waits for a running conversion. The CPU time that a crafted image can cost inside Pillow is not limited.
 
 **Replaces the Strands tool**: `strands-agents-tools` 0.9.0 removed its `image_reader`; this one keeps the tool name and input schema.
 

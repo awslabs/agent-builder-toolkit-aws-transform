@@ -32,7 +32,7 @@ MAX_JPEG_PIXELS = 40_000_000
 # takes memory by its size, which the pixel limits do not bound.
 MAX_INPUT_BYTES = 20 * 1024 * 1024
 # Seconds a caller waits for a conversion, queue time included. A conversion that is still
-# running then keeps its worker until Pillow returns.
+# running then keeps its worker until Pillow returns, and a process exit waits for it.
 CONVERSION_TIMEOUT_SECONDS = 30.0
 
 # Untrusted bytes reach only these Pillow decoders (the JPEG decoder also opens MPO).

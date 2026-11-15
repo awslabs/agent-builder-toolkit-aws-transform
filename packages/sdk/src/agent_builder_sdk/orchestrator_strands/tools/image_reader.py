@@ -7,7 +7,7 @@ Derived from ``strands_tools/image_reader.py`` of strands-agents-tools 0.8 (Apac
 most MAX_IMAGE_FILE_BYTES is read, and the image is returned within 3.75 MB and 1568 px per
 side (downscaled and re-encoded when needed) instead of as the raw file bytes. The function is
 a coroutine: Strands awaits it on the event loop, so a call waiting for a conversion holds no
-thread.
+thread. The file read itself has no time limit.
 
 Strands registers a module-style tool under its module name, so this file must stay
 ``image_reader.py``.
@@ -80,11 +80,20 @@ def _read(file_path: str) -> bytes:
     # Checked before the open: opening a FIFO blocks, and a device file has no end.
     if not stat.S_ISREG(os.stat(file_path).st_mode):
         raise ValueError("not a regular file")
-    with open(file_path, "rb") as file:
+    # The path can be replaced between the check and the open, so the open does not block on a
+    # FIFO and the open file is checked again.
+    with open(file_path, "rb", opener=_open_nonblocking) as file:
+        if not stat.S_ISREG(os.fstat(file.fileno()).st_mode):
+            raise ValueError("not a regular file")
         raw = file.read(MAX_IMAGE_FILE_BYTES + 1)
     if len(raw) > MAX_IMAGE_FILE_BYTES:
         raise ValueError(f"the file is over the {MAX_IMAGE_FILE_BYTES:,}-byte limit")
     return raw
+
+
+def _open_nonblocking(path: str, flags: int) -> int:
+    # Windows has no O_NONBLOCK, and no FIFO that a file path can name.
+    return os.open(path, flags | getattr(os, "O_NONBLOCK", 0))
 
 
 def _error(tool: ToolUse, message: str) -> ToolResult:
