@@ -11,7 +11,7 @@ from typing import Any
 from unittest.mock import Mock
 
 import pytest
-from PIL import Image, ImageFile, ImageSequence, PngImagePlugin
+from PIL import Image, ImageFile, ImageSequence, PngImagePlugin, TiffImagePlugin
 from strands import Agent, tool
 from strands.hooks import AfterToolCallEvent, HookProvider, HookRegistry
 from strands.models.model import Model
@@ -204,6 +204,55 @@ def test_exif_orientation_is_applied_before_downscaling() -> None:
     assert height > width
 
 
+def test_only_the_exif_orientation_tag_is_decoded(monkeypatch: pytest.MonkeyPatch) -> None:
+    exif = Image.Exif()
+    exif[0x0112] = 6
+    exif[0x010E] = "a tag that can hold millions of values"
+    raw = _encode(Image.new("RGB", (2000, 1000), (9, 9, 9)), "PNG", exif=exif.tobytes())
+    read: list[int] = []
+    getitem = TiffImagePlugin.ImageFileDirectory_v2.__getitem__
+
+    def spy(directory: TiffImagePlugin.ImageFileDirectory_v2, tag: int) -> Any:
+        read.append(tag)
+        return getitem(directory, tag)
+
+    monkeypatch.setattr(TiffImagePlugin.ImageFileDirectory_v2, "__getitem__", spy)
+    block = _guarded(raw)
+    assert set(read) == {0x0112}
+    width, height = _decoded(block).size
+    assert height > width
+
+
+def _exif_segment(orientation: int) -> bytes:
+    exif = Image.Exif()
+    exif[0x0112] = orientation
+    payload = exif.tobytes()
+    assert payload.startswith(b"Exif\x00\x00")
+    return b"\xff\xe1" + (len(payload) + 2).to_bytes(2, "big") + payload
+
+
+@pytest.mark.parametrize("between", [b"", b"\xff", b"\x00\x01"], ids=["none", "fill", "junk"])
+def test_a_jpeg_with_more_than_one_exif_segment_becomes_a_note_before_it_is_opened(
+    monkeypatch: pytest.MonkeyPatch, between: bytes
+) -> None:
+    jpeg = _encode(Image.new("RGB", (64, 64), (9, 9, 9)), "JPEG")
+    raw = jpeg[:2] + _exif_segment(1) + between + _exif_segment(6) + jpeg[2:]
+    assert Image.open(io.BytesIO(raw)).getexif()[0x0112] in (1, 6)
+    monkeypatch.setattr(Image, "open", Mock(side_effect=AssertionError("opened")))
+    assert _guarded(raw, "jpeg")["text"].endswith("not shown: a JPEG with more than one Exif segment]")
+
+
+def test_bytes_over_the_input_limit_become_a_note_before_they_are_opened(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    raw = _png(64, 64)
+    monkeypatch.setattr(converse_image, "MAX_INPUT_BYTES", len(raw))
+    assert _guarded(raw)["image"]["source"]["bytes"] == raw
+    monkeypatch.setattr(converse_image, "MAX_INPUT_BYTES", len(raw) - 1)
+    monkeypatch.setattr(Image, "open", Mock(side_effect=AssertionError("opened")))
+    assert f"not shown: over the {len(raw) - 1:,}-byte input limit" in _guarded(raw)["text"]
+
+
 def test_tiny_image_with_heavy_metadata_is_re_encoded_once_at_its_own_size(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -311,9 +360,9 @@ def test_high_depth_image_is_downscaled_before_its_value_range_is_mapped(
         return real_convert(self, mode, *args, **kwargs)
 
     monkeypatch.setattr(Image.Image, "convert", recording_convert)
-    block = _guarded(_encode(Image.new(mode, (3200, 2000), 7), fmt))
-    assert mapped == [(MAX_EDGE, 980)]
-    assert _decoded(block).size == (MAX_EDGE, 980)
+    block = _guarded(_encode(Image.new(mode, (3200, 1600), 7), fmt))
+    assert mapped == [(MAX_EDGE, 784)]
+    assert _decoded(block).size == (MAX_EDGE, 784)
 
 
 def test_a_non_finite_pixel_blanks_only_the_output_pixels_that_cover_it() -> None:
@@ -370,9 +419,32 @@ def _with_three_components_declared(gray_jpeg: bytes) -> bytes:
     return gray_jpeg[:start] + frame + gray_jpeg[start + 13 :]
 
 
+def _with_a_decoy_scan(jpeg: bytes, prefix: bytes) -> bytes:
+    """``jpeg`` with ``prefix`` and two comments after SOI.
+
+    A walk that reads the 2-byte ``prefix`` as a segment with a length field lands on a scan of
+    3 components, then EOI, in the second comment.
+    """
+    landing = 2 + 2 + 0xFFFE
+    first = b"\xff\xfe\xff\xf0" + bytes(0xFFEE)
+    decoy = b"\xff\xda\x00\x0c\x03" + bytes(9) + b"\xff\xd9"
+    offset = landing - (4 + len(first) + 4)
+    second = b"\xff\xfe" + (offset + len(decoy) + 2).to_bytes(2, "big") + bytes(offset) + decoy
+    raw = jpeg[:2] + prefix + first + second + jpeg[2:]
+    assert raw[landing : landing + 2] == b"\xff\xda"
+    return raw
+
+
 @pytest.mark.parametrize(
     "kind",
-    ["progressive", "sequential", "progressive header, one scan", "one scan of 1 component in 3"],
+    [
+        "progressive",
+        "sequential",
+        "progressive header, one scan",
+        "one scan of 1 component in 3",
+        "restart marker in the header",
+        "fill byte in the header",
+    ],
 )
 def test_jpeg_that_is_not_one_sequential_scan_is_charged_at_full_size_without_decoding(
     monkeypatch: pytest.MonkeyPatch, kind: str
@@ -386,6 +458,11 @@ def test_jpeg_that_is_not_one_sequential_scan_is_charged_at_full_size_without_de
         raw = raw.replace(b"\xff\xc0", b"\xff\xc2")
     elif kind == "one scan of 1 component in 3":
         raw = _with_three_components_declared(_encode(image.convert("L"), "JPEG"))
+        assert Image.open(io.BytesIO(raw)).mode == "RGB"
+    elif kind in ("restart marker in the header", "fill byte in the header"):
+        prefix = b"\xff\xd0" if kind.startswith("restart") else b"\xff\xff"
+        one_component = _with_three_components_declared(_encode(image.convert("L"), "JPEG"))
+        raw = _with_a_decoy_scan(one_component, prefix)
         assert Image.open(io.BytesIO(raw)).mode == "RGB"
     monkeypatch.setattr(converse_image, "MAX_DECODE_PIXELS", 1_000_000)
     monkeypatch.setattr(converse_image, "MAX_EDGE", 300)

@@ -28,9 +28,10 @@ class ImageBlockGuardHook(HookProvider):
     - corrects a wrong declared format;
     - downscales and re-encodes any other image (first frame only; png when it has
       transparency, jpeg at quality 85 otherwise);
-    - replaces an image that cannot be read or made to fit, or that needs more than 20 million
-      pixels decoded, with a text block that names the reason, so the model knows an image
-      was there. The text never quotes the image bytes.
+    - replaces an image that cannot be read or made to fit, that needs more than 20 million
+      pixels decoded, that is over 20 MiB, or that is a JPEG with more than one Exif segment,
+      with a text block that names the reason, so the model knows an image was there. The
+      text never quotes the image bytes.
 
     A conversion can take about 350 MB of memory for a 20-million-pixel image, and two run at
     a time. Only blocks with a ``bytes`` source are checked. Other blocks keep their place and

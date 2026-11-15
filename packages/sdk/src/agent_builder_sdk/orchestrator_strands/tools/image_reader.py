@@ -17,10 +17,10 @@ from typing import Any
 
 from strands.types.tools import ToolResult, ToolUse
 
-from agent_builder_sdk.util.converse_image import submit_conversion
+from agent_builder_sdk.util.converse_image import MAX_INPUT_BYTES, submit_conversion
 
 # Read into memory before the image header can be checked, so the size is capped first.
-MAX_IMAGE_FILE_BYTES = 20 * 1024 * 1024
+MAX_IMAGE_FILE_BYTES = MAX_INPUT_BYTES
 
 TOOL_SPEC = {
     "name": "image_reader",
@@ -50,7 +50,8 @@ def image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult:
     is resolved against the working directory, and symbolic links are followed. The file must
     be a regular file of at most MAX_IMAGE_FILE_BYTES that holds a PNG, JPEG, GIF, WebP, BMP
     or PPM image. An image over 3.75 MB (the Converse limit) or 1568 px per side is
-    downscaled and re-encoded; one that needs more than 20 million pixels decoded is an error.
+    downscaled and re-encoded; one that needs more than 20 million pixels decoded, or a JPEG
+    with more than one Exif segment, is an error.
     File content is returned only as an image; every failure is an ``error`` result with a
     message for the model that quotes no file content, never an exception.
     """

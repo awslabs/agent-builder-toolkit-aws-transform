@@ -208,14 +208,14 @@ A class built on `BaseOrchestrator` or `BaseSubagent` takes the same two objects
 
 | Piece | What it does | Limits |
 |---|---|---|
-| `image_reader` | Returns the image at the path the model gives as one image block. An image over 3.75 MB or 1568 px per side is downscaled and re-encoded first. | Reads any regular file of at most 20 MiB that the agent process can read (`~` is expanded, symbolic links are followed). Accepts PNG, JPEG, GIF, WebP, BMP and PPM; TIFF and ICO are not accepted. Any other file gives the model an error message, never the file content. An image that needs more than 20 million pixels decoded is an error too (a single-scan JPEG decodes at down to 1/8 scale, so it can be larger). |
-| `ImageBlockGuardHook` | Applies the same limits to the image blocks of every tool result (an MCP tool, your own tool): corrects a wrong declared format, downscales an oversized image, and replaces an unreadable one with a text note. | Checks blocks with a `bytes` source only. A re-encoded animation keeps its first frame only; so does an animation of more than 1,000 frames or 50 million pixels over all its frames. An image that needs more than 20 million pixels decoded becomes a text note. |
+| `image_reader` | Returns the image at the path the model gives as one image block. An image over 3.75 MB or 1568 px per side is downscaled and re-encoded first. | Reads any regular file of at most 20 MiB that the agent process can read (`~` is expanded, symbolic links are followed). Accepts PNG, JPEG, GIF, WebP, BMP and PPM; TIFF and ICO are not accepted. Any other file gives the model an error message, never the file content. An image that needs more than 20 million pixels decoded is an error too (a single-scan JPEG decodes at down to 1/8 scale, so it can be larger), and so is a JPEG with more than one Exif segment. |
+| `ImageBlockGuardHook` | Applies the same limits to the image blocks of every tool result (an MCP tool, your own tool): corrects a wrong declared format, downscales an oversized image, and replaces an unreadable one with a text note. | Checks blocks with a `bytes` source only. A re-encoded animation keeps its first frame only; so does an animation of more than 1,000 frames or 50 million pixels over all its frames. A block over 20 MiB, an image that needs more than 20 million pixels decoded, or a JPEG with more than one Exif segment becomes a text note. |
 
 **Why the hook**: Converse rejects a request that holds an image over 3.75 MB or one whose bytes do not match its declared format. The tool result stays in history, so one such image fails every later turn of the job.
 
 **The 1568 px edge**: this is not a Converse limit (that is 8000 px). It is the edge above which, by Anthropic's vision guidance, a Claude model resizes an image before it reads it. The edge is fixed. With the hook on, a larger image from any tool is downscaled, and becomes a JPEG (quality 85) unless it has transparency, also for a model that could read it at full size.
 
-**Memory**: a conversion can take about 350 MB for a 20-million-pixel image. Two conversions run at a time.
+**Memory**: a conversion of at most 20 MiB can take about 350 MB for a 20-million-pixel image. Of the image metadata, only the EXIF orientation is decoded. Two conversions run at a time.
 
 **Replaces the Strands tool**: `strands-agents-tools` 0.9.0 removed its `image_reader`; this one keeps the tool name and input schema.
 

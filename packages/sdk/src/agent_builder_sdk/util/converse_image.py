@@ -4,10 +4,11 @@
 
 import io
 import re
+from collections.abc import Iterator
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, Literal, cast, get_args
 
-from PIL import Image, ImageMath, ImageOps, ImageSequence, UnidentifiedImageError
+from PIL import Image, ImageMath, ImageSequence, UnidentifiedImageError
 
 ImageFormat = Literal["png", "jpeg", "gif", "webp"]
 _CONVERSE_FORMATS: frozenset[str] = frozenset(get_args(ImageFormat))
@@ -31,6 +32,9 @@ MAX_FRAME_PIXELS = 50_000_000
 # Frames decoded in that check. A frame costs a seek whatever its size, so the pixel budget
 # alone does not bound the time.
 MAX_FRAMES = 1_000
+# Bytes of an image to convert. The metadata that Pillow parses (EXIF, text chunks) takes memory
+# by its size, which the pixel limits do not bound.
+MAX_INPUT_BYTES = 20 * 1024 * 1024
 
 # Untrusted bytes reach only these Pillow decoders (the JPEG decoder also opens MPO). Two are
 # left out because the header size does not bound their memory: ICO is decoded on open at the
@@ -40,6 +44,20 @@ _OPEN_FORMATS = ("PNG", "JPEG", "GIF", "WEBP", "BMP", "PPM")
 _FLOAT_LIMIT = 3.0e38
 # A marker in JPEG scan data: not a stuffed 0xFF, a restart marker or a fill byte.
 _JPEG_MARKER = re.compile(rb"\xff[^\x00\xd0-\xd7\xff]")
+# A JPEG marker with a length field, after its fill bytes. Between segments, Pillow and libjpeg
+# skip any other byte, and the markers without a length field (JPG, RST0-7, SOI, EOI, JPG0-13)
+# are 2 bytes.
+_JPEG_SEGMENT = re.compile(rb"\xff+([^\x00\xff\xc8\xd0-\xd9\xf0-\xfd])")
+# The transpose that undoes each EXIF orientation other than 1.
+_ORIENTATION = {
+    2: Image.Transpose.FLIP_LEFT_RIGHT,
+    3: Image.Transpose.ROTATE_180,
+    4: Image.Transpose.FLIP_TOP_BOTTOM,
+    5: Image.Transpose.TRANSPOSE,
+    6: Image.Transpose.ROTATE_270,
+    7: Image.Transpose.TRANSVERSE,
+    8: Image.Transpose.ROTATE_90,
+}
 # Two workers cap the memory of concurrent decodes at twice that of one image, and keep the
 # queue of waiting images off the event loop and off the default executor that the rest of the
 # agent shares.
@@ -60,9 +78,10 @@ def submit_conversion(raw: bytes) -> Future[tuple[bytes, ImageFormat]]:
     jpeg otherwise.
 
     At most two conversions run at a time; the others wait in a queue. The future raises
-    ImageConversionError when the bytes are not a readable image of a supported format, when
-    the frame to encode again is over MAX_DECODE_PIXELS, or when the image is still over
-    MAX_IMAGE_BYTES at MIN_EDGE px. The message never quotes the bytes.
+    ImageConversionError when the bytes are over MAX_INPUT_BYTES or are not a readable image of
+    a supported format, when a JPEG holds more than one Exif segment, when the frame to encode
+    again is over MAX_DECODE_PIXELS, or when the image is still over MAX_IMAGE_BYTES at
+    MIN_EDGE px. The message never quotes the bytes.
     """
     return _POOL.submit(_convert_or_raise, raw)
 
@@ -84,6 +103,12 @@ def _convert_or_raise(raw: bytes) -> tuple[bytes, ImageFormat]:
 
 
 def _convert(raw: bytes) -> tuple[bytes, ImageFormat]:
+    if len(raw) > MAX_INPUT_BYTES:
+        raise ImageConversionError(f"over the {MAX_INPUT_BYTES:,}-byte input limit")
+    # Pillow joins the Exif segments of a JPEG and decodes a tag of the result on open, so only
+    # the one segment that the Exif standard allows (at most 64 KB) is let through.
+    if raw.startswith(b"\xff\xd8\xff") and _exif_segments(raw) > 1:
+        raise ImageConversionError("a JPEG with more than one Exif segment")
     with Image.open(io.BytesIO(raw), formats=_OPEN_FORMATS) as image:
         pil_format = (image.format or "").lower()
         # An MPO file is a JPEG with further images appended, and Converse reads it as that JPEG.
@@ -132,7 +157,11 @@ def _reencode(image: Image.Image, raw: bytes) -> tuple[bytes, ImageFormat]:
     if width * height > MAX_DECODE_PIXELS:
         raise ImageConversionError(f"{width}x{height} px exceeds the decode limit")
     image.load()
-    ImageOps.exif_transpose(image, in_place=True)
+    # Pillow decodes an EXIF tag when it is read, and ImageOps.exif_transpose reads them all,
+    # whatever their count of values. Only the orientation is read here.
+    method = _ORIENTATION.get(image.getexif().get(0x0112, 1))
+    if method is not None:
+        image = image.transpose(method)
     # A profile describes the colour space it was written for, so it is kept only when the
     # encoded image stays in that space.
     keeps_colour_space = image.mode in ("RGB", "RGBA", "P", "PA")
@@ -163,16 +192,39 @@ def _reencode(image: Image.Image, raw: bytes) -> tuple[bytes, ImageFormat]:
             raise ImageConversionError(f"still over {MAX_IMAGE_BYTES:,} bytes at {MIN_EDGE} px")
 
 
+def _jpeg_segments(raw: bytes) -> Iterator[tuple[int, int, int]]:
+    """The segments of a JPEG file's first header, up to and with the first SOS.
+
+    Yields (marker, start, end): the segment after its marker byte, length field included, is
+    ``raw[start:end]``. The walk reads the header as Pillow does on open, and libjpeg reads it
+    the same way or fails before it decodes. A length under 2 makes the walk read the length
+    field again, which holds no 0xFF byte, so it ends where Pillow's does.
+    """
+    position = 2
+    while (found := _JPEG_SEGMENT.search(raw, position)) is not None:
+        marker, start = found[1][0], found.end()
+        end = start + int.from_bytes(raw[start : start + 2], "big")
+        yield marker, start, end
+        if marker == 0xDA:
+            return
+        position = end
+
+
+def _exif_segments(raw: bytes) -> int:
+    """The count of APP1 Exif segments in a JPEG file's first header."""
+    return sum(
+        marker == 0xE1 and raw.startswith(b"Exif\x00\x00", start + 2, end)
+        for marker, start, end in _jpeg_segments(raw)
+    )
+
+
 def _has_one_scan(raw: bytes, components: int) -> bool:
     """Whether one scan codes all ``components`` of a JPEG file's first image; False if unsure."""
-    position = 2
-    while position + 4 < len(raw) and raw[position] == 0xFF:
-        marker, in_scan = raw[position + 1], raw[position + 4]
-        position += 2 + int.from_bytes(raw[position + 2 : position + 4], "big")
+    for marker, start, end in _jpeg_segments(raw):
         if marker == 0xDA:
-            following = _JPEG_MARKER.search(raw, position)
+            following = _JPEG_MARKER.search(raw, end)
             last = following is None or following.group()[1] == 0xD9
-            return last and in_scan == components
+            return last and raw[start + 2 : start + 3] == bytes([components])
     return False
 
 
