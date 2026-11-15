@@ -80,7 +80,8 @@ class StatelessAgentRuntimeServer(BaseServer):
         self.port = port
         self.binary_location = binary_location
         self.storage_dir = storage_dir
-        paths.protect(storage_dir)
+        if storage_dir:
+            paths.protect(storage_dir)
         self.auto_transition_job_to_executing = auto_transition_job_to_executing
 
         # Agent state

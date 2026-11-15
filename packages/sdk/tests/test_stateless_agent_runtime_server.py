@@ -61,6 +61,15 @@ def test_storage_dir_is_refused_to_file_tools(
     assert paths.unwritable(str(tmp_path / "report.md"), [str(tmp_path)]) is None
 
 
+def test_no_storage_dir_still_constructs(mock_subagent_factory: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(paths, "_protected", set())
+    with mock.patch("agent_builder_sdk.server.stateless_agent_runtime_server.MessageHandler"):
+        server = StatelessAgentRuntimeServer(agent_factory=mock_subagent_factory, storage_dir=None)  # type: ignore[arg-type]
+
+    assert server.storage_dir is None
+    assert paths._protected == set()
+
+
 class TestStatelessAgentRuntimeServer:
     """Test cases for StatelessAgentRuntimeServer compatibility and functionality."""
 
