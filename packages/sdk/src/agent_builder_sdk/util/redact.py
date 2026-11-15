@@ -7,10 +7,13 @@ The patterns catch AWS access-key ids and literal values of keys whose name ends
 ``password`` (case-insensitive, ``_`` or ``-`` optional, after a prefix of letters and ``_`` such
 as ``aws_``) in JSON (also JSON nested in a JSON string), env-file, INI (such as
 ``~/.aws/credentials``) and YAML text (LF or CRLF line ends).
+A match replaces the whole key and value with ``<redacted>``, so scrubbed JSON is no longer valid
+JSON and the key name is gone.
 A secret under any other name (for example ``token``, ``secret``, ``access_token`` or
-``private_key``), or in any other shape, passes unless the caller hands its exact value to
-:func:`scrub`. Matching runs in time linear in the text length, and this module never
-logs.
+``private_key``), a value shorter than 8 characters, an indented env or INI line
+(``  password = ...``), or a secret in any other shape passes unless the caller hands its exact
+value (8 characters or more) to :func:`scrub`. Matching runs in time linear in the text length,
+and this module never logs.
 """
 
 import re
@@ -97,15 +100,15 @@ REDACTED = "<redacted>"
 _MIN_SECRET_LEN = 8
 
 
-def scrub(text: str, secrets: Optional[Union[str, Iterable[str]]] = None) -> str:
+def scrub(text: str, secrets: Optional[Union[str, Iterable[Optional[str]]]] = None) -> str:
     """``text`` with every credential match and every exact ``secrets`` value replaced by
-    <redacted>. ``secrets`` is one value or several. A value shorter than 8 characters is left in
-    place."""
+    <redacted>. ``secrets`` is one value or several; a ``None`` entry (an unset environment
+    variable) is skipped. A value shorter than 8 characters is left in place."""
     if isinstance(secrets, str):
         secrets = [secrets]
+    usable = {secret for secret in secrets or () if secret and len(secret) >= _MIN_SECRET_LEN}
     # Longest first, so a secret that holds a shorter one is not cut and left half in place.
-    for secret in sorted(set(secrets or ()), key=len, reverse=True):
-        if secret and len(secret) >= _MIN_SECRET_LEN:
-            text = text.replace(secret, REDACTED)
+    for secret in sorted(usable, key=len, reverse=True):
+        text = text.replace(secret, REDACTED)
     return CREDENTIAL_RE.sub(REDACTED, text)
 

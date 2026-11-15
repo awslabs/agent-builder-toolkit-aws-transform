@@ -36,6 +36,23 @@ def test_exact_secrets_are_redacted() -> None:
     ) == (f"value={REDACTED} ok")
 
 
+def test_a_none_exact_secret_is_skipped() -> None:
+    assert scrub("a abcdefghij b", ["abcdefghij", None]) == f"a {REDACTED} b"
+
+
+@pytest.mark.parametrize(
+    ("text", "out"),
+    [
+        ('{"password":"hunter2"}', '{"password":"hunter2"}'),
+        ("  password = hunter2hunter2", "  password = hunter2hunter2"),
+        ('{"user": "bob", "password": "hunter2xyz"}', f'{{"user": "bob", {REDACTED}}}'),
+    ],
+    ids=["short value passes", "indented env line passes", "whole pair replaced"],
+)
+def test_the_documented_limits_hold(text: str, out: str) -> None:
+    assert scrub(text) == out
+
+
 def test_a_single_exact_secret_passed_as_a_string_is_redacted() -> None:
     assert scrub("dsn=db.example.com:5432 pw secretvalue123", "secretvalue123") == f"dsn=db.example.com:5432 pw {REDACTED}"
 

@@ -4873,9 +4873,9 @@
     "kind": "function",
     "file": "agent_builder_sdk/util/redact.py",
     "module": "agent_builder_sdk.util.redact",
-    "docstring": "``text`` with every credential match and every exact ``secrets`` value replaced by\n<redacted>. ``secrets`` is one value or several. A value shorter than 8 characters is left in\nplace.",
-    "signature": "scrub(text: str, secrets: Optional[Union[str, Iterable[str]]] = None) -> str",
-    "description": "Parameters:\n  text: str (required)\n  secrets: Optional[Union[str, Iterable[str]]] (default=None)"
+    "docstring": "``text`` with every credential match and every exact ``secrets`` value replaced by\n<redacted>. ``secrets`` is one value or several; a ``None`` entry (an unset environment\nvariable) is skipped. A value shorter than 8 characters is left in place.",
+    "signature": "scrub(text: str, secrets: Optional[Union[str, Iterable[Optional[str]]]] = None) -> str",
+    "description": "Parameters:\n  text: str (required)\n  secrets: Optional[Union[str, Iterable[Optional[str]]]] (default=None)"
   },
   {
     "name": "SuggestionsManager",

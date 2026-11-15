@@ -2873,13 +2873,19 @@ repository gets (default `/tmp/orchestrator/conversations`) and every checkpoint
 `agent_builder_sdk.util.paths.protect(path)` for it before the agent starts.
 
 To keep credentials out of text that your own tools return to the model or write to logs, use
-`agent_builder_sdk.util.redact.scrub(text, secrets)`. It is best effort: it removes AWS access-key
-ids, literal values of keys whose name ends in `client_secret`, `api_secret`, `api_key`,
-`secret_access_key`, `session_token` or `password` (after a prefix of letters and `_`, such as
-`aws_` or `db_`) in JSON (also JSON nested in a JSON string, such as a Secrets Manager
-`SecretString`), env-file, INI (such as `~/.aws/credentials`) and YAML text, and the
-exact `secrets` values you pass (one string or a list). A secret under any other name (for example `token`, `secret`,
-`access_token` or `private_key`), or in a URL or a header, passes unless you pass its value.
+`agent_builder_sdk.util.redact.scrub(text, secrets)`. It is best effort. It replaces with
+`<redacted>` AWS access-key ids, the key and value of every key whose name ends in `client_secret`,
+`api_secret`, `api_key`, `secret_access_key`, `session_token` or `password` (after a prefix of
+letters and `_`, such as `aws_` or `db_`) in JSON (also JSON nested in a JSON string, such as a
+Secrets Manager `SecretString`), env-file, INI (such as `~/.aws/credentials`) and YAML text, and
+the exact `secrets` values you pass (one string or a list; `None` entries are skipped).
+
+| Limit | Effect |
+|---|---|
+| Whole pair replaced | `{"user": "bob", "password": "..."}` becomes `{"user": "bob", <redacted>}`: no longer valid JSON, and the key name is gone |
+| Values shorter than 8 characters | Not matched, and not removed when passed in `secrets` |
+| Indented env or INI lines | `  password = ...` is not matched |
+| Other key names and shapes | A secret under another name (for example `token`, `secret`, `access_token` or `private_key`), or in a URL or a header, passes unless you pass its value |
 
 ## AWS Transform Agentic API Specification
 
