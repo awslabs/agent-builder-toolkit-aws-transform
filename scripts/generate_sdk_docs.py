@@ -17,6 +17,7 @@ Defaults:
 
 import ast
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Optional
@@ -112,6 +113,11 @@ def _format_signature(func: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     return sig
 
 
+_ARGS_HEADERS = ("args:", "arguments:", "parameters:", "keyword args:", "keyword arguments:")
+# "name: text", "name (type): text" or "**kwargs: text" at the parameter indent.
+_PARAM_LINE = re.compile(r"\*{0,2}\w+\s*(\([^)]*\))?\s*:")
+
+
 def _extract_parameters(func: ast.FunctionDef | ast.AsyncFunctionDef, docstring: str) -> list[dict]:
     """Extract parameter details with types, defaults, and descriptions from docstring."""
     args = func.args
@@ -134,12 +140,12 @@ def _extract_parameters(func: ast.FunctionDef | ast.AsyncFunctionDef, docstring:
                 # A line no deeper than "Args:" starts the next section.
                 in_args = False
             if not in_args:
-                if stripped.lower() in ("args:", "parameters:"):
+                if stripped.lower() in _ARGS_HEADERS:
                     in_args, args_indent, param_indent = True, indent, None
                 continue
             if param_indent is None:
                 param_indent = indent
-            if indent == param_indent and ":" in stripped:
+            if indent == param_indent and _PARAM_LINE.match(stripped):
                 pname = stripped.split(":", 1)[0].strip().split("(")[0].strip()
                 current_param = pname
                 param_descs[pname] = stripped.split(":", 1)[1].strip()

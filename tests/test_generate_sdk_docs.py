@@ -329,6 +329,30 @@ class TestParameterExtraction:
         desc = generate_sdk_docs.extract_sdk(tmp_sdk)[0]["description"]
         assert "args (required) - Parsed command line arguments" in desc
 
+    def test_keyword_args_section_and_a_wrapped_line_with_a_colon(
+        self, generate_sdk_docs, tmp_sdk
+    ):
+        _write_module(
+            tmp_sdk,
+            "kw.py",
+            '''\
+            def fetch(source: str, *, timeout: int = 5, **kwargs) -> None:
+                """Fetch once.
+
+                Args:
+                    source: See the guide
+                    at https://example.com/x for details.
+
+                Keyword Args:
+                    timeout: Seconds to wait.
+                    **kwargs: Ignored.
+                """
+            ''',
+        )
+        desc = generate_sdk_docs.extract_sdk(tmp_sdk)[0]["description"]
+        assert "See the guide at https://example.com/x for details." in desc
+        assert "timeout: int (default=5) - Seconds to wait.\n" in desc + "\n"
+
 
 class TestFileHandling:
     """Test file traversal and edge cases."""
