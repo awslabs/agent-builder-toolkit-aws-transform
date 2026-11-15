@@ -121,23 +121,30 @@ def _extract_parameters(func: ast.FunctionDef | ast.AsyncFunctionDef, docstring:
     param_descs: dict[str, str] = {}
     if docstring:
         in_args = False
+        args_indent = 0
+        # Indent of the parameter lines; a deeper line continues the description above it.
+        param_indent: Optional[int] = None
         current_param = ""
         for line in docstring.split("\n"):
             stripped = line.strip()
-            if stripped.lower().startswith(("args:", "parameters:")):
-                in_args = True
+            if not stripped:
                 continue
-            if in_args:
-                if stripped.lower().startswith(("returns:", "raises:", "yields:", "note:", "example")):
-                    in_args = False
-                    continue
-                if ": " in stripped and not stripped.startswith(" "):
-                    pname = stripped.split(":", 1)[0].strip().split("(")[0].strip()
-                    pdesc = stripped.split(":", 1)[1].strip()
-                    current_param = pname
-                    param_descs[pname] = pdesc
-                elif current_param and stripped:
-                    param_descs[current_param] += " " + stripped
+            indent = len(line) - len(line.lstrip())
+            if in_args and indent <= args_indent:
+                # A line no deeper than "Args:" starts the next section.
+                in_args = False
+            if not in_args:
+                if stripped.lower() in ("args:", "parameters:"):
+                    in_args, args_indent, param_indent = True, indent, None
+                continue
+            if param_indent is None:
+                param_indent = indent
+            if indent == param_indent and ":" in stripped:
+                pname = stripped.split(":", 1)[0].strip().split("(")[0].strip()
+                current_param = pname
+                param_descs[pname] = stripped.split(":", 1)[1].strip()
+            elif current_param:
+                param_descs[current_param] += " " + stripped
 
     all_positional = getattr(args, "posonlyargs", []) + args.args
     num_defaults = len(args.defaults)
