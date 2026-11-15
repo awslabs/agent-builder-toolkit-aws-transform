@@ -2867,14 +2867,14 @@ agent = create_default_async_orchestrator(mcp_client, storage_dir, custom_tools=
 
 Runtime state is the SDK's default state locations under `/tmp` (for example `/tmp/agent_runtime`,
 `/tmp/orchestrator_agent`, `/tmp/agent_state` and the agentic MCP server log files), plus every
-`storage_dir` that `AgentRuntimeServer` or `StatelessAgentRuntimeServer` gets and every checkpoint
-location. If your agent keeps other state under `/tmp`, call
+`storage_dir` that `AgentRuntimeServer`, `StatelessAgentRuntimeServer` or the file conversation
+repository gets (default `/tmp/orchestrator/conversations`) and every checkpoint location. If your agent keeps other state under `/tmp`, call
 `agent_builder_sdk.util.paths.protect(path)` for it before the agent starts.
 
 To keep credentials out of text that your own tools return to the model or write to logs, use
 `agent_builder_sdk.util.redact.scrub(text, secrets)`. It is best effort: it removes AWS access-key
 ids, literal values of secret-named keys (`password`, `api_key`, `client_secret`, `session_token`
-and similar) in JSON, env-file and YAML text, and the exact `secrets` values you pass. A secret
+and similar) in JSON, env-file, INI (such as `~/.aws/credentials`) and YAML text, and the exact `secrets` values you pass. A secret
 under any other name passes unless you pass its value.
 
 ## AWS Transform Agentic API Specification

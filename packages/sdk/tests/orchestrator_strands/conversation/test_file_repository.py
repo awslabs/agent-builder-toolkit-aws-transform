@@ -4,6 +4,7 @@
 
 import os
 import tempfile
+from pathlib import Path
 from typing import cast
 from unittest.mock import Mock
 
@@ -25,6 +26,7 @@ from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     conversation_source_id,
     conversation_source_type,
 )
+from agent_builder_sdk.util import paths
 from agent_builder_sdk.utils import INTERRUPTED_TURN_TEXT
 
 
@@ -386,3 +388,16 @@ def test_get_conversation_history_leaves_tool_use_unpaired_during_an_interrupt(
 
     assert len(history) == 2
     assert "toolResult" not in str(history)
+
+
+@pytest.mark.parametrize("custom", [True, False], ids=["custom", "default"])
+def test_the_storage_dir_is_refused_to_file_tools(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, custom: bool
+) -> None:
+    monkeypatch.setattr(paths, "_protected", set())
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
+    repo = FileMultiSourceConversationRepository(str(tmp_path / "c") if custom else None)
+
+    target = os.path.join(repo.storage_dir, "conversations.json")
+    assert "runtime state" in (paths.unwritable(target, [str(tmp_path)]) or "")
+    assert paths.unwritable(str(tmp_path / "notes.md"), [str(tmp_path)]) is None

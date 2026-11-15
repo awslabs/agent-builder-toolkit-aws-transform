@@ -4878,15 +4878,6 @@
     "description": "Parameters:\n  text: str (required)\n  secrets: Optional[Iterable[str]] (default=None)"
   },
   {
-    "name": "scrub_transfer_error",
-    "kind": "function",
-    "file": "agent_builder_sdk/util/redact.py",
-    "module": "agent_builder_sdk.util.redact",
-    "docstring": "``text`` of a failed artifact transfer, scrubbed, with no URL, X-Amz-* parameter value or raw\nS3 reply left in it.",
-    "signature": "scrub_transfer_error(text: str) -> str",
-    "description": "Parameters:\n  text: str (required)"
-  },
-  {
     "name": "SuggestionsManager",
     "kind": "class",
     "file": "agent_builder_sdk/util/suggestions_manager.py",

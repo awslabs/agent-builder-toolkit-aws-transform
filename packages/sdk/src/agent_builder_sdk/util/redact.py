@@ -3,7 +3,8 @@
 """Best-effort redaction of credentials from text that reaches the model or the logs.
 
 The patterns catch AWS access-key ids and literal values of secret-named keys (``password``,
-``api_key``, ``client_secret``, ``session_token`` and similar) in JSON, env-file and YAML text.
+``api_key``, ``client_secret``, ``session_token`` and similar) in JSON, env-file, INI (such as
+``~/.aws/credentials``) and YAML text.
 A secret under any other name, or in any other shape, passes unless the caller hands its exact
 value to :func:`scrub`. Matching runs in time linear in the text length, and this module never
 logs.
@@ -53,12 +54,13 @@ CREDENTIAL_RE = re.compile(
     + r"[\"']\s*:\s*(?:"
     + _quoted("json")
     + r"|[\"'][^\"'\s]{8,}[\"'])"
-    # env file: unindented, so an indented keyword argument (password=payload.get(...)) is not one.
+    # env or INI file (key=value, key = value): unindented, so an indented keyword argument
+    # (password=payload.get(...)) is not one.
     + r"|"
     + _LINE_START
     + r"(?:export[ \t]+)?"
     + _SECRET_KEY
-    + r"=(?:"
+    + r"[ \t]*=[ \t]*(?:"
     + _quoted("env")
     + r"|"
     + _QUOTE
@@ -92,23 +94,9 @@ _MIN_SECRET_LEN = 8
 def scrub(text: str, secrets: Optional[Iterable[str]] = None) -> str:
     """``text`` with every credential match and every exact ``secrets`` value replaced by
     <redacted>. A ``secrets`` value shorter than 8 characters is left in place."""
-    for secret in secrets or ():
+    # Longest first, so a secret that holds a shorter one is not cut and left half in place.
+    for secret in sorted(set(secrets or ()), key=len, reverse=True):
         if secret and len(secret) >= _MIN_SECRET_LEN:
             text = text.replace(secret, REDACTED)
     return CREDENTIAL_RE.sub(REDACTED, text)
 
-
-# A presigned URL is a bearer credential, and S3 echoes the signing details (SignatureDoesNotMatch)
-# or the session token itself (ExpiredToken) in an error reply.
-_URL_RE = re.compile(r"https?://[^\s\"'<>]+")
-_AMZ_PARAM_RE = re.compile(r"(X-Amz-[A-Za-z-]+)=[^&\s\"'<>]*", re.IGNORECASE)
-# What follows is a reply raise_for_s3_error_response could not classify, kept raw.
-_RAW_S3_REPLY_RE = re.compile(r"(S3 error: ).*", re.DOTALL)
-
-
-def scrub_transfer_error(text: str) -> str:
-    """``text`` of a failed artifact transfer, scrubbed, with no URL, X-Amz-* parameter value or raw
-    S3 reply left in it."""
-    text = _RAW_S3_REPLY_RE.sub(r"\1(reply removed)", text)
-    text = _URL_RE.sub("(url removed)", text)
-    return scrub(_AMZ_PARAM_RE.sub(r"\1=(removed)", text))

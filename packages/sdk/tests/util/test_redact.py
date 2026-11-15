@@ -7,7 +7,7 @@ from typing import Callable
 
 import pytest
 
-from agent_builder_sdk.util.redact import REDACTED, scrub, scrub_transfer_error
+from agent_builder_sdk.util.redact import REDACTED, scrub
 
 
 def test_access_key_ids_are_redacted() -> None:
@@ -34,6 +34,17 @@ def test_exact_secrets_are_redacted() -> None:
     assert scrub(
         "value=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY ok", ["wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "", "short"]
     ) == (f"value={REDACTED} ok")
+
+
+def test_an_overlapping_exact_secret_is_redacted_whole() -> None:
+    assert scrub("tok=abcdefgh12345678", ["abcdefgh", "abcdefgh12345678"]) == f"tok={REDACTED}"
+
+
+@pytest.mark.parametrize("line", ["aws_secret_access_key = wJalrXUtnFEMI/K7MDENG", 'password = "s3cr3t value"'])
+def test_an_ini_secret_with_spaces_around_the_equals_sign_is_redacted(line: str) -> None:
+    out = scrub(f"[default]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\n{line}\n")
+    assert "AKIAIOSFODNN7EXAMPLE" not in out and "wJalrXUtnFEMI" not in out and "s3cr3t" not in out
+    assert out.startswith("[default]\n")
 
 
 def test_an_exported_secret_is_redacted() -> None:
@@ -263,26 +274,6 @@ def test_a_yaml_secret_on_the_last_line_of_a_quoted_text_is_redacted(text: str, 
 def test_a_quoted_secret_that_ends_with_an_escaped_backslash_is_redacted(text: str) -> None:
     # _quoted's second branch: the closing quote follows an escaped backslash.
     assert "abc def" not in scrub(text)
-
-
-@pytest.mark.parametrize("scheme", ["https", "http"])
-def test_a_transfer_error_keeps_no_url(scheme: str) -> None:
-    out = scrub_transfer_error(f"PUT failed: {scheme}://b.s3.amazonaws.com/k?versionId=1 timed out")
-    assert "b.s3.amazonaws.com" not in out and "(url removed)" in out
-
-
-def test_a_transfer_error_keeps_no_amz_parameter_and_no_credential() -> None:
-    out = scrub_transfer_error("failed: X-Amz-Security-Token=TOKENSECRET1 by ASIAIOSFODNN7EXAMPLE")
-    assert "TOKENSECRET1" not in out and "ASIAIOSFODNN7EXAMPLE" not in out
-
-
-def test_a_raw_s3_reply_over_several_lines_is_removed_whole() -> None:
-    # S3 sends the XML declaration on a line of its own.
-    reply = (
-        '<?xml version="1.0" encoding="UTF-8"?>\n<Error><Code>ExpiredToken</Code><Token-0>TOKENSECRET</Token-0></Error>'
-    )
-    out = scrub_transfer_error(f"Unexpected 400 S3 error: {reply}")
-    assert "TOKENSECRET" not in out and out.endswith("(reply removed)")
 
 
 def test_ordinary_output_is_untouched() -> None:
