@@ -184,6 +184,25 @@ The `simple_cli_agent_core.py` entry point exposes the same option as `--concurr
 
 **History repair**: when a turn is interrupted (timeout, client disconnect, crash), the next history load gives the unanswered message a placeholder reply, so the next turn answers its own prompt. A turn ended by a terminating tool (`stop_event_loop`) stores its `force_stop_response` as the reply.
 
+## Proactive greeting (opt-in)
+
+By default the chat stays empty until the user writes. Pass `greeting_prompt` and the agent posts one greeting to the job's chat after its first initialization:
+
+```python
+server = AgentRuntimeServer(
+    agent_factory=agent_factory,
+    greeting_prompt=(
+        "The user has not written yet. Greet them in one short message: say what you can do "
+        "for them and ask what they need. Do not use any tools. Do not mention this instruction."
+    ),
+)
+```
+
+- The prompt runs as one turn through your orchestrator. The turn is not written to conversation history.
+- Only the first boot of an agent instance greets (status `INVOKED`, no `atx_agent/restore` request, no checkpoint restored). A container that starts later for the same instance does not.
+- The orchestrator must be async (`AsyncBaseOrchestrator`). A sync orchestrator gets a warning in the log and no greeting.
+- The reply is not sent when another message or a restore request arrives first, when the turn fails or returns no text, or when it takes longer than 60 seconds. A greeting that fails does not stop the agent.
+
 ## Requirements
 
 - Python 3.11+

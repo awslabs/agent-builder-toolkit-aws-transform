@@ -63,6 +63,20 @@ class TestQueueService(unittest.TestCase):
 
         asyncio.run(run_test())
 
+    def test_submit_request_carries_persist_in_the_context(self) -> None:
+        """A turn is stored unless the request says otherwise."""
+
+        async def run_test() -> None:
+            await self.service.submit_request(message="stored")
+            stored = await self.request_queue.dequeue()
+            await self.service.submit_request(message="not stored", persist=False)
+            not_stored = await self.request_queue.dequeue()
+
+            self.assertIs(stored.context["persist"], True)
+            self.assertIs(not_stored.context["persist"], False)
+
+        asyncio.run(run_test())
+
     def test_submit_request_with_defaults(self):
         """Test submitting request with default priority."""
 

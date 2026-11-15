@@ -13,6 +13,9 @@ from agent_builder_sdk.orchestrator_strands.conversation.constants import Messag
 
 conversation_source_id: ContextVar[str] = ContextVar("conversation_source_id")
 conversation_source_type: ContextVar[MessageSourceType] = ContextVar("conversation_source_type")
+# Whether the current turn's messages are written to conversation history. The value reaches a
+# hook only on the task that set it or on a thread that copied that task's context.
+conversation_persist: ContextVar[bool] = ContextVar("conversation_persist", default=True)
 
 
 class ConversationRepository(ABC):

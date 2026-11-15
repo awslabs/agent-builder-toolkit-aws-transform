@@ -22,6 +22,8 @@ from ..custom_types.orchestrator_agent_types import (
 )
 from ..interfaces import AnyBaseAgent
 from ..message_queue import QueueRequest, QueueResponse, RequestQueue, RequestStatus, ResponseStore
+from ..orchestrator_strands.base_orchestrator import BaseOrchestrator
+from ..orchestrator_strands.conversation.repository import conversation_persist
 from ..utils import describe_agent_result, extract_text_from_strands_agent_response
 from .context import RequestContext
 from .interface import RequestHandler
@@ -50,6 +52,9 @@ class QueueRequestHandler(RequestHandler):
         self.request_queue = request_queue
         self.response_store = response_store
         self._current_request: Optional[QueueRequest] = None
+        # Dequeued turns whose messages are stored. A turn submitted with persist=False is not
+        # counted, so a value above zero means the conversation has started.
+        self.persisted_turns_started = 0
 
     async def receive_request(self) -> Optional[Dict[str, Any]]:
         """
@@ -66,6 +71,9 @@ class QueueRequestHandler(RequestHandler):
                 return None
 
             self._current_request = request
+            persist = request.context.get("persist", True)
+            if persist:
+                self.persisted_turns_started += 1
             logger.info(
                 "Received request %s from queue",
                 request.request_id,
@@ -89,6 +97,7 @@ class QueueRequestHandler(RequestHandler):
                 "priority": request.priority.value,
                 "created_at": request.created_at.isoformat(),
                 "transaction_id": request.context.get("transaction_id"),
+                "persist": persist,
             }
         except Exception as e:
             logger.error(f"Error receiving request from queue: {e}")
@@ -237,10 +246,23 @@ class QueueRequestHandler(RequestHandler):
 
                         # Process the message in thread pool to avoid blocking event loop
                         request = ProcessMessageRequest(message_data["message"], conv_context)
-                        if hasattr(agent, "process_message_async"):
-                            result = await agent.process_message_async(request)
-                        else:
-                            result = await asyncio.to_thread(agent.process_message, request)
+                        # Set on this task: process_message_async runs on it, and asyncio.to_thread
+                        # copies its context. A sync agent that hands the turn to a thread of its
+                        # own (BaseOrchestrator does) loses the value there.
+                        persist = message_data.get("persist", True)
+                        if not persist and isinstance(agent, BaseOrchestrator):
+                            logger.warning(
+                                "persist=False has no effect with a sync BaseOrchestrator: "
+                                "its conversation hooks store the turn"
+                            )
+                        persist_token = conversation_persist.set(persist)
+                        try:
+                            if hasattr(agent, "process_message_async"):
+                                result = await agent.process_message_async(request)
+                            else:
+                                result = await asyncio.to_thread(agent.process_message, request)
+                        finally:
+                            conversation_persist.reset(persist_token)
 
                         logger.info("Agent result: %s", describe_agent_result(result))
 

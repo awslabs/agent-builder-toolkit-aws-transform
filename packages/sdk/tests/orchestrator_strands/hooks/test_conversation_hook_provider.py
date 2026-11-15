@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the ConversationHookProvider class."""
 
+from typing import Iterator
 from unittest.mock import Mock, patch
 
 import pytest
@@ -13,6 +14,7 @@ from strands.types.content import ContentBlock, Message
 
 from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     ConversationRepository,
+    conversation_persist,
 )
 from agent_builder_sdk.orchestrator_strands.hooks.conversation_hook_provider import (
     ConversationHookProvider,
@@ -207,3 +209,34 @@ def test_force_stopped_turn_is_stored_with_its_answer(tmp_path):
     assert [m["role"] for m in second_input] == ["user", "assistant", "user", "assistant", "user"]
     assert second_input[3]["content"] == [{"text": "FORCED ANSWER"}]
     assert INTERRUPTED_TURN_TEXT not in str(second_input)
+
+
+@pytest.fixture
+def persist_off() -> Iterator[None]:
+    """Run the test as a turn whose messages are not stored."""
+    token = conversation_persist.set(False)
+    yield
+    conversation_persist.reset(token)
+
+
+def test_message_added_hook_stores_nothing_when_persist_is_off(
+    hook_provider: ConversationHookProvider, mock_agent: Mock, persist_off: None
+) -> None:
+    message = Message(role="user", content=[ContentBlock(text="Test message")])
+
+    hook_provider._on_message_added(MessageAddedEvent(message=message, agent=mock_agent))
+
+    hook_provider.repository.add_message_for_agent.assert_not_called()
+
+
+def test_after_invocation_hook_stores_no_forced_reply_when_persist_is_off(
+    hook_provider: ConversationHookProvider, mock_agent: Mock, persist_off: None
+) -> None:
+    mock_agent.messages = [Message(role="user", content=[ContentBlock(text="Test message")])]
+    result = Mock(state={"force_stop_response": "forced answer"})
+
+    hook_provider._after_invocation(AfterInvocationEvent(agent=mock_agent, result=result))
+
+    hook_provider.repository.add_message_for_agent.assert_not_called()
+    hook_provider.repository.save.assert_not_called()
+    assert len(mock_agent.messages) == 1
