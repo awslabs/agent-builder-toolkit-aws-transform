@@ -1,7 +1,9 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
+import asyncio
 import io
 import os
+import threading
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock
@@ -16,7 +18,7 @@ from agent_builder_sdk.util.converse_image import MAX_EDGE
 
 
 def _read(**tool_input: Any) -> Any:
-    return image_reader({"toolUseId": "t1", "name": "image_reader", "input": tool_input})
+    return asyncio.run(image_reader({"toolUseId": "t1", "name": "image_reader", "input": tool_input}))
 
 
 def _error_text(result: Any) -> str:
@@ -72,9 +74,9 @@ def test_a_missing_file_is_an_error(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     "content,reason",
     [
-        ("secret-content", "not a PNG/JPEG/GIF/WEBP/BMP/PPM image"),
-        ("P2 2 2 255 private-text-of-the-file", "damaged or unsupported image data (ValueError)"),
-        ("P2 private-text-of-the-file", "damaged or unsupported image data (ValueError)"),
+        ("secret-content", "not a PNG/JPEG/GIF/WEBP/BMP image"),
+        ("P2 2 2 255 private-text-of-the-file", "not a PNG/JPEG/GIF/WEBP/BMP image"),
+        ("\x89PNG\r\n\x1a\nprivate-text-of-the-file", "not a PNG/JPEG/GIF/WEBP/BMP image"),
     ],
 )
 def test_a_file_that_is_not_an_image_is_an_error_without_its_content(
@@ -120,3 +122,21 @@ def test_a_file_the_process_may_not_read_is_an_error(
     path = _save(tmp_path / "a.png")
     monkeypatch.setattr("builtins.open", Mock(side_effect=PermissionError(13, "denied")))
     assert _error_text(_read(image_path=str(path))).startswith("Error reading file: [Errno 13]")
+
+
+def test_a_conversion_over_the_timeout_is_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    release = threading.Event()
+
+    def stuck_convert(raw: bytes) -> tuple[bytes, str]:
+        release.wait(timeout=10)
+        return raw, "png"
+
+    monkeypatch.setattr(converse_image, "_convert", stuck_convert)
+    monkeypatch.setattr(converse_image, "CONVERSION_TIMEOUT_SECONDS", 0.2)
+    try:
+        result = _read(image_path=str(_save(tmp_path / "a.png")))
+    finally:
+        release.set()
+    assert _error_text(result) == "Error reading file: not converted within 0.2 s"

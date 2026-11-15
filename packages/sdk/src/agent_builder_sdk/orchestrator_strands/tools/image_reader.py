@@ -5,19 +5,22 @@
 Derived from ``strands_tools/image_reader.py`` of strands-agents-tools 0.8 (Apache-2.0), which
 0.9 removed. The tool name and input schema are the same. Modified: only a regular file of at
 most MAX_IMAGE_FILE_BYTES is read, and the image is returned within 3.75 MB and 1568 px per
-side (downscaled and re-encoded when needed) instead of as the raw file bytes.
+side (downscaled and re-encoded when needed) instead of as the raw file bytes. The function is
+a coroutine: Strands awaits it on the event loop, so a call waiting for a conversion holds no
+thread.
 
 Strands registers a module-style tool under its module name, so this file must stay
 ``image_reader.py``.
 """
 
+import asyncio
 import os
 import stat
 from typing import Any
 
 from strands.types.tools import ToolResult, ToolUse
 
-from agent_builder_sdk.util.converse_image import MAX_INPUT_BYTES, submit_conversion
+from agent_builder_sdk.util.converse_image import MAX_INPUT_BYTES, convert_image
 
 # Read into memory before the image header can be checked, so the size is capped first.
 MAX_IMAGE_FILE_BYTES = MAX_INPUT_BYTES
@@ -43,15 +46,15 @@ TOOL_SPEC = {
 }
 
 
-def image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult:
+async def image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult:
     """Return the image at ``tool["input"]["image_path"]`` as one Converse image block.
 
     The path may be any file the agent process can read: ``~`` is expanded, a relative path
     is resolved against the working directory, and symbolic links are followed. The file must
-    be a regular file of at most MAX_IMAGE_FILE_BYTES that holds a PNG, JPEG, GIF, WebP, BMP
-    or PPM image. An image over 3.75 MB (the Converse limit) or 1568 px per side is
-    downscaled and re-encoded; one that needs more than 20 million pixels decoded, or a JPEG
-    with more than one Exif segment, is an error.
+    be a regular file of at most MAX_IMAGE_FILE_BYTES that holds a PNG, JPEG, GIF, WebP or BMP
+    image. An image over 3.75 MB (the Converse limit) or 1568 px per side is downscaled and
+    re-encoded; one that needs more than 20 million pixels decoded (40 million for a JPEG), or
+    whose conversion takes more than 30 s, is an error.
     File content is returned only as an image; every failure is an ``error`` result with a
     message for the model that quotes no file content, never an exception.
     """
@@ -61,7 +64,7 @@ def image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult:
         return _error(tool, "File path is required")
     file_path = os.path.expanduser(image_path)
     try:
-        data, image_format = submit_conversion(_read(file_path)).result()
+        data, image_format = await convert_image(await asyncio.to_thread(_read, file_path))
     except FileNotFoundError:
         return _error(tool, f"File not found at path: {file_path}")
     except (OSError, ValueError) as error:

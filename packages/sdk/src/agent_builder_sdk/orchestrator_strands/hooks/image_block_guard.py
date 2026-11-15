@@ -7,7 +7,7 @@ from typing import Any
 from strands.hooks import AfterToolCallEvent, HookProvider, HookRegistry
 from strands.types.tools import ToolResultContent
 
-from agent_builder_sdk.util.converse_image import ImageConversionError, submit_conversion
+from agent_builder_sdk.util.converse_image import ImageConversionError, convert_image
 
 logger = logging.getLogger(__name__)
 
@@ -22,20 +22,18 @@ class ImageBlockGuardHook(HookProvider):
     guidance, a Claude model resizes an image before it reads it. The edge is fixed, so a model
     that reads larger images still gets them downscaled. After each tool call this hook:
 
-    - leaves a valid png, jpeg, gif or webp block of at most 3.75 MB and 1568 px per side as
-      is, unless it is an animation of more than 1,000 frames or 50 million pixels over all
-      its frames;
+    - leaves as is a png, jpeg, gif or webp block of at most 3.75 MB and 1568 px per side
+      whose first frame decodes (later frames of an animation are not checked);
     - corrects a wrong declared format;
     - downscales and re-encodes any other image (first frame only; png when it has
       transparency, jpeg at quality 85 otherwise);
-    - replaces an image that cannot be read or made to fit, that needs more than 20 million
-      pixels decoded, that is over 20 MiB, or that is a JPEG with more than one Exif segment,
-      with a text block that names the reason, so the model knows an image was there. The
-      text never quotes the image bytes.
+    - replaces an image that cannot be read or made to fit, that is over 20 MiB, that needs
+      more than 20 million pixels decoded (40 million for a JPEG), or whose conversion takes
+      more than 30 s, with a text block that names the reason, so the model knows an image was
+      there. The text never quotes the image bytes.
 
-    A conversion can take about 350 MB of memory for a 20-million-pixel image, and two run at
-    a time. Only blocks with a ``bytes`` source are checked. Other blocks keep their place and
-    content.
+    A conversion can take about 370 MB of memory, and two run at a time. Only blocks with a
+    ``bytes`` source are checked. Other blocks keep their place and content.
     """
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
@@ -61,7 +59,7 @@ class ImageBlockGuardHook(HookProvider):
         raw = bytes(source)
         declared = str(image.get("format", ""))
         try:
-            data, fmt = await asyncio.wrap_future(submit_conversion(raw))
+            data, fmt = await convert_image(raw)
         except ImageConversionError as error:
             logger.warning("Dropping an image block from '%s': %s", tool_name, error)
             return {
