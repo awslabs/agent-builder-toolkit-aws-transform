@@ -469,7 +469,8 @@ class TestCreateCheckpointRepository:
 
         (stranded,) = dest.glob(".checkpoint-restore-*/backup/*")
         assert stranded.name == moved_aside[0]
-        assert stranded.read_text() == live.pop(stranded.name)
+        stranded_content = live.pop(stranded.name)
+        assert stranded.read_text() == stranded_content
         in_place = {p.name: p.read_text() for p in dest.iterdir() if p.is_file()}
         assert in_place == live
         mock_logger.warning.assert_not_called()
