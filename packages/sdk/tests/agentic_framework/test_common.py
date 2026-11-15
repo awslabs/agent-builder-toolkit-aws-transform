@@ -27,7 +27,9 @@ def session():
 
 @pytest.fixture
 def response():
-    return mock.create_autospec(requests.Response, instance=True)
+    response = mock.create_autospec(requests.Response, instance=True)
+    response.raw = mock.Mock(length_remaining=0)  # the whole body arrived
+    return response
 
 
 @pytest.fixture
@@ -211,7 +213,7 @@ def test_download_from_presigned_url_mounts_retry_policy(
     session, response, download_response, tmp_path
 ):
     """The download path shares the upload path's retry policy."""
-    response.content = b"downloaded content"
+    response.iter_content.return_value = [b"downloaded ", b"content"]
     response.status_code = 200
     session.get.return_value = response
 
@@ -235,7 +237,7 @@ def test_handle_boto_error():
 
 def test_download_from_presigned_url_success(session, response, download_response, tmp_path):
     """Test successful download using presigned URL."""
-    response.content = b"downloaded content"
+    response.iter_content.return_value = [b"downloaded ", b"content"]
     response.status_code = 200
     session.get.return_value = response
 
@@ -248,8 +250,11 @@ def test_download_from_presigned_url_success(session, response, download_respons
         "https://test-download-url.com",
         headers=expected_headers,
         timeout=common._PRESIGNED_DOWNLOAD_TIMEOUT,
+        stream=True,
     )
     assert destination_path.read_bytes() == b"downloaded content"
+    assert list(tmp_path.iterdir()) == [tmp_path / "file.zip"]
+    response.close.assert_called_once()
 
 
 def test_download_from_presigned_url_connection_error(session, download_response, tmp_path):
@@ -261,24 +266,23 @@ def test_download_from_presigned_url_connection_error(session, download_response
         common.download_from_presigned_url(download_response, str(destination_path))
 
 
-@mock.patch("agent_builder_sdk.agentic_framework.common.Path")
-def test_download_from_presigned_url_file_error(mock_path, response, session, download_response):
-    """Test download file write error handling."""
-    mock_path.return_value.write_bytes.side_effect = IOError("File write error")
-
-    response.content = b"downloaded content"
+def test_download_from_presigned_url_file_error(response, session, download_response, tmp_path):
+    """A destination that cannot be written raises, and leaves no temp file beside it."""
+    response.iter_content.return_value = [b"downloaded content"]
     response.status_code = 200
     session.get.return_value = response
-
-    destination_path = "/test/path/file.zip"
+    (tmp_path / "file.zip").mkdir()
 
     with pytest.raises(IOError):
-        common.download_from_presigned_url(download_response, destination_path)
+        common.download_from_presigned_url(download_response, str(tmp_path / "file.zip"))
+
+    assert list(tmp_path.iterdir()) == [tmp_path / "file.zip"]
+    response.close.assert_called_once()
 
 
 def test_download_from_presigned_url_capital_p_key(session, response, tmp_path):
     """Test download with s3PreSignedUrl (capital P) key for skill downloads."""
-    response.content = b"skill content"
+    response.iter_content.return_value = [b"skill content"]
     response.status_code = 200
     session.get.return_value = response
 
@@ -294,6 +298,7 @@ def test_download_from_presigned_url_capital_p_key(session, response, tmp_path):
         "https://skill-download-url.com",
         headers={"host": "s3.amazonaws.com"},
         timeout=common._PRESIGNED_DOWNLOAD_TIMEOUT,
+        stream=True,
     )
     assert destination_path.read_bytes() == b"skill content"
 
