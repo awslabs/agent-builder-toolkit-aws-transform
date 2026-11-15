@@ -658,6 +658,13 @@ class TestUntrustedResults:
         out.encode("utf-8")
         assert "emoji cut  here, low  alone, pair \U0001f600 kept" in out
 
+    def test_an_unpaired_surrogate_in_the_query_is_replaced(self, env: None, creds: None) -> None:
+        with _serve(TOOLS, _search_reply([])) as opener:
+            out = _run(_new_tool(), query="q\ud83d")
+        out.encode("utf-8")
+        assert out == "No web results for: q?"
+        assert json.loads(_sent(opener, 1).data)["params"]["arguments"]["query"] == "q?"
+
     def test_every_field_is_cut_to_its_limit(self) -> None:
         hit = {
             "title": "t" * 10_000,

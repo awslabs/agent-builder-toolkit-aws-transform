@@ -605,7 +605,9 @@ def create_web_search_tool() -> Optional[AgentTool]:
         return None
 
     def web_search(query: str, max_results: int = DEFAULT_MAX_RESULTS) -> str:
-        query = (query or "").strip()
+        # The model's input can hold unpaired surrogates; UTF-8 cannot encode those, and the
+        # query is sent and echoed back, so each becomes "?".
+        query = (query or "").strip().encode("utf-8", "replace").decode("utf-8")
         if not query:
             return "Error: query is empty."
         if len(query) > QUERY_MAX_CHARS:
