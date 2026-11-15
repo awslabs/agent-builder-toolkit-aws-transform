@@ -183,8 +183,9 @@ class ArtifactStore(AgenticApiHelper):
     ) -> None:
         """Download artifact by ID and put to the destination file path.
 
-        See download_from_presigned_url for how the file is written. ``visibility`` is sent
-        with the request only when given.
+        See download_from_presigned_url for how the file is written. A body over 5 GiB fails
+        the download, for every artifact, also one in a customer bucket. ``visibility`` is
+        sent with the request only when given.
         """
         try:
             request = abt.CreateArtifactDownloadUrlRequestRequestTypeDef(

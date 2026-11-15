@@ -32,8 +32,8 @@ logger = logging.getLogger(__name__)
 _STREAM_BLOCK_BYTES = 1 << 20
 
 # S3 takes at most 5 GiB in a single PUT, which is how an artifact is uploaded through its
-# presigned URL, so a longer download body is not an artifact. The bound keeps a faulty
-# endpoint from filling the disk.
+# presigned URL. The bound applies to every download, also an artifact in a customer bucket
+# that was written some other way, and keeps a faulty endpoint from filling the disk.
 _MAX_DOWNLOAD_BYTES = 5 << 30
 
 # S3 signals a throttle with 503 SlowDown, which urllib3's default Retry does NOT retry
@@ -153,8 +153,9 @@ def download_from_presigned_url(
 
     The file is written in full or not at all: the body goes to a temp file in the same
     directory, which then replaces the destination. A new file gets the mode the umask
-    allows; an existing file keeps its mode. A destination that is a symlink is refused, and a
-    body over 5 GiB fails the download.
+    allows; an existing file keeps its mode. A destination that is a symlink is refused. A
+    body over 5 GiB fails the download: before any of it is read when its Content-Length says
+    so, else once the 5 GiB is passed.
     """
     if os.path.islink(destination_file_path):
         raise ValueError(f"Download destination {destination_file_path} is a symlink")
@@ -185,6 +186,12 @@ def download_from_presigned_url(
                 if response.status_code >= 400:
                     raise_for_s3_error_response(
                         response.status_code, response.text, is_managed_bucket
+                    )
+                declared = response.raw.length_remaining
+                if declared is not None and declared > _MAX_DOWNLOAD_BYTES:
+                    raise InternalBaseAgentError(
+                        f"Artifact download failed: body of {declared} bytes exceeds "
+                        f"{_MAX_DOWNLOAD_BYTES} bytes"
                     )
                 _write_file_atomically(_body_blocks(response), destination_file_path)
             finally:
