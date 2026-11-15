@@ -141,7 +141,7 @@ class TransientRetryStrategy(ModelRetryStrategy):
 
     def _on_before_model_call(self, event: BeforeModelCallEvent) -> None:
         self._attempt_started = time.monotonic()
-        stream_state: Optional["StreamState"] = event.invocation_state.get("stream_state")
+        stream_state: Optional[StreamState] = event.invocation_state.get("stream_state")
         if stream_state is not None:
             stream_state.content_streamed = False
 
@@ -175,7 +175,7 @@ class TransientRetryStrategy(ModelRetryStrategy):
         # Strands yields this throttle event after every failed call; only the inherited handler,
         # which this path skips, clears it.
         self._backwards_compatible_event_to_yield = None
-        stream_state: Optional["StreamState"] = event.invocation_state.get("stream_state")
+        stream_state: Optional[StreamState] = event.invocation_state.get("stream_state")
         if stream_state is not None and stream_state.content_streamed:
             logger.warning(
                 "Model call failed (%s: %s) after its output reached the client; not retried",
@@ -218,7 +218,7 @@ class TransientRetryStrategy(ModelRetryStrategy):
         if source is not MessageSourceType.USER:
             logger.info("Turn from a %s source ended; no resume note", source)
             return
-        stream_state: Optional["StreamState"] = event.invocation_state.get("stream_state")
+        stream_state: Optional[StreamState] = event.invocation_state.get("stream_state")
         note = stream_state.error_note if stream_state is not None else turn_error_note.get()
         if note is None:
             logger.warning("No reply is delivered for this turn; no resume note")
