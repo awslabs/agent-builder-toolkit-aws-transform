@@ -495,24 +495,32 @@ class StreamingResponsePersistHook(HookProvider):
 _ERROR_PERSIST_TIMEOUT_SECONDS = 5.0
 
 
-async def persist_stream_error(context_id: str, text: str, message_id: str) -> None:
+async def persist_stream_error(
+    context_id: str, text: str, message_id: str, suggestions: Optional[List[str]] = None
+) -> None:
     """Persist a terminal error message for a streaming turn, so a reload shows the same error the
     client saw live (rather than a blank turn). The per-model-call persist hook does not fire on a
     turn that errored before/without a model message, so the streaming turn body calls this from its
     terminal-error paths (model/MCP error, timeout, concurrency reject). Best-effort: a persist
     failure OR a slow send must never mask the original error or hold the already-open SSE stream, so
     it is bounded by a short timeout and any failure is logged and swallowed. ``message_id`` is the id
-    the terminal RUN_ERROR streamed under, so the live error and this persisted copy reconcile."""
+    the terminal RUN_ERROR streamed under, so the live error and this persisted copy reconcile.
+    ``suggestions`` ride as the chat_suggestions extension."""
     try:
         sender = get_agent_context_from_env().agent_instance_id
+        metadata: Dict[str, Any] = {A2A_SOURCE_INFORMATION_EXT: {"senderAgentInstanceId": sender}}
+        extensions = [A2A_SOURCE_INFORMATION_EXT]
+        if suggestions:
+            metadata[A2A_CHAT_SUGGESTIONS_EXT] = suggestions
+            extensions.append(A2A_CHAT_SUGGESTIONS_EXT)
         message = A2AMessage(
             role="agent",
             parts=[{"kind": "text", "text": text}],
             messageId=message_id,
             kind="message",
             contextId=context_id,
-            metadata={A2A_SOURCE_INFORMATION_EXT: {"senderAgentInstanceId": sender}},
-            extensions=[A2A_SOURCE_INFORMATION_EXT],
+            metadata=metadata,
+            extensions=extensions,
         )
         manager = get_a2a_manager()
         await asyncio.wait_for(

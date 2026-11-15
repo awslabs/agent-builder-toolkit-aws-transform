@@ -4,7 +4,8 @@
 
 from abc import ABC, abstractmethod
 from contextvars import ContextVar
-from typing import List
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 from strands.agent import Agent
 from strands.types.content import Message
@@ -13,6 +14,35 @@ from agent_builder_sdk.orchestrator_strands.conversation.constants import Messag
 
 conversation_source_id: ContextVar[str] = ContextVar("conversation_source_id")
 conversation_source_type: ContextVar[MessageSourceType] = ContextVar("conversation_source_type")
+# time.monotonic() value at which the reply window of the queued user turn being run ends. Set by
+# the queue worker; None when nobody waits for the turn's reply.
+turn_deadline: ContextVar[Optional[float]] = ContextVar("turn_deadline", default=None)
+
+
+@dataclass
+class TurnErrorNote:
+    """A message for the user that replaces the error a user turn ends with.
+
+    The code that delivers the turn's reply creates an empty note; a hook that gives up on the
+    turn fills it in. The note is mutable because hooks can run in a copy of the caller's context,
+    where setting a context variable would not reach the caller.
+    """
+
+    text: Optional[str] = None
+    suggestions: List[str] = field(default_factory=list)
+    exception: Optional[BaseException] = None
+
+    def explains(self, raised: BaseException) -> bool:
+        """Whether the note was left for ``raised``, as raised or as the cause of the exception
+        Strands wraps a model error in after the first event-loop cycle."""
+        if self.exception is None:
+            return False
+        return raised is self.exception or raised.__cause__ is self.exception
+
+
+# The note of the queued user turn being run. Set by the queue worker; None when no reply is
+# delivered for the turn.
+turn_error_note: ContextVar[Optional[TurnErrorNote]] = ContextVar("turn_error_note", default=None)
 
 
 class ConversationRepository(ABC):

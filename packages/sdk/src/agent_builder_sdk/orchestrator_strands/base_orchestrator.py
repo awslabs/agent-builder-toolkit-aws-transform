@@ -11,6 +11,7 @@ __all__ = ("BaseOrchestrator", "AsyncBaseOrchestrator", "a2a_context_id_var", "a
 
 import asyncio
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, ExitStack
 from contextvars import ContextVar, copy_context
@@ -669,6 +670,7 @@ class AsyncBaseOrchestrator(
                 # turn_cm.expired() and re-raise anything else so it falls through to the generic
                 # handler with its real error class logged, not mislabeled as a turn timeout.
                 try:
+                    state.turn_deadline = time.monotonic() + cfg.turn_timeout_seconds
                     async with asyncio.timeout(cfg.turn_timeout_seconds) as turn_cm:
                         async for frame in self._stream_frames(message, state, cfg, **kwargs):
                             turn_finished = turn_finished or is_final(frame)
@@ -738,18 +740,25 @@ class AsyncBaseOrchestrator(
                     _background_tasks.add(task)
                     task.add_done_callback(_background_tasks.discard)
             raise
-        except Exception:
+        except Exception as exc:
             # Any other failure (model/MCP/adapter error) surfaces as a terminal error
             # frame so the client sees a clean end instead of a truncated SSE stream.
             # The connection has already returned 200 + headers, so the ingress can no
             # longer turn this into an HTTP error.
-            # Client gets a generic message; the exception detail (which can carry
-            # ARNs, account ids, endpoints, or file paths from Bedrock/MCP errors)
-            # stays in the server log only. Persist the same generic message so a reload matches
-            # the live error (parity with the buffered path); best-effort, keyed on run_id.
+            # Client gets a generic message, or the note a hook left for this exception; the
+            # exception detail (which can carry ARNs, account ids, endpoints, or file paths from
+            # Bedrock/MCP errors) stays in the server log only. Persist the same message so a reload
+            # matches the live error (parity with the buffered path); best-effort, keyed on run_id.
             logger.exception("Streaming turn failed for conversation %s", conversation_id)
-            error_msg = "An internal error occurred while processing the streaming turn."
-            await _persist_stream_error(context_id, error_msg, state.run_id)
+            note = state.error_note
+            if note.text is not None and note.explains(exc):
+                error_msg = note.text
+                await _persist_stream_error(
+                    context_id, error_msg, state.run_id, suggestions=note.suggestions
+                )
+            else:
+                error_msg = "An internal error occurred while processing the streaming turn."
+                await _persist_stream_error(context_id, error_msg, state.run_id)
             for frame in to_a2a_error_frames(error_msg, state):
                 yield frame
 

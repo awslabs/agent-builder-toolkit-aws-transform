@@ -454,6 +454,225 @@ async def test_stream_message_async_error_persists_error_message(mock_model):
     assert failed and failed[-1]["taskId"] == args[2]
 
 
+def _failed_frames(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [f for f in frames if f.get("status", {}).get("state") == "failed"]
+
+
+def _run_error(frame: dict[str, Any]) -> dict[str, Any]:
+    (part,) = frame["status"]["message"]["parts"]
+    (agui_event,) = part["data"].values()
+    result: dict[str, Any] = agui_event
+    return result
+
+
+async def _stream_turn(orchestrator: AsyncBaseOrchestrator, **kwargs: Any) -> list[dict[str, Any]]:
+    return [
+        frame
+        async for frame in orchestrator._stream_message_async(
+            "hello",
+            "user-1",
+            MessageSourceType.USER,
+            conversation_id="conv-1",
+            a2a_context=A2AContext(context_id="ctx-9", task_id=None),
+            **kwargs,
+        )
+    ]
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+async def test_stream_message_async_error_note_replaces_the_generic_error(
+    mock_model: Mock, wrapped: bool
+) -> None:
+    """A note a hook left for the exception that ends the turn is the terminal RUN_ERROR text and
+    is persisted with its chips under run_id, also when Strands wraps the exception."""
+    from strands.types.exceptions import EventLoopException
+
+    orchestrator = AsyncBaseOrchestrator(system_prompt="Test prompt")
+
+    async def boom(*args: Any, **kwargs: Any) -> Any:
+        failure = RuntimeError("kaboom")
+        note = kwargs["invocation_state"]["stream_state"].error_note
+        note.text, note.suggestions, note.exception = "Reply Continue.", ["Continue"], failure
+        if wrapped:
+            raise EventLoopException(failure) from failure
+        raise failure
+        yield  # pragma: no cover - async generator
+
+    with patch.object(orchestrator, "stream_async", side_effect=boom), patch(
+        "agent_builder_sdk.streaming.response_persist_hook.persist_stream_error"
+    ) as mock_persist:
+        frames = await _stream_turn(orchestrator)
+
+    failed = _failed_frames(frames)
+    assert _run_error(failed[-1]) == {"type": "RUN_ERROR", "message": "Reply Continue."}
+    mock_persist.assert_awaited_once_with(
+        "ctx-9", "Reply Continue.", failed[-1]["taskId"], suggestions=["Continue"]
+    )
+
+
+async def test_stream_message_async_note_for_another_exception_keeps_the_generic_error(
+    mock_model: Mock,
+) -> None:
+    orchestrator = AsyncBaseOrchestrator(system_prompt="Test prompt")
+
+    async def boom(*args: Any, **kwargs: Any) -> Any:
+        note = kwargs["invocation_state"]["stream_state"].error_note
+        note.text, note.exception = "Reply Continue.", RuntimeError("inner")
+        raise RuntimeError("outer")
+        yield  # pragma: no cover - async generator
+
+    with patch.object(orchestrator, "stream_async", side_effect=boom), patch(
+        "agent_builder_sdk.streaming.response_persist_hook.persist_stream_error"
+    ) as mock_persist:
+        frames = await _stream_turn(orchestrator)
+
+    generic = "An internal error occurred while processing the streaming turn."
+    assert _run_error(_failed_frames(frames)[-1])["message"] == generic
+    assert mock_persist.await_args.args[1] == generic
+
+
+def _streaming_retry_orchestrator(scripts: list[list[Any]]) -> AsyncBaseOrchestrator:
+    """An orchestrator with the retry strategy and the streaming persist hook, whose model streams
+    one script per call (an exception entry raises after the events before it)."""
+    from collections.abc import AsyncGenerator
+
+    from strands.models import Model
+
+    from agent_builder_sdk.orchestrator_strands.hooks.transient_retry_strategy import (
+        TransientRetryStrategy,
+    )
+    from agent_builder_sdk.streaming.config import DEFAULT_STREAMING_CONFIG
+    from agent_builder_sdk.streaming.response_persist_hook import StreamingResponsePersistHook
+
+    orchestrator = AsyncBaseOrchestrator(
+        system_prompt="Test prompt",
+        retry_strategy=TransientRetryStrategy(transient_attempts=2, transient_delays=(0,)),
+    )
+    orchestrator.callback_handler = lambda *args, **kwargs: None
+    orchestrator.model = create_autospec(Model, spec_set=True, instance=True)
+    orchestrator.hooks.add_hook(StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG))
+    responses = iter(scripts)
+
+    async def stream(events: list[Any]) -> AsyncGenerator[dict[str, Any], None]:
+        for event in events:
+            if isinstance(event, BaseException):
+                raise event
+            yield event
+
+    orchestrator.model.stream.side_effect = lambda *args, **kwargs: stream(next(responses))
+    return orchestrator
+
+
+def _text_events(text: str, stop: bool = True) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = [
+        {"messageStart": {"role": "assistant"}},
+        {"contentBlockStart": {"start": {}}},
+        {"contentBlockDelta": {"delta": {"text": text}}},
+    ]
+    if stop:
+        events += [{"contentBlockStop": {}}, {"messageStop": {"stopReason": "end_turn"}}]
+    return events
+
+
+def _text_deltas(frames: list[dict[str, Any]]) -> list[str]:
+    return [
+        event["delta"]
+        for frame in frames
+        for part in (frame.get("status", {}).get("message", {}).get("parts") or [])
+        for event in [next(iter(part.get("data", {}).values()), {})]
+        if event.get("type") == "TEXT_MESSAGE_CONTENT"
+    ]
+
+
+async def _run_streamed_retry_turn(
+    orchestrator: AsyncBaseOrchestrator,
+) -> tuple[list[dict[str, Any]], list[Any]]:
+    """Run a streamed turn with Chat stubbed; returns its frames and the messages sent to Chat."""
+    from types import SimpleNamespace
+
+    manager = Mock()
+    hook_module = "agent_builder_sdk.streaming.response_persist_hook"
+    with patch(f"{hook_module}.get_a2a_manager", return_value=manager), patch(
+        f"{hook_module}.get_agent_context_from_env",
+        return_value=SimpleNamespace(agent_instance_id="agent-1"),
+    ):
+        frames = await _stream_turn(orchestrator)
+    return frames, [call.kwargs["message"] for call in manager.send_message.call_args_list]
+
+
+async def test_stream_message_async_failure_after_output_ends_the_turn_with_the_note(
+    mock_model: Mock,
+) -> None:
+    """A transient failure after part of the answer reached the client is not retried: the client
+    keeps the partial text and gets the resume note as the terminal error, and Chat stores only the
+    note, with its Continue chip, under the run id."""
+    from urllib3.exceptions import ProtocolError
+
+    from agent_builder_sdk.orchestrator_strands.hooks.transient_retry_strategy import (
+        RESUME_NOTE,
+        RESUME_SUGGESTION,
+    )
+    from agent_builder_sdk.utils import A2A_CHAT_SUGGESTIONS_EXT
+
+    orchestrator = _streaming_retry_orchestrator(
+        [
+            _text_events("PARTIAL-", stop=False) + [ProtocolError("Connection broken")],
+            _text_events("FULL ANSWER"),
+        ]
+    )
+
+    frames, stored = await _run_streamed_retry_turn(orchestrator)
+
+    assert orchestrator.model.stream.call_count == 1
+    assert _text_deltas(frames) == ["PARTIAL-"]
+    failed = _failed_frames(frames)
+    assert _run_error(failed[-1]) == {"type": "RUN_ERROR", "message": RESUME_NOTE}
+    assert [(m.messageId, m.parts[0]["text"]) for m in stored] == [
+        (failed[-1]["taskId"], RESUME_NOTE)
+    ]
+    assert stored[0].metadata[A2A_CHAT_SUGGESTIONS_EXT] == [RESUME_SUGGESTION]
+
+
+async def test_stream_message_async_failure_before_output_is_retried(mock_model: Mock) -> None:
+    """A transient failure before any output reached the client is retried, and the live stream
+    and the stored message both hold the retry's answer only."""
+    from urllib3.exceptions import ReadTimeoutError as StreamReadTimeoutError
+
+    orchestrator = _streaming_retry_orchestrator(
+        [
+            [StreamReadTimeoutError(None, "/converse-stream", "Read timed out.")],
+            _text_events("FULL ANSWER"),
+        ]
+    )
+
+    frames, stored = await _run_streamed_retry_turn(orchestrator)
+
+    assert orchestrator.model.stream.call_count == 2
+    assert _text_deltas(frames) == ["FULL ANSWER"]
+    assert not _failed_frames(frames)
+    assert [m.parts[0]["text"] for m in stored] == ["FULL ANSWER"]
+
+
+async def test_stream_message_async_sets_the_turn_deadline_for_hooks(mock_model: Mock) -> None:
+    import time
+
+    from agent_builder_sdk.streaming.config import StreamingConfig
+
+    orchestrator = AsyncBaseOrchestrator(system_prompt="Test prompt")
+    seen: dict[str, Any] = {}
+
+    async def capture(*args: Any, **kwargs: Any) -> Any:
+        seen["state"] = kwargs["invocation_state"]["stream_state"]
+        seen["at"] = time.monotonic()
+        return
+        yield  # pragma: no cover - async generator
+
+    with patch.object(orchestrator, "stream_async", side_effect=capture):
+        await _stream_turn(orchestrator, cfg=StreamingConfig(turn_timeout_seconds=120))
+
+    assert 118 < seen["state"].turn_deadline - seen["at"] <= 120
+
+
 async def test_stream_message_async_turn_timeout_emits_clean_terminal(mock_model):
     """A turn that never terminates within turn_timeout_seconds is aborted with a clean terminal
     RUN_ERROR (not left hanging), and the timeout message is persisted for reload."""

@@ -271,7 +271,10 @@ class AgentRuntimeServer(BaseServer):
         # Initialize components
         self.queue = QueueService(storage_path=self.queue_storage_path)
         self.request_handler = QueueRequestHandler(
-            request_queue=self.queue.request_queue, response_store=self.queue.response_store
+            request_queue=self.queue.request_queue,
+            response_store=self.queue.response_store,
+            timeout=self.timeout,
+            delayed_timeout=self.delayed_timeout,
         )
         self.task_handler = TaskHandler(task_manager=self.task_manager)
         self.message_handler = MessageHandler(

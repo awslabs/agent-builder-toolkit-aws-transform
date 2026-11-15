@@ -747,6 +747,21 @@ async def test_persist_stream_error_sends_error_message():
     assert message.messageId == "run-123"
     assert message.parts == [{"kind": "text", "text": "The request took too long."}]
     assert A2A_SOURCE_INFORMATION_EXT in message.extensions
+    assert A2A_CHAT_SUGGESTIONS_EXT not in message.extensions
+
+
+async def test_persist_stream_error_carries_suggestions_as_chips() -> None:
+    mgr = RecordingManager()
+    with patch(f"{HOOK_MODULE}.get_a2a_manager", return_value=mgr), patch(
+        f"{HOOK_MODULE}.get_agent_context_from_env",
+        return_value=SimpleNamespace(agent_instance_id="job-agent-99"),
+    ):
+        await persist_stream_error("ctx-err", "Reply Continue.", "run-123", suggestions=["Continue"])
+
+    assert len(mgr.calls) == 1
+    _, message = mgr.calls[0]
+    assert message.metadata[A2A_CHAT_SUGGESTIONS_EXT] == ["Continue"]
+    assert message.extensions == [A2A_SOURCE_INFORMATION_EXT, A2A_CHAT_SUGGESTIONS_EXT]
 
 
 async def test_persist_stream_error_swallows_failure():
