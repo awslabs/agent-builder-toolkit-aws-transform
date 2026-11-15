@@ -63,7 +63,10 @@ from agent_builder_sdk.util.suggestions_manager import (
     clear_suggestions,
     get_and_consume_suggestions,
 )
-from agent_builder_sdk.utils import extract_text_from_strands_agent_response
+from agent_builder_sdk.utils import (
+    A2A_CHAT_SUGGESTIONS_EXT,
+    extract_text_from_strands_agent_response,
+)
 
 MODULE = "agent_builder_sdk.orchestrator_strands.hooks.transient_retry_strategy"
 
@@ -731,7 +734,9 @@ async def test_queued_turn_failing_after_a_tool_call_stores_the_note_as_its_repl
     assert response.status is RequestStatus.COMPLETED
     assert response.message == RESUME_NOTE
     assert response.error_message is None
-    assert get_and_consume_suggestions() == [RESUME_SUGGESTION]
+    assert response.metadata == {A2A_CHAT_SUGGESTIONS_EXT: [RESUME_SUGGESTION]}
+    assert response.extensions == [A2A_CHAT_SUGGESTIONS_EXT]
+    assert get_and_consume_suggestions() is None
 
 
 async def test_the_note_never_enters_the_stored_history_or_the_next_prompt(

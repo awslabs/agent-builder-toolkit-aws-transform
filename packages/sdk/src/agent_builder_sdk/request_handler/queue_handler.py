@@ -13,7 +13,7 @@ import logging
 import time
 from contextvars import Token
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from strands.agent import AgentResult
 from structlog.contextvars import bound_contextvars
@@ -35,8 +35,11 @@ from ..orchestrator_strands.conversation.repository import (
     turn_deadline,
     turn_error_note,
 )
-from ..util.suggestions_manager import add_suggestions
-from ..utils import describe_agent_result, extract_text_from_strands_agent_response
+from ..utils import (
+    A2A_CHAT_SUGGESTIONS_EXT,
+    describe_agent_result,
+    extract_text_from_strands_agent_response,
+)
 from .context import RequestContext
 from .interface import RequestHandler
 
@@ -123,13 +126,20 @@ class QueueRequestHandler(RequestHandler):
             logger.error(f"Error receiving request from queue: {e}")
             return None
 
-    async def store_response(self, message: str, recipient_id: Optional[str] = None) -> bool:
+    async def store_response(
+        self,
+        message: str,
+        recipient_id: Optional[str] = None,
+        suggestions: Optional[List[str]] = None,
+    ) -> bool:
         """
         Store response for the current request.
 
         Args:
             message: The response message content
             recipient_id: Not used in queue processor (responses are stored by request ID)
+            suggestions: Chat suggestion chips carried on this response only, so a reply that
+                nobody reads leaves no chip behind for the next one
 
         Returns:
             True if response was stored successfully, False otherwise
@@ -146,6 +156,8 @@ class QueueRequestHandler(RequestHandler):
                 task_id=self._current_request.context.get("task_id"),
                 message=message,
                 status=RequestStatus.COMPLETED,
+                metadata={A2A_CHAT_SUGGESTIONS_EXT: list(suggestions)} if suggestions else {},
+                extensions=[A2A_CHAT_SUGGESTIONS_EXT] if suggestions else [],
             )
 
             # Store response
@@ -322,9 +334,7 @@ class QueueRequestHandler(RequestHandler):
                         logger.error(f"Error processing request: {e}")
                         note = turn_error_note.get()
                         if note is not None and note.text is not None and note.explains(e):
-                            if note.suggestions:
-                                add_suggestions(list(note.suggestions))
-                            await self.store_response(note.text)
+                            await self.store_response(note.text, suggestions=note.suggestions)
                         else:
                             await self.handle_request_error(e)
                 finally:

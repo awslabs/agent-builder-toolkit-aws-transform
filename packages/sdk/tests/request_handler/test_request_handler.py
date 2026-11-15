@@ -13,6 +13,7 @@ import pytest
 from strands.agent import AgentResult
 from strands.types.exceptions import EventLoopException
 
+from agent_builder_sdk.custom_types.common_types import A2AMessage
 from agent_builder_sdk.interfaces import AsyncBaseAgent, BaseAgent
 from agent_builder_sdk.message_queue import (
     QueueRequest,
@@ -31,6 +32,10 @@ from agent_builder_sdk.request_handler.queue_handler import QueueRequestHandler
 from agent_builder_sdk.util.suggestions_manager import (
     clear_suggestions,
     get_and_consume_suggestions,
+)
+from agent_builder_sdk.utils import (
+    A2A_CHAT_SUGGESTIONS_EXT,
+    convert_queue_response_to_send_message_output,
 )
 
 
@@ -319,7 +324,8 @@ async def test_a_user_turn_that_ends_with_a_note_stores_the_note_as_its_reply(
 ) -> None:
     """A note left for the exception that ends the turn, raised as is or inside the
     EventLoopException Strands raises after a tool call, is stored with its chip as a completed
-    reply; the raw exception text reaches nobody."""
+    reply; the raw exception text reaches nobody. The chip rides on the stored reply, not on the
+    shared suggestion holder, so a reply nobody reads cannot put it on the next one."""
     clear_suggestions()
     handler = _user_handler()
     request = _chat_user_request()
@@ -339,7 +345,11 @@ async def test_a_user_turn_that_ends_with_a_note_stores_the_note_as_its_reply(
     assert response.status is RequestStatus.COMPLETED
     assert response.message == "Reply Continue."
     assert response.error_message is None
-    assert get_and_consume_suggestions() == ["Continue"]
+    assert get_and_consume_suggestions() is None
+    output = convert_queue_response_to_send_message_output(response, A2AMessage(role="user", parts=[], messageId="m", kind="message"))
+    assert output.result is not None
+    assert output.result.metadata[A2A_CHAT_SUGGESTIONS_EXT] == ["Continue"]
+    assert A2A_CHAT_SUGGESTIONS_EXT in output.result.extensions
     handler.request_queue.update_request_status.assert_awaited_once_with(
         request.request_id, RequestStatus.COMPLETED
     )
