@@ -288,6 +288,7 @@ async def test_sync_orchestrator_gets_a_warning_and_no_greeting(
     assert "requires an async orchestrator" in caplog.text
 
 
+@mock.patch(f"{SERVER}._GREETING_TIMEOUT_SECONDS", 2.0)
 async def test_no_greeting_when_a_turn_is_waiting_in_the_queue(
     tmp_path: Path, send: mock.AsyncMock
 ) -> None:
@@ -451,6 +452,7 @@ async def test_queue_whose_submit_request_takes_no_persist_runs_no_greeting_turn
     assert "unexpected keyword argument 'persist'" in caplog.text
 
 
+@mock.patch(f"{SERVER}._GREETING_TIMEOUT_SECONDS", 2.0)
 async def test_cleanup_cancels_a_greeting_that_is_still_running(
     tmp_path: Path, send: mock.AsyncMock
 ) -> None:
