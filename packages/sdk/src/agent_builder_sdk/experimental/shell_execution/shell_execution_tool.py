@@ -249,9 +249,10 @@ class _CappedReader(threading.Thread):
     open; it is a daemon and ends when that descendant does.
     """
 
-    def __init__(self, stream: IO[bytes], limit: int) -> None:
+    def __init__(self, fd: int, limit: int) -> None:
         super().__init__(daemon=True)
-        self._stream = stream
+        # The reader owns the descriptor from here on: run() closes it at end of input.
+        self._stream: IO[bytes] = os.fdopen(fd, "rb")
         self._limit = limit
         self.kept = bytearray()
         self.total_bytes = 0
@@ -601,14 +602,14 @@ def _start(
         stderr_read, stderr_write = os.pipe()
         parent_copies.callback(os.close, stderr_write)
         # One byte over each limit is kept so that _decode can tell that output was cut.
-        stderr_reader = _CappedReader(os.fdopen(stderr_read, "rb"), _MAX_STDERR_BYTES + 1)
+        stderr_reader = _CappedReader(stderr_read, _MAX_STDERR_BYTES + 1)
         stdin = devnull
         try:
             for stage, program in zip(stages, programs):
                 stdout_read, stdout_write = os.pipe()
                 parent_copies.callback(os.close, stdout_write)
                 if stage is stages[-1]:
-                    stdout_reader = _CappedReader(os.fdopen(stdout_read, "rb"), _MAX_STDOUT_BYTES + 1)
+                    stdout_reader = _CappedReader(stdout_read, _MAX_STDOUT_BYTES + 1)
                 else:
                     parent_copies.callback(os.close, stdout_read)
                 streams = {1: stdout_write, 2: stderr_write}

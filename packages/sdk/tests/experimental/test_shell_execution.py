@@ -13,7 +13,6 @@ import tempfile
 import time
 import tracemalloc
 import warnings
-from io import BytesIO
 from pathlib import Path
 from typing import Any, List, Optional
 from unittest import mock
@@ -174,11 +173,16 @@ class TestExecuteShellTool:
         assert _decode(b"ab\xc3\xa9", 3) == "ab\ufffd\n[output truncated]"
         assert _decode(b"", 3) == ""
 
-    def test_reader_keeps_the_first_bytes_and_counts_all(self) -> None:
-        reader = _CappedReader(BytesIO(b"abcdef" * 100_000), 4)
+    def test_reader_keeps_the_first_bytes_counts_all_and_closes_its_descriptor(self) -> None:
+        read_fd, write_fd = os.pipe()
+        reader = _CappedReader(read_fd, 4)
+        with os.fdopen(write_fd, "wb") as write_end:
+            write_end.write(b"abcdef" * 100_000)
         reader.join(timeout=10)
         assert bytes(reader.kept) == b"abcd"
         assert reader.total_bytes == 600_000
+        with pytest.raises(OSError):
+            os.fstat(read_fd)
 
     @pytest.mark.parametrize(
         "command, kept, logged",

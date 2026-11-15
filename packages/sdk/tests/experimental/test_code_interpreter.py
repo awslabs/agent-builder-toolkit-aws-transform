@@ -366,7 +366,7 @@ class TestServerShutdown:
                 waited = time.monotonic() - start
         finally:
             release.set()
-            await tool_call
+            await asyncio.wait_for(tool_call, timeout=5)
         assert waited < 1
         assert "The code-interpreter sessions were not stopped within 0.05 seconds" in caplog.text
 
