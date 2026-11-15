@@ -312,7 +312,8 @@ class Deeplinks:
         artifact_id: str,
         job_id: str | None = None,
         workspace_id: str | None = None,
-    ) -> str: ...
+    ) -> str:
+        """Link to the artifact with this ID."""
 
     @overload
     @staticmethod
@@ -322,7 +323,8 @@ class Deeplinks:
         artifact_name: str,
         job_id: str | None = None,
         workspace_id: str | None = None,
-    ) -> str: ...
+    ) -> str:
+        """The same link, with the ID passed as the earlier keyword ``artifact_name``."""
 
     @staticmethod
     def artifact(
