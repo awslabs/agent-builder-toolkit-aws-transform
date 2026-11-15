@@ -2603,7 +2603,7 @@ Things to know:
 - Limits per search: a query of at most 200 characters, at most 10 results (default 5), at most 4,000 characters of text per result, 60 seconds of wall-clock time.
 - Results are untrusted text. The tool returns them between `<<<BEGIN UNTRUSTED WEB CONTENT>>>` and `<<<END UNTRUSTED WEB CONTENT>>>` with a notice that tells the model to treat them as data and to cite the source URL of every fact. Keep these citations and links in the output you show to users; the service's acceptable use terms require it.
 - The tool description tells the model not to put customer data, file contents or credentials in a query. Add the same rule to your system prompt when your agent handles sensitive data.
-- On the Gateway path the tool sends `tools/list` and `tools/call` with the header `MCP-Protocol-Version: 2025-11-25` and reads a JSON reply. A Gateway that does not accept that version, or that replies with an event stream, gives an `Error: ...` text for each search.
+- On the Gateway path the tool sends `tools/list` and `tools/call` with the headers `Accept: application/json` and `MCP-Protocol-Version: 2025-11-25` and reads one JSON reply. A Gateway with response streaming turned on also replies with JSON to a request that accepts only JSON. A Gateway that does not accept that MCP version gives an `Error: ...` text for each search.
 - A failed search does not raise. The model gets an `Error: ...` text. A refused call names the permission to check; on the Gateway path an HTTP 403 also names the Region the request was signed for, because a wrong `ATX_WEB_SEARCH_GATEWAY_REGION` gives the same 403 as a missing permission.
 
 ```

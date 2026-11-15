@@ -185,9 +185,9 @@ class _GatewayWebSearch:
         """Sign and send one JSON-RPC request and return its ``result``. A Gateway, HTTP,
         credential or transport error, a passed ``deadline``, or a reply that is not a JSON
         object with a JSON-object ``result``, raises ``_WebSearchError``."""
-        # The Gateway must answer a bare JSON-RPC call (no MCP initialize, no session) with a JSON
-        # body. A Gateway that requires initialize or replies with an event stream gets an error
-        # text for every search.
+        # The Gateway must answer a bare JSON-RPC call (no MCP initialize, no session). Accept names
+        # JSON alone: a Gateway with response streaming on answers a request that also accepts
+        # text/event-stream with an event stream, which the tool cannot read.
         body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
         # The Host header is set before signing so the signed and the sent value are one string:
         # botocore signs a URL's host without a default port such as :443, which urllib still sends.
@@ -197,7 +197,7 @@ class _GatewayWebSearch:
             data=body,
             headers={
                 "Content-Type": "application/json",
-                "Accept": "application/json, text/event-stream",
+                "Accept": "application/json",
                 "MCP-Protocol-Version": GATEWAY_MCP_PROTOCOL_VERSION,
                 "Host": urllib.parse.urlsplit(self._url).netloc,
             },

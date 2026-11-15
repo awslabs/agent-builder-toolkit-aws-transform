@@ -326,7 +326,7 @@ class TestSearch:
             _run(_new_tool(), query="q")
         for index in (0, 1):
             request = _sent(opener, index)
-            assert request.get_header("Accept") == "application/json, text/event-stream"
+            assert request.get_header("Accept") == "application/json"
             assert request.get_header("Mcp-protocol-version") == "2025-11-25"
             signed = request.get_header("Authorization").split("SignedHeaders=")[1].split(",")[0]
             assert {"accept", "mcp-protocol-version"} <= set(signed.split(";"))
