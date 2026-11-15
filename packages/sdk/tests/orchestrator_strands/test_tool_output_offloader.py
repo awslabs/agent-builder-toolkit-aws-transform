@@ -16,9 +16,11 @@ from strands import Agent, tool
 from strands.hooks import AfterToolCallEvent
 from strands.models import Model
 from strands.types.exceptions import StorageError
+from strands.types.tools import ToolResultContent
 from strands.vended_plugins.context_offloader import ContextOffloader
 from strands.vended_plugins.skills import AgentSkills
 
+from agent_builder_sdk.orchestrator_strands import tool_output_offloader as offloader_module
 from agent_builder_sdk.orchestrator_strands.base_orchestrator import AsyncBaseOrchestrator
 from agent_builder_sdk.orchestrator_strands.tool_output_offloader import (
     DEFAULT_KEEP_IN_CONTEXT_TOOLS,
@@ -244,40 +246,106 @@ async def test_json_text_is_indented_off_the_event_loop_thread(
 ) -> None:
     agent, _ = _agent(tmp_path)
     text = json.dumps([{"a": i} for i in range(100)], separators=(",", ":"))
-    dumps = json.dumps
+    relined_json = offloader_module._relined_json
     threads: list[threading.Thread] = []
 
-    def recording_dumps(*args: Any, **kwargs: Any) -> str:
+    def recording_relined_json(text: str) -> str:
         threads.append(threading.current_thread())
-        return dumps(*args, **kwargs)
+        return relined_json(text)
 
-    monkeypatch.setattr(json, "dumps", recording_dumps)
+    monkeypatch.setattr(offloader_module, "_relined_json", recording_relined_json)
 
     await _after_tool_call(agent, [{"text": text}])
 
     assert threads and threading.current_thread() not in threads
 
 
+def _without_whitespace_outside_strings(text: str) -> str:
+    kept: list[str] = []
+    in_string = escaped = False
+    for char in text:
+        if escaped:
+            escaped = False
+        elif in_string and char == "\\":
+            escaped = True
+        elif char == '"':
+            in_string = not in_string
+        elif not in_string and char in " \t\r\n":
+            continue
+        kept.append(char)
+    return "".join(kept)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "1234567890123456.78",
+        "1731542400.123456789",
+        "1e-400",
+        "123456789012.123456789012",
+        "1e400",
+        "NaN",
+        "-Infinity",
+        "1.10",
+        '{"result":"first","result":"second"}',
+        '["say \\"hi\\" [, {: }]", "C:\\\\tmp\\\\"]',
+        '"\\u00e9 \\ud83d \\n"',
+        '{"a":{},"b":[],"c":[{}],"d":[[]]}',
+        "[" * 100 + "1,2" + "]" * 100,
+        json.dumps({"z": [1, {"y": None}], "a": True}, indent=4).replace("\n", "\r\n"),
+    ],
+    ids=[
+        "long decimal",
+        "epoch with nanoseconds",
+        "float underflow",
+        "decimal with 24 digits",
+        "number beyond the range of a float",
+        "NaN",
+        "-Infinity",
+        "trailing zero",
+        "repeated key",
+        "escaped quotes and backslashes",
+        "unicode escapes and a lone surrogate",
+        "empty containers",
+        "nested 100 deep",
+        "already indented with CRLF",
+    ],
+)
+async def test_json_text_is_stored_with_only_whitespace_between_tokens_changed(
+    tmp_path: Path, value: str
+) -> None:
+    agent, offloader = _agent(tmp_path)
+    text = '{"value":' + value + ',"rows":' + ROWS + "}"
+
+    result = await _after_tool_call(agent, [{"text": text}])
+
+    stored = await _retrieve(offloader, agent, _reference(result["content"][0]["text"]))
+    assert _without_whitespace_outside_strings(stored) == _without_whitespace_outside_strings(text)
+    assert len(stored.splitlines()) > 200
+    assert max(len(line) for line in stored.splitlines()) < 80
+
+
+def test_json_text_gets_the_layout_of_json_dumps_with_indent_2() -> None:
+    value = {"a": [], "b": {}, "c": [1, {"d": [[]]}], "e": "x"}
+    block = ToolResultContent(text=json.dumps(value, separators=(",", ":")))
+
+    assert offloader_module._with_json_on_short_lines(block) == {"text": json.dumps(value, indent=2)}
+
+
 @pytest.mark.parametrize(
     "text",
     [
         "[INFO] start\n" + BIG,
+        "{not JSON}\n" + BIG,
         json.dumps("\u00e9" * 300),
-        json.dumps([{"note": "\ud83d"}] * 60),
         "[" * 100_000 + "]" * 100_000,
-        '{"result":"first","result":"second","rows":' + ROWS + "}",
-        '{"big":1e400,"rows":' + ROWS + "}",
-        '{"missing":NaN,"rows":' + ROWS + "}",
         json.dumps(["x" * 1000] * (MAX_INDENTED_JSON_CHARS // 1000)),
     ],
     ids=[
         "not JSON",
+        "not JSON that starts with a brace",
         "JSON string",
-        "JSON with an escaped lone surrogate",
         "JSON nested too deeply",
-        "JSON with a repeated key",
-        "JSON with a number beyond the range of a float",
-        "JSON with NaN",
         "JSON over the size limit for indenting",
     ],
 )

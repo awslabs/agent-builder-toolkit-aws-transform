@@ -7,9 +7,10 @@ import dataclasses
 import json
 import logging
 import os
+import re
 import uuid
 from contextvars import ContextVar
-from typing import AbstractSet, Any, Dict, FrozenSet, List, Optional, Tuple
+from typing import AbstractSet, Any, FrozenSet, List, Optional
 
 from strands.hooks import AfterToolCallEvent
 from strands.plugins import hook
@@ -21,8 +22,13 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_MAX_RESULT_TOKENS = 12_500
 DEFAULT_PREVIEW_TOKENS = 1_000
-# The parsed value and its indented text take over ten times the memory of the text.
+# json.loads, which checks that the text is JSON, takes several times the memory of the text.
 MAX_INDENTED_JSON_CHARS = 5_000_000
+# Deeper levels get no more indentation, so deep nesting cannot multiply the size of the text.
+_MAX_INDENT_DEPTH = 20
+_INDENTS = ["\n" + "  " * depth for depth in range(_MAX_INDENT_DEPTH + 1)]
+# A JSON string with its escapes, a structural character, or a number or literal name.
+_JSON_TOKEN = re.compile(r'"[^"\\]*(?:\\.[^"\\]*)*"|[{}\[\],:]|[^\s{}\[\],:"]+')
 
 # Tools whose result the model acts on as a whole: a loaded skill, recalled memory, a subagent's answer.
 DEFAULT_KEEP_IN_CONTEXT_TOOLS: FrozenSet[str] = frozenset(
@@ -46,33 +52,46 @@ def _is_offloadable(block: ToolResultContent) -> bool:
     return bool(block.get("text")) or "json" in block
 
 
-def _object_with_unique_keys(pairs: List[Tuple[str, Any]]) -> Dict[str, Any]:
-    parsed = dict(pairs)
-    if len(parsed) != len(pairs):
-        raise ValueError("repeated key in a JSON object")
-    return parsed
+def _relined_json(text: str) -> str:
+    """Return valid JSON ``text`` with each value on its own line; literals stay byte-for-byte."""
+    parts: List[str] = []
+    depth = 0
+    for match in _JSON_TOKEN.finditer(text):
+        token = match.group()
+        opened = bool(parts) and parts[-1] in ("{", "[")
+        if token in ("}", "]"):
+            depth -= 1
+            if not opened:
+                parts.append(_INDENTS[min(depth, _MAX_INDENT_DEPTH)])
+        elif opened:
+            parts.append(_INDENTS[min(depth, _MAX_INDENT_DEPTH)])
+        parts.append(token)
+        if token in ("{", "["):
+            depth += 1
+        elif token == ",":
+            parts.append(_INDENTS[min(depth, _MAX_INDENT_DEPTH)])
+        elif token == ":":
+            parts.append(" ")
+    return "".join(parts)
 
 
 def _with_json_on_short_lines(block: ToolResultContent) -> ToolResultContent:
-    """Return a text block that holds a JSON object or array with that JSON indented, else ``block``.
+    """Return a text block that holds a JSON object or array with each value on its own line.
 
-    ``block`` is also returned for JSON of more than ``MAX_INDENTED_JSON_CHARS`` characters, and for
-    JSON that the indented text would not hold in full: an object that repeats a key, ``NaN``,
-    ``Infinity``, or a number beyond the range of a float (``1e400``).
+    Only whitespace between tokens changes: numbers, strings, escapes, repeated keys and key order
+    stay as the tool wrote them. ``block`` is returned for any other text, for JSON that
+    ``json.loads`` rejects (also when nested too deeply), and for JSON of more than
+    ``MAX_INDENTED_JSON_CHARS`` characters.
     """
     text = block.get("text")
     if not text or len(text) > MAX_INDENTED_JSON_CHARS:
         return block
     try:
-        parsed = json.loads(text, object_pairs_hook=_object_with_unique_keys)
-        if not isinstance(parsed, (dict, list)):
+        if not isinstance(json.loads(text), (dict, list)):
             return block
-        indented = json.dumps(parsed, indent=2, ensure_ascii=False, allow_nan=False)
-        # json.loads accepts an escaped lone surrogate, which cannot be written as UTF-8.
-        indented.encode()
     except (ValueError, RecursionError):
         return block
-    return ToolResultContent(text=indented)
+    return ToolResultContent(text=_relined_json(text))
 
 
 def _with_content(result: ToolResult, content: List[ToolResultContent]) -> ToolResult:
@@ -90,15 +109,14 @@ class ToolOutputOffloader(ContextOffloader):
 
     Retrieval by line range or pattern works on lines and returns at most ``max_result_tokens * 4``
     characters. A text block that holds a JSON object or array is therefore stored indented, one
-    value per line, with numbers and string escapes as Python's ``json`` module writes them
-    (``1.10`` becomes ``1.1``). The indenting runs in a worker thread. JSON text is not indented
-    when it is longer than ``MAX_INDENTED_JSON_CHARS`` (5,000,000) characters, when an object
-    repeats a key, or when it holds ``NaN``, ``Infinity`` or a number beyond the range of a float
-    (``1e400``). That text, and any other text, is stored as the tool returned it: of a single line
-    longer than the retrieval limit, only the start is readable by line range or pattern, and the
-    rest only by a whole retrieval. The pattern is a regular expression that the model writes.
-    Strands runs it on the event loop, line by line, with no time limit: a pattern that backtracks
-    heavily on a long line blocks the loop until the search ends.
+    value per line. Only the whitespace between tokens changes: numbers, strings, escapes, repeated
+    keys and key order stay as the tool wrote them. The indenting runs in a worker thread. JSON text
+    is not indented when it is longer than ``MAX_INDENTED_JSON_CHARS`` (5,000,000) characters or
+    when ``json.loads`` rejects it. That text, and any other text, is stored as the tool returned
+    it: of a single line longer than the retrieval limit, only the start is readable by line range
+    or pattern, and the rest only by a whole retrieval. The pattern is a regular expression that
+    the model writes. Strands runs it on the event loop, line by line, with no time limit: a
+    pattern that backtracks heavily on a long line blocks the loop until the search ends.
 
     Files are never evicted, so a reference stays valid for as long as the directory exists: for
     another agent whose offloader uses the same ``storage_dir``, and after a checkpoint restore of
