@@ -1,9 +1,11 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
+import ntpath
 import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Optional
 from unittest import mock
 
@@ -578,6 +580,18 @@ def test_artifact_file_name(artifact: dict[str, Any], name: str) -> None:
     metadata: Any = {"artifact": {"artifactId": "a-1", **artifact}, "isS3ObjectPresent": {}}
 
     assert artifact_file_name(metadata) == name
+
+
+def test_artifact_file_name_skips_a_windows_drive_name() -> None:
+    metadata: Any = {
+        "artifact": {"artifactId": "a-1", "fileMetadata": {"path": "x/C:evil"}},
+        "isS3ObjectPresent": {},
+    }
+
+    with mock.patch(
+        "agent_builder_sdk.agentic_framework.artifact_store.os", SimpleNamespace(path=ntpath)
+    ):
+        assert artifact_file_name(metadata) == "a-1"
 
 
 def test_artifact_file_name_refuses_an_unusable_id() -> None:

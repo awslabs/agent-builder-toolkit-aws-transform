@@ -217,7 +217,8 @@ def artifact_file_name(metadata: abt.GetArtifactMetadataResponseTypeDef) -> str:
     """A local file name for the artifact: the last part of its stored file path, else of its
     label, else its ID.
 
-    Only a last part is used, so joining the name to a directory stays in that directory.
+    Only a last part without a drive (Windows ``C:name``) is used, so joining the name to a
+    directory stays in that directory.
     """
     artifact = metadata["artifact"]
     file_metadata = artifact.get("fileMetadata")
@@ -228,6 +229,6 @@ def artifact_file_name(metadata: abt.GetArtifactMetadataResponseTypeDef) -> str:
     )
     for candidate in candidates:
         name = os.path.basename(candidate or "")
-        if name not in ("", ".", ".."):
+        if name not in ("", ".", "..") and not os.path.splitdrive(name)[0]:
             return name
     raise ValueError(f"Artifact {artifact['artifactId']} has no usable file name")
