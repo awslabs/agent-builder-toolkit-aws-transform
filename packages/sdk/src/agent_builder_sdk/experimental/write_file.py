@@ -6,8 +6,10 @@ An agent with no shell tool authors its files with it. The tool is opt-in: pass 
 ``custom_tools``. It refuses a path outside /tmp, a relative path, a path with a ``..`` component or
 a NUL byte, a symlink, directory or other non-regular file (FIFO, socket, device) at the path, and
 the agent's own runtime state (see :mod:`agent_builder_sdk.util.paths`). It writes at most 256 KiB
-per call, and each write is atomic. A new file gets mode 0666 less the umask; an overwrite keeps the
-old file's mode.
+per call; nothing caps the total size of a file that grows by appends. An overwrite is atomic (a
+temp file renamed over the target). An append adds to the file in place, so a failed append (for
+example on a full disk) can leave part of its section at the end. A new file gets mode 0666 less
+the umask; an overwrite keeps the old file's mode.
 """
 
 import logging
@@ -25,17 +27,18 @@ logger = logging.getLogger(__name__)
 
 _WRITE_ROOT = "/tmp"
 
-# The cap bounds what one call puts on disk. It cannot prevent a very long ``content`` from timing
+# The cap bounds the new bytes of one call. It cannot prevent a very long ``content`` from timing
 # out while the model streams it, which is why the docstring tells the model to write in sections.
 _MAX_WRITE_BYTES = 256 * 1024
 
-# An append reads the old file and replaces it, so two concurrent writes to one file would lose one.
+# Without it, an append that opened the old file could land in the file that a concurrent overwrite
+# has just renamed away, and be lost.
 _write_lock = threading.Lock()
 
 
-def _replace(target: str, data: bytes, append: bool) -> int:
-    """Write ``data`` (after the current bytes of ``target`` when ``append``) to a temp file in the
-    same directory, then rename it over ``target``. Returns the new size of ``target`` in bytes."""
+def _replace(target: str, data: bytes) -> int:
+    """Write ``data`` to a temp file in the same directory, then rename it over ``target``. Returns
+    the new size of ``target`` in bytes."""
     tmp = os.path.join(os.path.dirname(target), f".write_file-{uuid.uuid4().hex}")
     # Not mkstemp: its fixed 0600 would make a new file owner-only whatever the umask is.
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666)
@@ -43,14 +46,19 @@ def _replace(target: str, data: bytes, append: bool) -> int:
         with os.fdopen(fd, "wb") as out:
             if os.path.exists(target):
                 shutil.copymode(target, tmp)
-                if append:
-                    with open(target, "rb") as old:
-                        shutil.copyfileobj(old, out)
             out.write(data)
         os.replace(tmp, target)
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
+    return os.path.getsize(target)
+
+
+def _append(target: str, data: bytes) -> int:
+    """Add ``data`` to the end of ``target`` in place, creating it if missing. Returns the new size
+    of ``target`` in bytes."""
+    with open(target, "ab") as out:
+        out.write(data)
     return os.path.getsize(target)
 
 
@@ -99,7 +107,7 @@ def write_file(path: str, content: str, append: bool = False) -> str:
     try:
         os.makedirs(os.path.dirname(resolved), exist_ok=True)
         with _write_lock:
-            total = _replace(resolved, encoded, append)
+            total = (_append if append else _replace)(resolved, encoded)
     except OSError as e:
         logger.error("write_file failed for %s: %s", resolved, e)
         return f"Error: could not write {resolved}: {e}"

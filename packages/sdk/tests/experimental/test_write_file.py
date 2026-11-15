@@ -6,12 +6,11 @@ _WRITE_ROOT is patched to pytest's tmp_path, because the test temp dir may not l
 """
 
 import os
-import shutil
 import stat
 import threading
 import time
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Iterator
 from unittest import mock
 
 import pytest
@@ -47,6 +46,17 @@ def test_append_adds_to_the_end_and_overwrite_replaces(tmp_path: Path) -> None:
 
     write_file(path=str(target), content="new")
     assert target.read_text() == "new"
+
+
+def test_append_keeps_the_old_bytes_in_place_and_copies_nothing(tmp_path: Path) -> None:
+    target = tmp_path / "big.log"
+    target.write_bytes(b"old\x00bytes\n")
+    inode = target.stat().st_ino
+    with mock.patch.object(write_file_module.shutil, "copyfileobj", side_effect=AssertionError("copied")):
+        assert write_file(path=str(target), content="new\n", append=True).startswith("Appended 4 bytes")
+    assert target.read_bytes() == b"old\x00bytes\nnew\n"
+    assert target.stat().st_ino == inode
+    assert os.listdir(tmp_path) == ["big.log"]
 
 
 def test_append_to_a_missing_file_creates_it(tmp_path: Path) -> None:
@@ -174,27 +184,26 @@ def test_runtime_state_is_not_overwritten(tmp_path: Path, name: str) -> None:
     assert target.read_text() == "{}"
 
 
-def test_concurrent_appends_to_one_file_all_land(tmp_path: Path) -> None:
+def test_an_append_during_an_overwrite_lands_in_the_new_file(tmp_path: Path) -> None:
     target = tmp_path / "log.txt"
-    target.write_text("start\n")
-    copy = shutil.copyfileobj
+    target.write_text("old\n")
+    replace = os.replace
+    renaming = threading.Event()
 
-    def slow_copy(src: Any, dst: Any) -> None:
-        # Holds each append between its read of the old file and its rename, so unserialized
-        # appends would overlap and one would be lost.
-        copy(src, dst)
+    def slow_replace(src: str, dst: str) -> None:
+        # Holds the overwrite between its temp file and its rename, so an unserialized append
+        # would go to the old file and be lost with it.
+        renaming.set()
         time.sleep(0.1)
+        replace(src, dst)
 
-    with mock.patch.object(write_file_module.shutil, "copyfileobj", side_effect=slow_copy):
-        threads = [
-            threading.Thread(target=write_file, kwargs={"path": str(target), "content": line, "append": True})
-            for line in ("a\n", "b\n")
-        ]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
-    assert sorted(target.read_text().splitlines()) == ["a", "b", "start"]
+    with mock.patch.object(write_file_module.os, "replace", side_effect=slow_replace):
+        overwrite = threading.Thread(target=write_file, kwargs={"path": str(target), "content": "new\n"})
+        overwrite.start()
+        assert renaming.wait(5)
+        assert write_file(path=str(target), content="more\n", append=True).startswith("Appended")
+        overwrite.join()
+    assert target.read_text() == "new\nmore\n"
 
 
 def test_the_tool_spec_exposes_path_content_and_append() -> None:

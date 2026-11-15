@@ -2862,7 +2862,8 @@ agent = create_default_async_orchestrator(mcp_client, storage_dir, custom_tools=
 |---|---|
 | Root | `/tmp` only; the path must be absolute |
 | Size | 256 KiB per call; the model writes long files one section per call with `append=True` |
-| Write | Atomic: the tool writes a temp file, then renames it over the target |
+| Overwrite | Atomic: the tool writes a temp file, then renames it over the target |
+| Append | In place, at the end of the file; a failed append (for example on a full disk) can leave part of its section. Nothing caps the total file size |
 | File mode | A new file gets `0666` less the umask (usually `0644`); an overwrite keeps the old mode |
 | Refused | Paths outside `/tmp`, `..` components, NUL bytes, symlinks, directories, FIFOs, sockets, devices, and the agent's own runtime state |
 
