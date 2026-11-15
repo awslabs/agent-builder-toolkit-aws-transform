@@ -878,7 +878,7 @@ async def test_setup_that_ends_after_stop_starts_no_heartbeat(
             }
         )
         invoking_ended.set()
-        await setup
+        await asyncio.wait_for(setup, timeout=5)
 
     assert result["error"] is None
     assert server.initialized is True
