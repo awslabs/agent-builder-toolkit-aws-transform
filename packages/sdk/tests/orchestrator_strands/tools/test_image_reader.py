@@ -45,13 +45,15 @@ def test_an_image_within_the_limits_comes_back_as_its_own_bytes_and_format(tmp_p
 def test_an_image_over_the_limits_comes_back_downscaled(tmp_path: Path) -> None:
     image = _read(image_path=str(_save(tmp_path / "wide.png", (9000, 100))))["content"][0]["image"]
     assert image["format"] == "jpeg"
-    assert Image.open(io.BytesIO(image["source"]["bytes"])).size[0] == MAX_EDGE
+    with Image.open(io.BytesIO(image["source"]["bytes"])) as decoded:
+        assert decoded.size[0] == MAX_EDGE
 
 
 def test_a_format_the_converse_api_lacks_is_re_encoded(tmp_path: Path) -> None:
     image = _read(image_path=str(_save(tmp_path / "a.bmp")))["content"][0]["image"]
     assert image["format"] == "jpeg"
-    assert Image.open(io.BytesIO(image["source"]["bytes"])).format == "JPEG"
+    with Image.open(io.BytesIO(image["source"]["bytes"])) as decoded:
+        assert decoded.format == "JPEG"
 
 
 def test_a_path_under_the_home_directory_is_expanded(
