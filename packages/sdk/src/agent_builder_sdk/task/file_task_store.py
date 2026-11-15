@@ -33,9 +33,15 @@ class FileTaskStore(TaskStore):
 
     For checkpointing: Use the same storage_dir as AgentRuntimeServer
     to ensure tasks are included in checkpoint artifacts and restored
-    on agent restart or failover. A checkpoint taken while a task is written
-    can lack that task on filesystems where a directory scan can miss an entry
-    that is renamed (tmpfs).
+    on agent restart or failover. Each write goes to a temporary file
+    .<random>.tmp that is then renamed to {task_id}.json. The checkpoint does
+    not wait for writes, so a checkpoint taken while a task is written can:
+    - fail with a logged error, when the temporary file is renamed after the
+      checkpoint lists it and before it reads it. A later checkpoint can
+      succeed; the final checkpoint at shutdown has no later one.
+    - lack that task, on filesystems where a directory scan can miss an entry
+      that is renamed (tmpfs).
+    - hold the temporary file. list_tasks ignores it after a restore.
     """
 
     def __init__(self, storage_dir: str):
