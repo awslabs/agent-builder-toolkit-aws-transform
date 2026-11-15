@@ -573,6 +573,9 @@ class TestGetArtifactMetadata:
         ({"fileMetadata": {"path": "../../etc/passwd"}}, "passwd"),
         ({"artifactLabel": "state bundle"}, "state bundle"),
         ({"fileMetadata": {"path": "x/.."}, "artifactLabel": ".."}, "a-1"),
+        ({"fileMetadata": {"path": "x/" + "r" * 255}, "artifactLabel": "l"}, "r" * 255),
+        ({"fileMetadata": {"path": "x/" + "r" * 256}, "artifactLabel": "l"}, "l"),
+        ({"artifactLabel": "\u00e9" * 128}, "a-1"),
         ({}, "a-1"),
     ],
 )

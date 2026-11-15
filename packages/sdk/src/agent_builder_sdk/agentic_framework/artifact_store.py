@@ -218,7 +218,8 @@ def artifact_file_name(metadata: abt.GetArtifactMetadataResponseTypeDef) -> str:
     label, else its ID.
 
     Only a last part without a drive (Windows ``C:name``) is used, so joining the name to a
-    directory stays in that directory.
+    directory stays in that directory. A last part over 255 bytes in UTF-8 (the usual file
+    name limit) is skipped too.
     """
     artifact = metadata["artifact"]
     file_metadata = artifact.get("fileMetadata")
@@ -229,6 +230,10 @@ def artifact_file_name(metadata: abt.GetArtifactMetadataResponseTypeDef) -> str:
     )
     for candidate in candidates:
         name = os.path.basename(candidate or "")
-        if name not in ("", ".", "..") and not os.path.splitdrive(name)[0]:
+        if (
+            name not in ("", ".", "..")
+            and not os.path.splitdrive(name)[0]
+            and len(name.encode()) <= 255
+        ):
             return name
     raise ValueError(f"Artifact {artifact['artifactId']} has no usable file name")

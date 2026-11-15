@@ -601,7 +601,7 @@
     "kind": "function",
     "file": "agent_builder_sdk/agentic_framework/artifact_store.py",
     "module": "agent_builder_sdk.agentic_framework.artifact_store",
-    "docstring": "A local file name for the artifact: the last part of its stored file path, else of its\nlabel, else its ID.\n\nOnly a last part without a drive (Windows ``C:name``) is used, so joining the name to a\ndirectory stays in that directory.",
+    "docstring": "A local file name for the artifact: the last part of its stored file path, else of its\nlabel, else its ID.\n\nOnly a last part without a drive (Windows ``C:name``) is used, so joining the name to a\ndirectory stays in that directory. A last part over 255 bytes in UTF-8 (the usual file\nname limit) is skipped too.",
     "signature": "artifact_file_name(metadata: abt.GetArtifactMetadataResponseTypeDef) -> str",
     "description": "Parameters:\n  metadata: abt.GetArtifactMetadataResponseTypeDef (required)"
   },
