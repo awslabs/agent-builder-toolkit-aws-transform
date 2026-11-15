@@ -2597,7 +2597,7 @@ Policy statement for the Web Search API path (the account field of the ARN is th
 Things to know:
 
 - Set the variable in your Dockerfile (`ENV ATX_WEB_SEARCH_REGION=us-east-1`) or in the environment variables of the AgentCore runtime. The toolkit's deploy tool sets only `REGION` and `STAGE`.
-- A value that cannot be served logs one warning that names the cause, and `create_web_search_tool()` returns `None`: a Region name that is not valid, a botocore older than 1.43.127 on the API path, a Gateway URL that is not `https://`.
+- A value that cannot be served logs one warning that names the cause, and `create_web_search_tool()` returns `None`: a Region name that is not valid, a botocore older than 1.43.127 on the API path, a Gateway URL that is not `https://` or that holds a user name or password.
 - Web search is available in a subset of Regions. See [Search the web using Amazon Bedrock AgentCore Web Search](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/web-search-api.html) and [Web Search Tool](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-target-connector-web-search-tool.html). `ATX_WEB_SEARCH_REGION` can differ from the Region of the agent; search queries then go to that Region.
 - Searches are billed to your AWS account. See the Amazon Bedrock AgentCore pricing page.
 - Limits per search: a query of at most 200 characters, at most 10 results (default 5), at most 4,000 characters of text per result, 60 seconds of wall-clock time.

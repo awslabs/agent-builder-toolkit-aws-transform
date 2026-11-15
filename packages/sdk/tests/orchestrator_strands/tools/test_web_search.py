@@ -245,15 +245,23 @@ class TestRegistration:
             "https://",
             "https:///mcp",
             "https://[gw",
+            "https://svc:hunter2@gw.example.com/mcp",
+            "https://svc@gw.example.com/mcp",
+            "https://:hunter2@gw.example.com/mcp",
+            "https://@gw.example.com/mcp",
         ],
     )
-    def test_a_url_that_is_not_https_registers_nothing(
+    def test_a_url_that_is_not_https_or_holds_user_info_registers_nothing(
         self, env: None, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, url: str
     ) -> None:
         monkeypatch.setenv(ws.GATEWAY_URL_ENV, url)
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.DEBUG, logger=ws.logger.name):
             assert ws.create_web_search_tool() is None
-        assert f"{ws.GATEWAY_URL_ENV} is not an https:// URL" in caplog.text
+        assert _warnings(caplog) == [
+            f"{ws.GATEWAY_URL_ENV} is not an https:// URL with a host and no user info; "
+            "web_search not registered"
+        ]
+        assert "hunter2" not in caplog.text
 
     @pytest.mark.parametrize("name", [ws.GATEWAY_REGION_ENV, "AWS_REGION"])
     def test_a_malformed_gateway_region_registers_nothing(

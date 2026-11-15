@@ -14,8 +14,8 @@
   ``supportedVersions``.
 
 A value that cannot be served (a malformed Region, an API Region in no partition, a botocore
-without ``InvokeWebSearch``, a URL that is not https) logs one warning and returns None. No
-network call happens before the first search.
+without ``InvokeWebSearch``, a URL that is not https or holds user info) logs one warning and
+returns None. No network call happens before the first search.
 
 Search results are untrusted text. The tool returns them between two markers with a notice that
 they are data, and cuts every field to a fixed length. Every field is one line: each run of
@@ -533,9 +533,11 @@ def _api_searcher(region: str) -> Optional[_ApiWebSearch]:
 
 
 def _is_https_url(url: str) -> bool:
+    """True for an https URL with a host and no user info (``user:password@``). Requests are
+    SigV4-signed, and urllib fails on user info at search time with an error text that quotes it."""
     try:
         parts = urllib.parse.urlsplit(url)
-        return parts.scheme == "https" and bool(parts.hostname)
+        return parts.scheme == "https" and bool(parts.hostname) and "@" not in parts.netloc
     except ValueError:
         return False
 
@@ -567,7 +569,10 @@ def _searcher_from_env() -> Optional[_WebSearcher]:
     if not url:
         return None
     if not _is_https_url(url):
-        logger.warning("%s is not an https:// URL; web_search not registered", GATEWAY_URL_ENV)
+        logger.warning(
+            "%s is not an https:// URL with a host and no user info; web_search not registered",
+            GATEWAY_URL_ENV,
+        )
         return None
     gateway_region = _gateway_region()
     if gateway_region is None:
