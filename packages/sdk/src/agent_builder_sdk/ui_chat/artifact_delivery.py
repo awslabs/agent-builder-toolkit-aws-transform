@@ -155,11 +155,12 @@ def reply_with_artifact_deeplinks(reply_text: str, agent: Any) -> str:
     The turn's source is the ``conversation_source_type`` ContextVar, which the orchestrator sets
     per turn. The ``agent.state`` copy serves a caller outside the turn's context, such as the queue
     worker after a sync orchestrator ran on another thread. A turn with no recorded source counts
-    as a user turn. Any failure is logged and the reply goes out unchanged.
+    as a user turn. An agent whose ``state`` has no ``get`` method gets the reply unchanged, with no
+    log line. Any other failure is logged and the reply goes out unchanged.
     """
     try:
         state = getattr(agent, "state", None)
-        if state is None:
+        if not callable(getattr(state, "get", None)):
             return reply_text
         source = conversation_source_type.get(None)
         if source is None:

@@ -2872,7 +2872,7 @@ If you construct your own orchestrator, you can pass `ArtifactDeliveryHookProvid
 |---|---|
 | What is linked | An artifact for which a `get_artifact_metadata` tool result in the same turn shows `artifactType.categoryType` `CUSTOMER_OUTPUT` and `isS3ObjectPresent.publicBucket` `true`. A completed upload alone is not enough, so tell the model to call `get_artifact_metadata` after it uploads a customer file. |
 | Tool name | Must be exactly `get_artifact_metadata`. If your MCP client adds a prefix to tool names, the hook records nothing. |
-| Servers | `AgentRuntimeServer` (`message/send` and `message/stream`) and `StatelessAgentRuntimeServer` (`message/send`). |
+| Servers | `AgentRuntimeServer` (`message/send` and `message/stream`). `StatelessAgentRuntimeServer` does not add links. |
 | Which replies | Replies to user turns only. Replies to subagents and notifications, and guardrail refusals, get no links. |
 | No duplicates | A file that the reply already links (a Markdown link or a `<...>` autolink to its `aws-transform://` deeplink) is not linked again. |
 | Link text | The artifact label, or else the file name, with Markdown characters escaped. The link URL contains only the `artifactId`. |

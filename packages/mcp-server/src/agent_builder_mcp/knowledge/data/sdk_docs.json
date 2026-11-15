@@ -4722,7 +4722,7 @@
     "kind": "function",
     "file": "agent_builder_sdk/ui_chat/artifact_delivery.py",
     "module": "agent_builder_sdk.ui_chat.artifact_delivery",
-    "docstring": "The reply with deeplinks for the artifacts recorded on ``agent.state``, for a turn the user\nsent; a reply to a subagent or a notification is read by a machine and goes out unchanged.\n\nThe turn's source is the ``conversation_source_type`` ContextVar, which the orchestrator sets\nper turn. The ``agent.state`` copy serves a caller outside the turn's context, such as the queue\nworker after a sync orchestrator ran on another thread. A turn with no recorded source counts\nas a user turn. Any failure is logged and the reply goes out unchanged.",
+    "docstring": "The reply with deeplinks for the artifacts recorded on ``agent.state``, for a turn the user\nsent; a reply to a subagent or a notification is read by a machine and goes out unchanged.\n\nThe turn's source is the ``conversation_source_type`` ContextVar, which the orchestrator sets\nper turn. The ``agent.state`` copy serves a caller outside the turn's context, such as the queue\nworker after a sync orchestrator ran on another thread. A turn with no recorded source counts\nas a user turn. An agent whose ``state`` has no ``get`` method gets the reply unchanged, with no\nlog line. Any other failure is logged and the reply goes out unchanged.",
     "signature": "reply_with_artifact_deeplinks(reply_text: str, agent: Any) -> str",
     "description": "Parameters:\n  reply_text: str (required)\n  agent: Any (required)"
   },

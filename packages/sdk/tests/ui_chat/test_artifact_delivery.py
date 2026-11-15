@@ -327,9 +327,12 @@ def _outside_a_turn(reply: str, agent: Any) -> str:
     return contextvars.Context().run(reply_with_artifact_deeplinks, reply, agent)
 
 
-def test_reply_is_untouched_for_an_agent_without_state(caplog: pytest.LogCaptureFixture) -> None:
+@pytest.mark.parametrize("agent", [object(), _Agent("RUNNING"), _Agent(None)])
+def test_reply_is_untouched_for_an_agent_without_a_state_store(
+    agent: Any, caplog: pytest.LogCaptureFixture
+) -> None:
     with caplog.at_level(logging.ERROR):
-        assert reply_with_artifact_deeplinks("Done.", object()) == "Done."
+        assert reply_with_artifact_deeplinks("Done.", agent) == "Done."
     assert caplog.records == []
 
 
