@@ -2,16 +2,18 @@
 # SPDX-License-Identifier: Apache-2.0
 """Best-effort redaction of credentials from text that reaches the model or the logs.
 
-The patterns catch AWS access-key ids and literal values of secret-named keys (``password``,
-``api_key``, ``client_secret``, ``session_token`` and similar) in JSON, env-file, INI (such as
-``~/.aws/credentials``) and YAML text.
-A secret under any other name, or in any other shape, passes unless the caller hands its exact
-value to :func:`scrub`. Matching runs in time linear in the text length, and this module never
+The patterns catch AWS access-key ids and literal values of keys whose name ends in
+``client_secret``, ``api_secret``, ``api_key``, ``secret_access_key``, ``session_token`` or
+``password`` (case-insensitive, ``_`` or ``-`` optional, after a prefix of letters and ``_`` such
+as ``aws_``) in JSON, env-file, INI (such as ``~/.aws/credentials``) and YAML text.
+A secret under any other name (for example ``token``, ``secret``, ``access_token`` or
+``private_key``), or in any other shape, passes unless the caller hands its exact value to
+:func:`scrub`. Matching runs in time linear in the text length, and this module never
 logs.
 """
 
 import re
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Union
 
 # The key names whose literal value is a secret; a prefix such as ``aws_`` or ``db_`` may precede them.
 _SECRET_KEY = (
@@ -91,9 +93,12 @@ REDACTED = "<redacted>"
 _MIN_SECRET_LEN = 8
 
 
-def scrub(text: str, secrets: Optional[Iterable[str]] = None) -> str:
+def scrub(text: str, secrets: Optional[Union[str, Iterable[str]]] = None) -> str:
     """``text`` with every credential match and every exact ``secrets`` value replaced by
-    <redacted>. A ``secrets`` value shorter than 8 characters is left in place."""
+    <redacted>. ``secrets`` is one value or several. A value shorter than 8 characters is left in
+    place."""
+    if isinstance(secrets, str):
+        secrets = [secrets]
     # Longest first, so a secret that holds a shorter one is not cut and left half in place.
     for secret in sorted(set(secrets or ()), key=len, reverse=True):
         if secret and len(secret) >= _MIN_SECRET_LEN:

@@ -25,6 +25,8 @@ _DEFAULT_PROTECTED = (
     "/tmp/qt-mcp-server.log",
 )
 
+# protect() may add to this set while another thread checks a path, so readers iterate a
+# tuple() copy (one step under the GIL), never the set itself.
 _protected: Set[str] = {os.path.realpath(path) for path in _DEFAULT_PROTECTED}
 
 
@@ -51,7 +53,7 @@ def is_under(path: str, roots: Sequence[str]) -> bool:
     a root deeper than that state holds it. ``path`` must not hold a NUL byte."""
     real = os.path.realpath(path)
     allowed = _deepest(real, [os.path.realpath(root) for root in roots])
-    return bool(allowed) and len(allowed) > len(_deepest(real, _protected))
+    return bool(allowed) and len(allowed) > len(_deepest(real, tuple(_protected)))
 
 
 def unreadable(path: str, roots: Sequence[str]) -> Optional[str]:
@@ -62,7 +64,7 @@ def unreadable(path: str, roots: Sequence[str]) -> Optional[str]:
         return f"{path} holds a '..' component"
     if is_under(path, roots):
         return None
-    if _deepest(os.path.realpath(path), _protected):
+    if _deepest(os.path.realpath(path), tuple(_protected)):
         return f"{path} is this agent's own runtime state"
     return f"{path} is not under {', '.join(roots)}"
 

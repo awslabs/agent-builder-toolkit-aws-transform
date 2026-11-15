@@ -36,6 +36,10 @@ def test_exact_secrets_are_redacted() -> None:
     ) == (f"value={REDACTED} ok")
 
 
+def test_a_single_exact_secret_passed_as_a_string_is_redacted() -> None:
+    assert scrub("dsn=db.example.com:5432 pw secretvalue123", "secretvalue123") == f"dsn=db.example.com:5432 pw {REDACTED}"
+
+
 def test_an_overlapping_exact_secret_is_redacted_whole() -> None:
     assert scrub("tok=abcdefgh12345678", ["abcdefgh", "abcdefgh12345678"]) == f"tok={REDACTED}"
 

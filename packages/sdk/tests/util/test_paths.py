@@ -4,6 +4,7 @@
 
 import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -113,3 +114,22 @@ def test_the_sdk_default_state_locations_are_protected_from_import(monkeypatch: 
     assert "runtime state" in (paths.unwritable("/tmp/atx-mcp-server.log", ["/tmp"]) or "")
     assert "runtime state" in (paths.unwritable("/tmp/orchestrator_agent/conversations.json", ["/tmp"]) or "")
     assert paths.unwritable("/tmp/a-report-that-does-not-exist.md", ["/tmp"]) is None
+
+
+def test_a_protect_call_while_a_path_is_checked_does_not_break_the_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths.protect(str(tmp_path / "state"))
+    realpath = os.path.realpath
+
+    class ProtectsOnCompare(str):
+        """Stands in for another thread that calls protect() between two steps of the check."""
+
+        def startswith(self, *args: Any, **kwargs: Any) -> bool:
+            paths.protect(f"/other-state-{len(paths._protected)}")
+            return super().startswith(*args, **kwargs)
+
+    monkeypatch.setattr(paths.os.path, "realpath", lambda path: ProtectsOnCompare(realpath(path)))
+
+    assert paths.is_under(str(tmp_path / "report.html"), [str(tmp_path)])
+    assert "runtime state" in (paths.unreadable(str(tmp_path / "state" / "x"), [str(tmp_path / "other")]) or "")

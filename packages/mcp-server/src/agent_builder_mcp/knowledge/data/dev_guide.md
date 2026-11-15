@@ -2873,9 +2873,11 @@ repository gets (default `/tmp/orchestrator/conversations`) and every checkpoint
 
 To keep credentials out of text that your own tools return to the model or write to logs, use
 `agent_builder_sdk.util.redact.scrub(text, secrets)`. It is best effort: it removes AWS access-key
-ids, literal values of secret-named keys (`password`, `api_key`, `client_secret`, `session_token`
-and similar) in JSON, env-file, INI (such as `~/.aws/credentials`) and YAML text, and the exact `secrets` values you pass. A secret
-under any other name passes unless you pass its value.
+ids, literal values of keys whose name ends in `client_secret`, `api_secret`, `api_key`,
+`secret_access_key`, `session_token` or `password` (after a prefix of letters and `_`, such as
+`aws_` or `db_`) in JSON, env-file, INI (such as `~/.aws/credentials`) and YAML text, and the
+exact `secrets` values you pass (one string or a list). A secret under any other name (for example `token`, `secret`,
+`access_token` or `private_key`), or in a URL or a header, passes unless you pass its value.
 
 ## AWS Transform Agentic API Specification
 
