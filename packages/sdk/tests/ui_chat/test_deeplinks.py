@@ -115,30 +115,56 @@ class TestTasksTab:
 class TestArtifact:
     """Tests for artifact deeplink generation."""
 
-    def test_artifact_static(self):
+    def test_artifact_static(self) -> None:
         """Test static artifact deeplink with workspace_id and job_id."""
         result = Deeplinks.artifact(
-            "View Report", artifact_name="report.json", job_id="job-67890", workspace_id="ws-12345"
+            "View Report", artifact_id="art-abc123", job_id="job-67890", workspace_id="ws-12345"
         )
         assert (
             result
-            == "[View Report](aws-transform://workspaces/ws-12345/jobs/job-67890/artifacts/report.json)"
+            == "[View Report](aws-transform://workspaces/ws-12345/jobs/job-67890/artifacts/art-abc123)"
         )
 
-    def test_artifact_dynamic_with_job(self):
+    def test_artifact_dynamic_with_job(self) -> None:
         """Test dynamic artifact deeplink with job_id only."""
-        result = Deeplinks.artifact("View Report", artifact_name="report.json", job_id="job-67890")
-        assert result == "[View Report](aws-transform://~/jobs/job-67890/artifacts/report.json)"
+        result = Deeplinks.artifact("View Report", artifact_id="art-abc123", job_id="job-67890")
+        assert result == "[View Report](aws-transform://~/jobs/job-67890/artifacts/art-abc123)"
 
-    def test_artifact_dynamic_no_context(self):
+    def test_artifact_dynamic_no_context(self) -> None:
         """Test dynamic artifact deeplink without any context."""
-        result = Deeplinks.artifact("View Report", artifact_name="report.json")
-        assert result == "[View Report](aws-transform://~/artifacts/report.json)"
+        result = Deeplinks.artifact("View Report", artifact_id="art-abc123")
+        assert result == "[View Report](aws-transform://~/artifacts/art-abc123)"
 
-    def test_artifact_raises_error_workspace_without_job(self):
+    @pytest.mark.parametrize("id_kwarg", ["artifact_id", "artifact_name"])
+    def test_artifact_raises_error_workspace_without_job(self, id_kwarg: str) -> None:
         """Test that artifact raises error when workspace_id provided without job_id."""
         with pytest.raises(ValueError, match="job_id is required when workspace_id is provided"):
-            Deeplinks.artifact("Report", artifact_name="report.json", workspace_id="ws-12345")
+            Deeplinks.artifact("Report", workspace_id="ws-12345", **{id_kwarg: "art-abc123"})
+
+    def test_every_earlier_call_form_builds_the_same_link(self) -> None:
+        """Positional and ``artifact_name=`` calls keep building the link they built before."""
+        static = "[R](aws-transform://workspaces/ws-1/jobs/job-1/artifacts/art-1)"
+        with_job = "[R](aws-transform://~/jobs/job-1/artifacts/art-1)"
+        dynamic = "[R](aws-transform://~/artifacts/art-1)"
+        assert Deeplinks.artifact("R", "art-1") == dynamic
+        assert Deeplinks.artifact("R", "art-1", "job-1") == with_job
+        assert Deeplinks.artifact("R", "art-1", "job-1", "ws-1") == static
+        assert Deeplinks.artifact("R", artifact_name="art-1") == dynamic
+        assert Deeplinks.artifact("R", artifact_name="art-1", job_id="job-1") == with_job
+        assert (
+            Deeplinks.artifact("R", artifact_name="art-1", job_id="job-1", workspace_id="ws-1")
+            == static
+        )
+        assert Deeplinks.artifact(display_text="R", artifact_name="art-1") == dynamic
+        assert Deeplinks.artifact(display_text="R", artifact_id="art-1") == dynamic
+
+    @pytest.mark.parametrize(
+        "ids",
+        [{}, {"artifact_id": "a", "artifact_name": "a"}, {"artifact_id": "", "artifact_name": ""}],
+    )
+    def test_artifact_requires_exactly_one_id(self, ids: dict[str, str]) -> None:
+        with pytest.raises(TypeError, match="artifact_id"):
+            Deeplinks.artifact("Report", **ids)
 
 
 class TestArtifactsList:
