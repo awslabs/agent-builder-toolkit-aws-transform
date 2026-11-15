@@ -624,6 +624,15 @@ class TestUntrustedResults:
         text = "2\u00b3\u00b2 bytes \uff21 \u00bd cafe\u0301 a\u034fb"
         assert ws._field(text, 100) == text
 
+    def test_an_unpaired_surrogate_in_a_reply_is_dropped(self, env: None, creds: None) -> None:
+        # json.loads turns these escapes into unpaired surrogates, which UTF-8 cannot encode.
+        cut = json.loads('"emoji cut \\ud83d here, low \\udc00 alone, pair \\ud83d\\ude00 kept"')
+        hit = {"title": cut, "url": cut, "text": cut, "publishedDate": cut}
+        with _serve(TOOLS, _search_reply([hit])):
+            out = _run(_new_tool(), query="q")
+        out.encode("utf-8")
+        assert "emoji cut  here, low  alone, pair \U0001f600 kept" in out
+
     def test_every_field_is_cut_to_its_limit(self) -> None:
         hit = {
             "title": "t" * 10_000,

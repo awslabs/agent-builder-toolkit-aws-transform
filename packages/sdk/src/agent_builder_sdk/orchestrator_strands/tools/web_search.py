@@ -21,9 +21,10 @@ Search results are untrusted text. The tool returns them between two markers wit
 they are data, and cuts every field to a fixed length. Every field is one line: each run of
 whitespace, line breaks included, becomes one space, so text in a result cannot start a line that
 reads as a further result or its URL. In every field it also drops control and format characters
-(Unicode categories Cc, Cf) and combining marks (Mn, Me) that follow a bracket, and puts a space
-between the brackets of each run of three or more ``<`` or ``>`` (ASCII, fullwidth or small form),
-so neither marker can appear in a result.
+and unpaired surrogates (Unicode categories Cc, Cf, Cs) and combining marks (Mn, Me) that follow a
+bracket, and puts a space between the brackets of each run of three or more ``<`` or ``>`` (ASCII,
+fullwidth or small form), so neither marker can appear in a result and the output always encodes
+as UTF-8.
 """
 
 import http.client
@@ -461,14 +462,17 @@ _WebSearcher = Union[_ApiWebSearch, _GatewayWebSearch]
 def _field(value: Any, limit: int) -> str:
     """A hit field as one line of at most ``limit`` characters plus the truncation mark. Each
     run of whitespace (line and paragraph separators included) is one space, so no part of a field
-    starts a line of the tool output. The field holds no control or format character (Unicode
-    categories Cc, Cf), no combining mark (Mn, Me) directly after a bracket, and no run of three
-    ``<`` or ``>`` in ASCII, fullwidth or small form, so neither marker can appear in it, also not
-    split by such characters. Any other character between two brackets stays."""
+    starts a line of the tool output. The field holds no control or format character and no
+    unpaired surrogate (Unicode categories Cc, Cf, Cs), so it encodes as UTF-8; no combining mark
+    (Mn, Me) directly after a bracket; and no run of three ``<`` or ``>`` in ASCII, fullwidth or
+    small form, so neither marker can appear in it, also not split by such characters. Any other
+    character between two brackets stays."""
     kept: list[str] = []
     for ch in " ".join(str(value or "").translate(_BRACKET_FORMS).split()):
         category = unicodedata.category(ch)
-        if category in ("Cc", "Cf") or (category in ("Mn", "Me") and kept and kept[-1] in "<>"):
+        if category in ("Cc", "Cf", "Cs") or (
+            category in ("Mn", "Me") and kept and kept[-1] in "<>"
+        ):
             continue
         kept.append(ch)
     text = "".join(kept)
