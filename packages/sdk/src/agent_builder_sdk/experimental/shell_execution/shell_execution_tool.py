@@ -597,13 +597,11 @@ def _start(
     # block ends, on every path: a pipe ends only when no copy of its write end is open,
     # and a stage gets SIGPIPE only when no copy of the read end is.
     with contextlib.ExitStack() as parent_copies:
-        devnull = os.open(os.devnull, os.O_RDWR)
-        parent_copies.callback(os.close, devnull)
         stderr_read, stderr_write = os.pipe()
         parent_copies.callback(os.close, stderr_write)
         # One byte over each limit is kept so that _decode can tell that output was cut.
         stderr_reader = _CappedReader(stderr_read, _MAX_STDERR_BYTES + 1)
-        stdin = devnull
+        stdin = subprocess.DEVNULL
         try:
             for stage, program in zip(stages, programs):
                 stdout_read, stdout_write = os.pipe()
@@ -614,7 +612,7 @@ def _start(
                     parent_copies.callback(os.close, stdout_read)
                 streams = {1: stdout_write, 2: stderr_write}
                 for stream, source in stage.redirections:
-                    streams[stream] = devnull if source is None else streams[source]
+                    streams[stream] = subprocess.DEVNULL if source is None else streams[source]
                 procs.append(
                     subprocess.Popen(
                         stage.argv,
