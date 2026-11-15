@@ -689,6 +689,21 @@ class TestUntrustedResults:
             out = _run(_new_tool(), query="q")
         assert out == "Error: web_search failed: " + "m" * 300
 
+    @pytest.mark.parametrize(
+        "reply",
+        [
+            {"error": {"code": -32000, "message": "cut \ud83d here"}},
+            {"result": {"isError": True, "content": [{"type": "text", "text": "cut \ud83d here"}]}},
+        ],
+    )
+    def test_an_unpaired_surrogate_in_error_text_is_replaced(
+        self, env: None, creds: None, reply: Any, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with _serve(TOOLS, reply), caplog.at_level(logging.WARNING, logger=ws.logger.name):
+            out = _run(_new_tool(), query="q")
+        assert out == "Error: web_search failed: cut ? here"
+        assert _warnings(caplog) == ["web_search failed: cut ? here"]
+
     def test_a_credential_error_text_is_cut(self, env: None) -> None:
         session = mock.Mock()
         session.get_credentials.side_effect = botocore.exceptions.CredentialRetrievalError(

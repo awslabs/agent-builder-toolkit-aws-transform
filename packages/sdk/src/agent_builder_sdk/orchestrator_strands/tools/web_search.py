@@ -611,8 +611,11 @@ def create_web_search_tool() -> Optional[AgentTool]:
             count = max(1, min(int(max_results or DEFAULT_MAX_RESULTS), MAX_RESULTS_CEILING))
             hits = _within(lambda: searcher.search(query, count))[:count]
         except _WebSearchError as exc:
-            logger.warning("%s", exc)
-            return f"Error: {exc}"
+            # Remote detail can hold unpaired surrogates (json.loads keeps them); UTF-8 cannot
+            # encode those, so each becomes "?".
+            message = str(exc).encode("utf-8", "replace").decode("utf-8")
+            logger.warning("%s", message)
+            return f"Error: {message}"
         except Exception:  # never raise into the agent loop
             logger.exception("web_search failed unexpectedly")
             return "Error: web_search failed unexpectedly."
