@@ -33,7 +33,7 @@ dependencies = [
     "structlog",
     "starlette_context",
     "defusedxml",
-    # image_reader and ImageBlockGuardHook. 10.3 is the first release with ImageMath.lambda_eval;
+    # image_reader and ImageBlockGuardHook. 10.3 is the oldest release tested;
     # Pillow removes deprecated APIs in major releases, so stay below the first untested one.
     "pillow>=10.3,<14",
     "aws-embedded-metrics>=3.0",
