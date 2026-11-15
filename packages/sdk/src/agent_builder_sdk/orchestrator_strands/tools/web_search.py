@@ -11,7 +11,7 @@
   web-search connector target and ``AWS_IAM`` inbound authorization. Requests are signed for
   ``ATX_WEB_SEARCH_GATEWAY_REGION`` (else ``AWS_REGION``; else ``us-east-1``, with one warning)
   and carry MCP protocol version ``2025-11-25``, which the Gateway must list in its
-  ``supportedVersions``.
+  ``supportedVersions``. They open no MCP session, so the Gateway must have sessions off.
 
 A value that cannot be served (a malformed Region, an API Region in no partition, a botocore
 without ``InvokeWebSearch``, a URL that is not https or holds user info) logs one warning and
