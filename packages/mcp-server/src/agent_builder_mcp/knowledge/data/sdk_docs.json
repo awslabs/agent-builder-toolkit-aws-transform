@@ -569,7 +569,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/agentic_framework/artifact_store.py",
     "module": "agent_builder_sdk.agentic_framework.artifact_store",
-    "docstring": "Download artifact by ID and put to the destination file path.\n\nSee download_from_presigned_url for how the file is written. ``visibility`` is sent\nwith the request only when given.",
+    "docstring": "Download artifact by ID and put to the destination file path.\n\nSee download_from_presigned_url for how the file is written. A body over 5 GiB fails\nthe download, for every artifact, also one in a customer bucket. ``visibility`` is\nsent with the request only when given.",
     "signature": "download_artifact(artifact_id: str, destination_file_path: str, *, visibility: VisibilityType | None = None) -> None"
   },
   {
@@ -681,7 +681,7 @@
     "kind": "function",
     "file": "agent_builder_sdk/agentic_framework/common.py",
     "module": "agent_builder_sdk.agentic_framework.common",
-    "docstring": "Download to ``destination_file_path``, streamed to disk 1 MiB at a time.\n\nThe file is written in full or not at all: the body goes to a temp file in the same\ndirectory, which then replaces the destination. A new file gets the mode the umask\nallows; an existing file keeps its mode. A destination that is a symlink is refused, and a\nbody over 5 GiB fails the download.",
+    "docstring": "Download to ``destination_file_path``, streamed to disk 1 MiB at a time.\n\nThe file is written in full or not at all: the body goes to a temp file in the same\ndirectory, which then replaces the destination. A new file gets the mode the umask\nallows; an existing file keeps its mode. A destination that is a symlink is refused. A\nbody over 5 GiB fails the download: before any of it is read when its Content-Length says\nso, else once the 5 GiB is passed.",
     "signature": "download_from_presigned_url(create_download_url_response: Union[CreateArtifactDownloadUrlResponseTypeDef, dict], destination_file_path: str, is_managed_bucket: bool = True) -> None",
     "description": "Parameters:\n  create_download_url_response: Union[CreateArtifactDownloadUrlResponseTypeDef, dict] (required)\n  destination_file_path: str (required)\n  is_managed_bucket: bool (default=True)"
   },
