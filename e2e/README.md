@@ -43,7 +43,7 @@ the test account reads `e2e/scenarios/` from:
   PR under test, not the PR that holds it. For example, PR #104 holds the scenario for PR #103:
 
 ```
-R=awslabs/agent-builder-toolkit-aws-transform; gh workflow run simulated-builder.yml --repo $R --ref main -f pr=103 -f sha=$(gh api repos/$R/pulls/103 --jq .head.sha) -f scenario=$(gh api repos/$R/pulls/104 --jq .head.sha)
+gh workflow run simulated-builder.yml --ref main -f pr=103 -f sha=<reviewed head commit of #103> -f scenario=<reviewed commit of #104>
 ```
 
 A scenario tells an AI agent what to type in a real AWS account. With `pull-request` or a commit,
