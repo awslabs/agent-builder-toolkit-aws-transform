@@ -6,9 +6,9 @@ name: Simulated builder
 # This workflow only records the request (its run name) and marks the commit as waiting. It checks
 # out nothing, runs no PR code and has no AWS access. The test account reads the public run list
 # and accepts only a manual run of this workflow on main, started by a maintainer, whose commit is
-# still the PR head. The scenario comes from main, or, with scenario=pull-request, from the PR at
-# that reviewed commit: the maintainer reviews the scenario file as part of the commit.
-run-name: "simulated-builder #${{ inputs.pr }} ${{ inputs.sha }}${{ inputs.scenario == 'pull-request' && ' scenario=pull-request' || '' }}"
+# still the PR head. It reads the scenario from main, from the reviewed commit (pull-request) or
+# from a commit of another PR that holds it; the maintainer reviews that file at that commit first.
+run-name: "simulated-builder #${{ inputs.pr }} ${{ inputs.sha }}${{ inputs.scenario != 'main' && format(' scenario={0}', inputs.scenario == 'pull-request' && inputs.sha || inputs.scenario) || '' }}"
 
 on:
   workflow_dispatch:
@@ -20,11 +20,8 @@ on:
         description: The reviewed head commit (40 hex characters)
         required: true
       scenario:
-        description: Scenario from main, or from the PR at the reviewed commit
-        type: choice
-        options:
-          - main
-          - pull-request
+        description: main, pull-request (the scenario in the reviewed commit of this PR), or the 40-hex commit of another pull request that holds the scenario
+        type: string
         default: main
 
 permissions:
@@ -44,7 +41,8 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           [[ "$PR" =~ ^[0-9]{1,6}$ && "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "pr must be a number and sha 40 hex characters"; exit 1; }
+          [[ "$SCENARIO" =~ ^(main|pull-request|[0-9a-f]{40})$ ]] || { echo "scenario must be main, pull-request or a commit of 40 hex characters"; exit 1; }
           head=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha)
           [ "$head" = "$SHA" ] || { echo "PR #$PR head is $head, not $SHA: review the new commit and start again"; exit 1; }
           gh api "repos/$REPO/statuses/$SHA" -f state=pending -f context=simulated-builder \
-            -f description="Requested by $GITHUB_ACTOR (scenario from $SCENARIO); waiting for the test account"
+            -f description="Requested by $GITHUB_ACTOR (scenario from ${SCENARIO:0:12}); waiting for the test account"

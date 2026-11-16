@@ -7,12 +7,12 @@ scenarios that a simulated developer runs against a PR's head commit to check ex
 
 ```
  maintainer ── reviews the PR at one commit, runs "Simulated builder" from main (PR number + SHA,
-                 scenario from main or from the PR)
+                 scenario from main, from the PR or from another PR's commit)
                   └─► status "simulated-builder: pending"  (no checkout, no secrets, no AWS access)
  test account ── reads GitHub's public run list; accepts only this workflow, on main,
                  started by a maintainer, whose SHA is still the PR head
               ── a simulated developer (an AI agent) follows e2e/scenarios/<feature>.md in Kiro
-                 (from main, or from the PR at that SHA when the maintainer chose it):
+                 (from main, or from the commit that the maintainer chose):
                    install the toolkit from the commit's source archive → build an agent
                    → deploy it → register it in AWS Transform → use it in a job → clean up
               ── verdict from evidence ──► PR comment + "simulated-builder: success | failure"
@@ -34,12 +34,22 @@ enter the PR number and the head commit you reviewed. Or:
 gh workflow run simulated-builder.yml --ref main -f pr=<number> -f sha=<head commit>
 ```
 
-The run follows the scenario whose `pr` field is the PR number. It comes from `main` by default.
-When the PR adds or changes its own scenario, choose `scenario: pull-request`
-(`-f scenario=pull-request`): the run then reads `e2e/scenarios/` from the PR at the commit you
-reviewed. The scenario tells an AI agent what to type in a real AWS account, so review that file
-like code, in the source diff and not the rendered view, before you start the run. A new push is
-not tested until a maintainer reviews it and starts a new run with the new SHA.
+The run follows the scenario whose `pr` field is the PR number. The `scenario` input says where
+the test account reads `e2e/scenarios/` from:
+
+- `main` (the default): the scenarios on `main`.
+- `pull-request`: the PR at the commit you reviewed, when the PR adds or changes its own scenario.
+- a commit (40 hex characters) of another PR that holds the scenario. Its `pr` field must name the
+  PR under test, not the PR that holds it. For example, PR #104 holds the scenario for PR #103:
+
+```
+R=awslabs/agent-builder-toolkit-aws-transform; gh workflow run simulated-builder.yml --repo $R --ref main -f pr=103 -f sha=$(gh api repos/$R/pulls/103 --jq .head.sha) -f scenario=$(gh api repos/$R/pulls/104 --jq .head.sha)
+```
+
+A scenario tells an AI agent what to type in a real AWS account. With `pull-request` or a commit,
+review the scenario file at that commit like code, in the source diff and not the rendered view,
+before you start the run. A new push is not tested until a maintainer reviews it and starts a new
+run with the new SHA.
 
 ## Write a scenario
 
@@ -57,9 +67,7 @@ Placeholders the runner fills: `{pr}`, `{commit}`, `{short}`, `{repo}` (the PR's
 `{archive}`, `{pip}` (pip requirements for all five packages at the commit), `{pip_runtime}` (the
 four the agent image needs), `{mcp_from}` (the MCP server at the commit, for `uvx --from`),
 `{agent}`, `{chat_label}`, `{workspace}`. Write prompts the way a developer would; say what to
-build and what to check, not how the harness works. Never put account IDs in a scenario. The
-test account refuses a scenario with an HTML comment or a character that a reader does not see
-(zero width, bidi, control).
+build and what to check, not how the harness works. Never put account IDs in a scenario.
 `tests/test_e2e_scenarios.py` checks the format in CI.
 
 ## Known workarounds in the scenarios
