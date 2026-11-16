@@ -6,11 +6,13 @@ deploy it, register it, and see it work in an AWS Transform job. This directory 
 scenarios that a simulated developer runs against a PR's head commit to check exactly that.
 
 ```
- maintainer ── reviews the PR at one commit, runs "Simulated builder" from main (PR number + SHA)
+ maintainer ── reviews the PR at one commit, runs "Simulated builder" from main (PR number + SHA,
+                 scenario from main or from the PR)
                   └─► status "simulated-builder: pending"  (no checkout, no secrets, no AWS access)
  test account ── reads GitHub's public run list; accepts only this workflow, on main,
                  started by a maintainer, whose SHA is still the PR head
-              ── a simulated developer (an AI agent) follows e2e/scenarios/<feature>.md in Kiro:
+              ── a simulated developer (an AI agent) follows e2e/scenarios/<feature>.md in Kiro
+                 (from main, or from the PR at that SHA when the maintainer chose it):
                    install the toolkit from the commit's source archive → build an agent
                    → deploy it → register it in AWS Transform → use it in a job → clean up
               ── verdict from evidence ──► PR comment + "simulated-builder: success | failure"
@@ -32,9 +34,12 @@ enter the PR number and the head commit you reviewed. Or:
 gh workflow run simulated-builder.yml --ref main -f pr=<number> -f sha=<head commit>
 ```
 
-The PR needs a scenario that exercises its change, either an existing one in `e2e/scenarios/` or
-a new one added by the PR. A new push is not tested until a maintainer reviews it and starts a
-new run with the new SHA.
+The run follows the scenario whose `pr` field is the PR number. It comes from `main` by default.
+When the PR adds or changes its own scenario, choose `scenario: pull-request`
+(`-f scenario=pull-request`): the run then reads `e2e/scenarios/` from the PR at the commit you
+reviewed. The scenario tells an AI agent what to type in a real AWS account, so review that file
+like code, in the source diff and not the rendered view, before you start the run. A new push is
+not tested until a maintainer reviews it and starts a new run with the new SHA.
 
 ## Write a scenario
 
@@ -52,7 +57,9 @@ Placeholders the runner fills: `{pr}`, `{commit}`, `{short}`, `{repo}` (the PR's
 `{archive}`, `{pip}` (pip requirements for all five packages at the commit), `{pip_runtime}` (the
 four the agent image needs), `{mcp_from}` (the MCP server at the commit, for `uvx --from`),
 `{agent}`, `{chat_label}`, `{workspace}`. Write prompts the way a developer would; say what to
-build and what to check, not how the harness works. Never put account IDs in a scenario.
+build and what to check, not how the harness works. Never put account IDs in a scenario. The
+test account refuses a scenario with an HTML comment or a character that a reader does not see
+(zero width, bidi, control).
 `tests/test_e2e_scenarios.py` checks the format in CI.
 
 ## Known workarounds in the scenarios
