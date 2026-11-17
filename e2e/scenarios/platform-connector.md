@@ -69,8 +69,8 @@ SDK class and method that return the temporary credentials, and cite the entries
 ```
 
 Expected: the answer names `platform|s3|1`, `create_platform_connector_hitl_task` and
-`Connector.get_temporary_credentials_for_connector`, and cites the developer guide entry and the
-SDK doc entry for `Connector` (`agent_builder_sdk/agentic_framework/connector.py`). Those entries
+`ConnectorClient.get_temporary_credentials_for_connector`, and cites the developer guide entry and the
+SDK doc entry for `ConnectorClient` (`agent_builder_sdk/agentic_framework/connector.py`). Those entries
 exist only at the PR commit, so this also checks the PR's docs and search index.
 
 ## 3. Build the agent
