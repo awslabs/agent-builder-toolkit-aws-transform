@@ -2097,7 +2097,7 @@ Ask the user for the platform S3 connector with the MCP tool `create_platform_co
 6. agent  -> your code gets temporary credentials for the connector and calls S3
 ```
 
-The connector type is `platform|s3|1`. It works for every agent. Its settings are `s3BucketArn` (required) and `s3BucketKmsKeyArn` (optional).
+The connector type is `platform|s3|1`. It works for every agent. Its settings are `s3BucketArn` (required) and `s3BucketKmsKeyArn` (optional: the ARN of a KMS key, not of an alias).
 
 In a custom tool, with the connector id that the model passes:
 
@@ -2110,6 +2110,9 @@ from agent_builder_sdk.agentic_framework.client_factory import create_agentic_ap
 from agent_builder_sdk.agentic_framework.connector import ConnectorClient
 from agent_builder_sdk.env_var import get_agent_context_from_env
 
+# At DEBUG, botocore logs requests and responses, and they hold secrets. The SDK's
+# configure_logging() sets DEBUG when STAGE is not prod.
+logging.getLogger("botocore").setLevel(logging.INFO)
 ctx = get_agent_context_from_env()
 connector_client = ConnectorClient(workspace_id=ctx.workspace_id, job_id=ctx.job_id,
                                    agent_instance_id=ctx.agent_instance_id,
@@ -2125,9 +2128,6 @@ if not match:
     raise ValueError(f"Connector {connector_id}: {arn!r} is not an S3 bucket ARN")
 bucket = match.group(1)
 creds = connector_client.get_temporary_credentials_for_connector(connector_id)
-# At DEBUG, botocore logs the access key id and the session token of each request, and
-# the SDK's configure_logging() sets DEBUG when STAGE is not prod.
-logging.getLogger("botocore").setLevel(logging.INFO)
 s3 = boto3.client("s3", aws_access_key_id=creds["accessKey"],
                   aws_secret_access_key=creds["secretKey"], aws_session_token=creds["accessToken"])
 ```
@@ -2140,6 +2140,7 @@ s3 = boto3.client("s3", aws_access_key_id=creds["accessKey"],
 - Give the model only the fields of the `get_connector` response that the agent needs, for example the status and the bucket ARN, never the whole response: it also holds `accountConnection.awsAccountConnection.connectionToken`.
 - The tool needs the step id of an existing job plan step. A subagent cannot create plan steps (`put_job_plan` is not among its tools by default), so it gets the step id from its orchestrator.
 - The error "Partner '<name>' is not authorized to access this type of connector" means that the connector has a workload-owned type. Ask for the platform connector instead.
+- An agent that is allowlisted for a mainframe or .NET modernization S3 connector type also gets `create_platform_connector_hitl_task`. To keep its type, its system prompt asks for that connector by name (for example "the mainframe modernization S3 connector"), or the agent hides the new tool with `excluded_mcp_tool_names={"create_platform_connector_hitl_task"}`.
 - The customer-side setup (who approves the connector, the connector role) is in the [AWS Transform User Guide](https://docs.aws.amazon.com/transform/latest/userguide/transform-user-connectors.html).
 
 ## HITL (Human-in-the-Loop) Task FAQs

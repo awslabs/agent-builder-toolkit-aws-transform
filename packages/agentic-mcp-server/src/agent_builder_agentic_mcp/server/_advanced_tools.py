@@ -270,7 +270,7 @@ _PLATFORM_CONNECTORS: Dict[str, Dict[str, Any]] = {
                 "fieldDescription": "ARN of the S3 bucket for this job's files",
                 "fieldRequired": True,
                 "fieldInputType": "text",
-                "fieldValidation": r"^arn:aws(-[\w]+)*:s3:.*:.*:[a-z0-9\-\.\_]+$",
+                "fieldValidation": r"^arn:aws[\w\-]*:s3:::[a-zA-Z0-9._\-]{3,255}$",
             },
             {
                 "fieldName": "s3BucketKmsKeyArn",
@@ -278,7 +278,7 @@ _PLATFORM_CONNECTORS: Dict[str, Dict[str, Any]] = {
                 "fieldDescription": "If your bucket uses KMS encryption, provide the key ARN",
                 "fieldRequired": False,
                 "fieldInputType": "text",
-                "fieldValidation": r"^arn:aws(-[\w]+)*:kms:.+:[0-9]{12}:[\w]+\/[\w-]+$",
+                "fieldValidation": r"^arn:aws(-[\w]+)*:kms:.+:[0-9]{12}:key\/[\w\-]+$",
             },
         ],
     },
@@ -292,8 +292,10 @@ async def create_platform_connector_hitl_task(
     """
     Creates and starts a HITL task that asks the user to create or select a platform connector. A platform connector
     gives the job scoped, temporary access to a resource in the user's AWS account. Platform connectors work for every
-    agent, with no allowlisting. After the user submits the task, retrieve_hitl_output_as_string returns the
-    connector id. Each call creates a new task, so call it once per plan step.
+    agent, with no allowlisting. Use this tool for S3 access unless the agent's instructions ask for a mainframe or
+    .NET modernization S3 connector: for those, use create_s3_connector_hitl_task. After the user submits the task,
+    retrieve_hitl_output_as_string returns the connector id. Each call creates a new task, so call it once per plan
+    step.
 
     :param step_id: The step id for the step associated with the HITL task. This must be a valid step in the current job plan.
     :param connector: Which platform connector to ask for. "s3": an Amazon S3 bucket
@@ -318,9 +320,10 @@ async def create_s3_connector_hitl_task(
     step_id: str, connector_type: Literal["m2", "dotnet"] = "m2"
 ) -> Dict[str, Any]:
     """
-    Creates and starts a HITL task for a workload-owned S3 connector type (mainframe modernization or .NET
-    modernization): only agents that AWS Transform has allowlisted for that workload can get credentials from these
-    connectors, and every other agent must use create_platform_connector_hitl_task instead.
+    Creates and starts a HITL task for a workload-owned S3 connector type: mainframe modernization or .NET
+    modernization. Use it when the agent's instructions ask for one of these connector types. Only agents that AWS
+    Transform has allowlisted for that workload can get credentials from these connectors. For other S3 access, use
+    create_platform_connector_hitl_task.
 
     :param step_id: The step id for the step associated with the HITL task. This must be a valid step in the current job plan.
     :param connector_type: The type of S3 connector to create. Options: "m2" (mainframe_modernization|s3|1) or "dotnet" (dotnet_modernization|s3|1)
