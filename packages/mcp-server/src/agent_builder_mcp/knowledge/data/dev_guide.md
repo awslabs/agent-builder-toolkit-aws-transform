@@ -2132,7 +2132,8 @@ s3 = boto3.client("s3", aws_access_key_id=creds["accessKey"],
                   aws_secret_access_key=creds["secretKey"], aws_session_token=creds["accessToken"])
 ```
 
-- Check the connector status after the user submits the task, as the sample does. Do not assume that the approval came first.
+- Check the connector status before you ask for credentials, as the sample does. The web application enables the Submit button of the task only after the approval, but the model can pass any connector id. For a connector that is not ACTIVE, `get_temporary_credentials_for_connector` raises a `ValidationException` that says the connector "is not in active state".
+- A connector belongs to its workspace. Another job in the same workspace can use it with no new task, and the write prefix is then that job's `transform-output/<jobId>/`. A connector of another workspace is not found (`ResourceNotFoundException`).
 - The credentials last about one hour. Call `get_temporary_credentials_for_connector` again after that.
 - The credentials allow reading the bucket and writing under `transform-output/<jobId>/`.
 - Never return key material to the model. Keep the `botocore` logger at INFO or above in an agent that uses these credentials: at DEBUG, botocore logs the session token of each request.
