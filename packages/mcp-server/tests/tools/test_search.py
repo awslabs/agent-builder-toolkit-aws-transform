@@ -18,6 +18,12 @@ class TestKeywordSearch:
         assert "content" in parsed[0]
         assert "citation" in parsed[0]
 
+    def test_keyword_search_s3_connector_shows_platform_type(self) -> None:
+        """Test that a search for the S3 connector shows the platform connector type."""
+        result = _lite.keyword_search("S3 connector", top_k=5)
+        parsed = json.loads(result)
+        assert any("platform|s3|1" in item["content"] for item in parsed)
+
 
 class TestSearchBySource:
     """Tests for search_by_source function."""
