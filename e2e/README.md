@@ -37,7 +37,9 @@ whose `pr` field is the PR number, so the PR must contain it: add the scenario i
 `main` into the PR if the scenario is already on `main`. A scenario tells an AI agent what to type
 in a real AWS account: review it like code, in the source diff and not the rendered view, before
 you start the run. A new push is not tested until a maintainer reviews it and starts a new run
-with the new SHA.
+with the new SHA. So that the diff shows the whole scenario, the run stops when a `.gitattributes`
+file at the top, in `e2e/` or in `e2e/scenarios/` defines a macro or sets `export-ignore`, or when
+a line of it that can match a scenario sets `binary`, `-diff` or `linguist-generated`.
 
 ## Write a scenario
 
