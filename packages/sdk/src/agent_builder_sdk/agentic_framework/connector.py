@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import logging
 import threading
+from typing import Callable, TypeVar
 
 import agent_builder_types.type_defs as abt
 from agent_builder_sdk.agentic_framework.agentic_api_helper import AgenticApiHelper
@@ -9,7 +10,29 @@ from agent_builder_types import TransformAgenticServiceClient
 
 logger = logging.getLogger(__name__)
 
-_BOTOCORE_LOG_LEVEL_LOCK = threading.Lock()
+_BOTOCORE_LOG_LEVEL_LOCK = threading.RLock()
+_T = TypeVar("_T")
+
+
+def _with_quiet_parser_logger(call: Callable[[], _T]) -> _T:
+    """Run an API call whose response holds a secret, with `botocore.parsers` at INFO or above.
+
+    At DEBUG, that logger writes the response body. A logger level is process-wide, so the lock
+    keeps a concurrent call from restoring DEBUG during this one; at DEBUG it also serializes these
+    calls for the network call and retries. The level check takes the lock too: a call that saw
+    INFO only because another call raised it would run unguarded once that call restores DEBUG.
+    The lock is re-entrant, so a guarded call made inside another one does not block.
+    """
+    parser_logger = logging.getLogger("botocore.parsers")
+    with _BOTOCORE_LOG_LEVEL_LOCK:
+        if parser_logger.getEffectiveLevel() < logging.INFO:
+            level = parser_logger.level
+            parser_logger.setLevel(logging.INFO)
+            try:
+                return call()
+            finally:
+                parser_logger.setLevel(level)
+    return call()
 
 
 class ConnectorClient(AgenticApiHelper):
@@ -31,6 +54,9 @@ class ConnectorClient(AgenticApiHelper):
         from agent_builder_sdk.agentic_framework.connector import ConnectorClient
         from agent_builder_sdk.env_var import get_agent_context_from_env
 
+        # At DEBUG, botocore logs requests and responses, and they hold secrets. The SDK's
+        # configure_logging() sets DEBUG when STAGE is not prod.
+        logging.getLogger("botocore").setLevel(logging.INFO)
         ctx = get_agent_context_from_env()
         connector_client = ConnectorClient(
             workspace_id=ctx.workspace_id,
@@ -49,9 +75,6 @@ class ConnectorClient(AgenticApiHelper):
             raise ValueError(f"Connector {connector_id}: {arn!r} is not an S3 bucket ARN")
         bucket = match.group(1)
         creds = connector_client.get_temporary_credentials_for_connector(connector_id)
-        # At DEBUG, botocore logs the access key id and the session token of each request, and
-        # the SDK's configure_logging() sets DEBUG when STAGE is not prod.
-        logging.getLogger("botocore").setLevel(logging.INFO)
         s3 = boto3.client(
             "s3",
             aws_access_key_id=creds["accessKey"],
@@ -73,8 +96,9 @@ class ConnectorClient(AgenticApiHelper):
         for example the status and the bucket ARN, never the whole response: the response also
         holds `accountConnection.awsAccountConnection.connectionToken`.
         """
-        return self.client.get_connector(
-            connectorId=connector_id, requestContext=self._create_request_context()
+        context = self._create_request_context()
+        return _with_quiet_parser_logger(
+            lambda: self.client.get_connector(connectorId=connector_id, requestContext=context)
         )
 
     def get_temporary_credentials_for_connector(
@@ -96,17 +120,9 @@ class ConnectorClient(AgenticApiHelper):
         if target_region is not None:
             request["targetRegion"] = target_region
 
-        parser_logger = logging.getLogger("botocore.parsers")
-        # At DEBUG, this logger writes the response body, which holds the keys. A logger level is
-        # process-wide, so without the lock a concurrent call restores DEBUG during this one.
-        # The lock also serializes credential calls in the process for the network call and retries.
-        with _BOTOCORE_LOG_LEVEL_LOCK:
-            level = parser_logger.level
-            parser_logger.setLevel(max(parser_logger.getEffectiveLevel(), logging.INFO))
-            try:
-                response = self.client.get_temporary_credentials_for_connector(**request)
-            finally:
-                parser_logger.setLevel(level)
+        response = _with_quiet_parser_logger(
+            lambda: self.client.get_temporary_credentials_for_connector(**request)
+        )
 
         creds = response.get("temporaryCredentials", {}).get("awsTemporaryCredentials", {})
         # A boto3 client built with keys that are None uses the agent's own role, without an error.

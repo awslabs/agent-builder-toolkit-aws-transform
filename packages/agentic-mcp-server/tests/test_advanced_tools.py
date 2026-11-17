@@ -572,19 +572,42 @@ class TestCreatePlatformConnectorHitlTask:
         assert "platform|s3|1" not in tools["create_platform_connector_hitl_task"].description
 
     def test_platform_s3_connector_field_validation(self):
-        """Test that the S3 field patterns take ARNs of any partition, not a bucket name or URL."""
+        """Test that the S3 field patterns take only bucket and key ARNs, of any partition."""
         fields = _PLATFORM_CONNECTORS["s3"]["fields"]
         patterns = {f["fieldName"]: f["fieldValidation"] for f in fields}
 
-        for value in ("arn:aws:s3:::my-bucket", "arn:aws-cn:s3:::my-bucket"):
+        for value in (
+            "arn:aws:s3:::my-bucket",
+            "arn:aws-cn:s3:::my-bucket",
+            "arn:aws-us-gov:s3:::my.bucket-1",
+            "arn:aws:s3:::Legacy_Bucket",
+        ):
             assert re.search(patterns["s3BucketArn"], value), value
-        for value in ("my-bucket", "s3://my-bucket"):
+            # The bucket parse of the SDK and FAQ sample must accept what the form accepts.
+            assert re.fullmatch(r"arn:aws[\w-]*:s3:::([^/]+)", value), value
+        for value in (
+            "my-bucket",
+            "s3://my-bucket",
+            "arn:aws:s3:::ab",
+            "arn:aws:s3:::my-bucket/prefix",
+            "arn:aws:s3:us-east-1:123456789012:accesspoint/my-ap",
+            "arn:awsx:s3:::my-bucket",
+            "arn:aws:s3:::...",
+            "arn:aws:s3:::-ab-",
+        ):
             assert not re.search(patterns["s3BucketArn"], value), value
         for value in (
             "arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab",
-            "arn:aws:kms:us-east-1:123456789012:alias/my-key",
+            "arn:aws-cn:kms:cn-north-1:123456789012:key/mrk-1234abcd12ab34cd56ef1234567890ab",
         ):
             assert re.search(patterns["s3BucketKmsKeyArn"], value), value
+        # An IAM policy on an alias ARN does not grant access to the key.
+        for value in (
+            "arn:aws:kms:us-east-1:123456789012:alias/my-key",
+            "1234abcd-12ab-34cd-56ef-1234567890ab",
+            "arn:aws:kms:us-east-1:x:y:123456789012:key/abc",
+        ):
+            assert not re.search(patterns["s3BucketKmsKeyArn"], value), value
 
 
 class TestCreateAutoformHitlTask:

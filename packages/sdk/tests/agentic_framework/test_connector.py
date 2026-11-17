@@ -7,6 +7,7 @@ from unittest import mock
 
 import pytest
 
+import agent_builder_sdk.agentic_framework.connector as connector_module
 from agent_builder_sdk.agentic_framework.connector import ConnectorClient
 from agent_builder_types.client import TransformAgenticServiceClient
 
@@ -45,6 +46,22 @@ def credentials_response():
     }
 
 
+def _held_by_another_thread(lock):
+    """Whether some thread holds the lock. A re-entrant lock has no `locked()` before Python 3.14,
+    and the thread that holds it can take it again, so the probe runs in a new thread."""
+    acquired = []
+
+    def probe():
+        acquired.append(lock.acquire(blocking=False))
+        if acquired[0]:
+            lock.release()
+
+    thread = threading.Thread(target=probe)
+    thread.start()
+    thread.join(timeout=5)
+    return acquired != [True]
+
+
 class TestGetConnector:
     """Test cases for get_connector method."""
 
@@ -68,6 +85,27 @@ class TestGetConnector:
             "workspaceId": "test-workspace",
         }
         assert call_args["requestContext"]["agentInstanceId"] == "test-agent"
+
+    def test_botocore_does_not_log_the_connection_token(self, connector, caplog):
+        """At DEBUG, the parser logger is held at INFO for the call, then gets its level back."""
+        caplog.set_level(logging.DEBUG)
+        caplog.set_level(logging.NOTSET, logger="botocore")
+        parser_logger = logging.getLogger("botocore.parsers")
+        response = {
+            "accountConnection": {
+                "awsAccountConnection": {"status": "ACTIVE", "connectionToken": "test-token"}
+            }
+        }
+
+        def respond(**kwargs):
+            parser_logger.debug("Response body: %r", response)
+            return response
+
+        connector.client.get_connector.side_effect = respond
+
+        assert connector.get_connector("test-connector") == response
+        assert "test-token" not in caplog.text
+        assert parser_logger.level == logging.NOTSET
 
 
 class TestGetTemporaryCredentialsForConnector:
@@ -145,7 +183,8 @@ class TestGetTemporaryCredentialsForConnector:
     def test_overlapping_calls_do_not_log_the_response_body(
         self, connector, credentials_response, caplog
     ):
-        """A call that starts during another one must not bring DEBUG back before it ends."""
+        """A call that starts during another one waits for it: it must not take the raised level
+        for INFO and skip the guard, and must not bring DEBUG back before the first call ends."""
         caplog.set_level(logging.DEBUG)
         caplog.set_level(logging.NOTSET, logger="botocore")
         parser_logger = logging.getLogger("botocore.parsers")
@@ -163,7 +202,9 @@ class TestGetTemporaryCredentialsForConnector:
         connector.client.get_temporary_credentials_for_connector.side_effect = respond
         threads = [
             threading.Thread(
-                target=connector.get_temporary_credentials_for_connector, args=("test-connector",)
+                target=connector.get_temporary_credentials_for_connector,
+                args=("test-connector",),
+                daemon=True,
             )
             for _ in range(2)
         ]
@@ -177,8 +218,56 @@ class TestGetTemporaryCredentialsForConnector:
             event.set()
             thread.join(timeout=5)
 
+        assert not any(thread.is_alive() for thread in threads)
+        assert connector.client.get_temporary_credentials_for_connector.call_count == 2
         assert "test-secret-key" not in caplog.text
         assert parser_logger.level == logging.NOTSET
+
+    def test_no_lock_and_no_level_change_at_info(self, connector, credentials_response, caplog):
+        """When the parser logger is already at INFO or above, the call runs without the lock."""
+        caplog.set_level(logging.INFO)
+        caplog.set_level(logging.NOTSET, logger="botocore")
+        parser_logger = logging.getLogger("botocore.parsers")
+        locked_in_call = []
+        levels_in_call = []
+
+        def respond(**kwargs):
+            locked_in_call.append(_held_by_another_thread(connector_module._BOTOCORE_LOG_LEVEL_LOCK))
+            levels_in_call.append(parser_logger.level)
+            return credentials_response
+
+        connector.client.get_temporary_credentials_for_connector.side_effect = respond
+
+        connector.get_temporary_credentials_for_connector("test-connector")
+
+        assert locked_in_call == [False]
+        assert levels_in_call == [logging.NOTSET]
+        assert parser_logger.level == logging.NOTSET
+
+    def test_nested_guarded_call_does_not_block(self, caplog):
+        """At DEBUG, a guarded call made inside another one finishes, while the outer call holds
+        the lock."""
+        caplog.set_level(logging.DEBUG)
+        caplog.set_level(logging.NOTSET, logger="botocore")
+        lock = connector_module._BOTOCORE_LOG_LEVEL_LOCK
+        held_in_call = []
+        results = []
+
+        def outer():
+            held_in_call.append(_held_by_another_thread(lock))
+            return connector_module._with_quiet_parser_logger(lambda: "inner")
+
+        thread = threading.Thread(
+            target=lambda: results.append(connector_module._with_quiet_parser_logger(outer)),
+            daemon=True,
+        )
+        thread.start()
+        thread.join(timeout=5)
+
+        assert not thread.is_alive()
+        assert results == ["inner"]
+        assert held_in_call == [True]
+        assert logging.getLogger("botocore.parsers").level == logging.NOTSET
 
     @pytest.mark.parametrize(
         "aws_credentials",
