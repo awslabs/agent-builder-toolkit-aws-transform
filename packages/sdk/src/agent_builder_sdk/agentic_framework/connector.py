@@ -1,6 +1,5 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
-import json
 import logging
 import threading
 
@@ -13,8 +12,8 @@ logger = logging.getLogger(__name__)
 _BOTOCORE_LOG_LEVEL_LOCK = threading.Lock()
 
 
-class Connector(AgenticApiHelper):
-    """Gives an agent temporary AWS credentials for a customer resource through an AWS Transform
+class ConnectorClient(AgenticApiHelper):
+    r"""Gives an agent temporary AWS credentials for a customer resource through an AWS Transform
     connector.
 
     To read files in a customer's S3 bucket, use the platform S3 connector, type `platform|s3|1`.
@@ -24,24 +23,35 @@ class Connector(AgenticApiHelper):
 
     Example, in a custom tool that gets the connector id from the model:
 
+        import logging
+        import re
+
         import boto3
         from agent_builder_sdk.agentic_framework.client_factory import create_agentic_api_client
-        from agent_builder_sdk.agentic_framework.connector import Connector
+        from agent_builder_sdk.agentic_framework.connector import ConnectorClient
         from agent_builder_sdk.env_var import get_agent_context_from_env
 
         ctx = get_agent_context_from_env()
-        connector = Connector(
+        connector_client = ConnectorClient(
             workspace_id=ctx.workspace_id,
             job_id=ctx.job_id,
             agent_instance_id=ctx.agent_instance_id,
             client=create_agentic_api_client(),
         )
-        info = connector.get_connector(connector_id)
-        status = info["accountConnection"]["awsAccountConnection"]["status"]
+        info = connector_client.get_connector(connector_id)
+        account = info.get("accountConnection", {}).get("awsAccountConnection", {})
+        status = account.get("status", "not connected to an AWS account")
         if status != "ACTIVE":
             raise RuntimeError(f"Connector {connector_id} is {status}: it needs approval first")
-        bucket = info["configuration"]["s3BucketArn"].split(":::")[-1]
-        creds = connector.get_temporary_credentials_for_connector(connector_id)
+        arn = info.get("configuration", {}).get("s3BucketArn", "")
+        match = re.fullmatch(r"arn:aws[\w-]*:s3:::([^/]+)", arn)
+        if not match:
+            raise ValueError(f"Connector {connector_id}: {arn!r} is not an S3 bucket ARN")
+        bucket = match.group(1)
+        creds = connector_client.get_temporary_credentials_for_connector(connector_id)
+        # At DEBUG, botocore logs the access key id and the session token of each request, and
+        # the SDK's configure_logging() sets DEBUG when STAGE is not prod.
+        logging.getLogger("botocore").setLevel(logging.INFO)
         s3 = boto3.client(
             "s3",
             aws_access_key_id=creds["accessKey"],
@@ -49,43 +59,19 @@ class Connector(AgenticApiHelper):
             aws_session_token=creds["accessToken"],
         )
 
-    The credentials are secrets: never return them to the model. Keep the `botocore` logger at
-    INFO or above in an agent that uses them: at DEBUG, botocore logs the session token of each
-    request.
+    The credentials are secrets: never return them to the model.
     """
 
     client: TransformAgenticServiceClient
-
-    def build_general_connector_artifact(
-        self,
-        connector_type: str,
-        title: str,
-        description: str,
-        fields: list[dict],
-        max_instances: int = 1,
-    ) -> bytes:
-        """Return the input artifact of a GeneralConnector HITL task, as JSON bytes."""
-        # The GeneralConnector component reads its input from the top-level "properties" key.
-        # Without it the web app cannot render the task.
-        payload = {
-            "properties": {
-                "connector": {
-                    "connectorType": connector_type,
-                    "title": title,
-                    "description": description,
-                    "maxInstances": max_instances,
-                    "fields": fields,
-                }
-            }
-        }
-        return json.dumps(payload).encode("utf-8")
 
     def get_connector(self, connector_id: str) -> abt.GetConnectorResponseTypeDef:
         """Return the details of a connector.
 
         The approval status (PENDING, ACTIVE or REJECTED) is at
         `accountConnection.awsAccountConnection.status`. The connector's settings, for example
-        `s3BucketArn`, are in `configuration`.
+        `s3BucketArn`, are in `configuration`. Give the model only the fields that the agent needs,
+        for example the status and the bucket ARN, never the whole response: the response also
+        holds `accountConnection.awsAccountConnection.connectionToken`.
         """
         return self.client.get_connector(
             connectorId=connector_id, requestContext=self._create_request_context()
@@ -101,7 +87,7 @@ class Connector(AgenticApiHelper):
         hour; call again after that.
 
         Raises:
-            ValueError: The response holds no access key or no secret key.
+            ValueError: The access key, the secret key or the session token is missing or empty.
         """
         request: dict = {
             "connectorId": connector_id,
@@ -113,6 +99,7 @@ class Connector(AgenticApiHelper):
         parser_logger = logging.getLogger("botocore.parsers")
         # At DEBUG, this logger writes the response body, which holds the keys. A logger level is
         # process-wide, so without the lock a concurrent call restores DEBUG during this one.
+        # The lock also serializes credential calls in the process for the network call and retries.
         with _BOTOCORE_LOG_LEVEL_LOCK:
             level = parser_logger.level
             parser_logger.setLevel(max(parser_logger.getEffectiveLevel(), logging.INFO))
@@ -123,7 +110,7 @@ class Connector(AgenticApiHelper):
 
         creds = response.get("temporaryCredentials", {}).get("awsTemporaryCredentials", {})
         # A boto3 client built with keys that are None uses the agent's own role, without an error.
-        if not creds.get("accessKey") or not creds.get("secretKey"):
+        if not all(creds.get(key) for key in ("accessKey", "secretKey", "accessToken")):
             raise ValueError(f"No temporary credentials returned for connector {connector_id}")
 
         logger.info(

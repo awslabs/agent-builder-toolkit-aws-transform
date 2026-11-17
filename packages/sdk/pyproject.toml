@@ -42,7 +42,7 @@ dependencies = [
 
 [project.optional-dependencies]
 full = [
-    "agent-builder-agentic-mcp-aws-transform>=1.0",
+    "agent-builder-agentic-mcp-aws-transform>=1.1",
     "agent-builder-mcp-aws-transform>=1.0",
 ]
 test = ["pytest", "pytest-asyncio"]

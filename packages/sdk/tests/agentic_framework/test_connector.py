@@ -1,6 +1,5 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
-import json
 import logging
 import threading
 from datetime import datetime, timezone
@@ -8,7 +7,7 @@ from unittest import mock
 
 import pytest
 
-from agent_builder_sdk.agentic_framework.connector import Connector
+from agent_builder_sdk.agentic_framework.connector import ConnectorClient
 from agent_builder_types.client import TransformAgenticServiceClient
 
 
@@ -22,7 +21,7 @@ def retrieve_auth_token():
 
 @pytest.fixture
 def connector():
-    return Connector(
+    return ConnectorClient(
         workspace_id="test-workspace",
         job_id="test-job",
         agent_instance_id="test-agent",
@@ -44,37 +43,6 @@ def credentials_response():
         "connectorConfiguration": {"s3BucketArn": "arn:aws:s3:::test-bucket"},
         "targetRegion": "us-east-1",
     }
-
-
-class TestBuildGeneralConnectorArtifact:
-    """Test cases for build_general_connector_artifact method."""
-
-    def test_artifact_has_properties_wrapper(self, connector):
-        """The artifact holds the given connector under the top-level "properties" key."""
-        fields = [
-            {"fieldName": "s3BucketArn", "fieldTitle": "S3 Bucket ARN", "fieldRequired": True},
-            {"fieldName": "s3BucketKmsKeyArn", "fieldTitle": "Key ARN", "fieldRequired": False},
-        ]
-
-        artifact = connector.build_general_connector_artifact(
-            connector_type="platform|s3|1",
-            title="Amazon S3",
-            description="Connect the S3 bucket",
-            fields=fields,
-            max_instances=3,
-        )
-
-        assert json.loads(artifact) == {
-            "properties": {
-                "connector": {
-                    "connectorType": "platform|s3|1",
-                    "title": "Amazon S3",
-                    "description": "Connect the S3 bucket",
-                    "maxInstances": 3,
-                    "fields": fields,
-                }
-            }
-        }
 
 
 class TestGetConnector:
@@ -219,11 +187,20 @@ class TestGetTemporaryCredentialsForConnector:
             {"secretKey": "test-secret-key"},
             {"accessKey": "", "secretKey": "test-secret-key"},
             {"accessKey": "test-access-key"},
+            {"accessKey": "test-access-key", "secretKey": "test-secret-key"},
+            {"accessKey": "test-access-key", "secretKey": "test-secret-key", "accessToken": ""},
         ],
-        ids=["no credentials", "no access key", "empty access key", "no secret key"],
+        ids=[
+            "no credentials",
+            "no access key",
+            "empty access key",
+            "no secret key",
+            "no session token",
+            "empty session token",
+        ],
     )
     def test_missing_credentials_raise(self, connector, aws_credentials):
-        """A response without an access key or a secret key raises instead of returning."""
+        """A response without an access key, a secret key or a session token raises."""
         response = {}
         if aws_credentials is not None:
             response = {"temporaryCredentials": {"awsTemporaryCredentials": aws_credentials}}

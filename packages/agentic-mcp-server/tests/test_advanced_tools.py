@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import base64
 import json
+import re
 from unittest import mock
 
 import pytest
@@ -34,6 +35,7 @@ from agent_builder_agentic_mcp.datamodels import (
 )
 from agent_builder_agentic_mcp.server import mcp
 from agent_builder_agentic_mcp.server._advanced_tools import (
+    _PLATFORM_CONNECTORS,
     create_autoform_hitl_task,
     create_autotable_hitl_task,
     create_hitl_task_with_json_input,
@@ -568,6 +570,21 @@ class TestCreatePlatformConnectorHitlTask:
 
         assert "create_platform_connector_hitl_task" in tools
         assert "platform|s3|1" not in tools["create_platform_connector_hitl_task"].description
+
+    def test_platform_s3_connector_field_validation(self):
+        """Test that the S3 field patterns take ARNs of any partition, not a bucket name or URL."""
+        fields = _PLATFORM_CONNECTORS["s3"]["fields"]
+        patterns = {f["fieldName"]: f["fieldValidation"] for f in fields}
+
+        for value in ("arn:aws:s3:::my-bucket", "arn:aws-cn:s3:::my-bucket"):
+            assert re.search(patterns["s3BucketArn"], value), value
+        for value in ("my-bucket", "s3://my-bucket"):
+            assert not re.search(patterns["s3BucketArn"], value), value
+        for value in (
+            "arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab",
+            "arn:aws:kms:us-east-1:123456789012:alias/my-key",
+        ):
+            assert re.search(patterns["s3BucketKmsKeyArn"], value), value
 
 
 class TestCreateAutoformHitlTask:

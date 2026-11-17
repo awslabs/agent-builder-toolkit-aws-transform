@@ -261,16 +261,16 @@ _PLATFORM_CONNECTORS: Dict[str, Dict[str, Any]] = {
     "s3": {
         "connectorType": "platform|s3|1",
         "title": "Amazon S3",
-        "description": "Connect the S3 bucket where your source files are stored.",
+        "description": "Connect the S3 bucket for this job's input and output files.",
         "maxInstances": 1,
         "fields": [
             {
                 "fieldName": "s3BucketArn",
                 "fieldTitle": "S3 Bucket ARN",
-                "fieldDescription": "ARN of the S3 bucket containing your source files",
+                "fieldDescription": "ARN of the S3 bucket for this job's files",
                 "fieldRequired": True,
                 "fieldInputType": "text",
-                "fieldValidation": "",
+                "fieldValidation": r"^arn:aws(-[\w]+)*:s3:.*:.*:[a-z0-9\-\.\_]+$",
             },
             {
                 "fieldName": "s3BucketKmsKeyArn",
@@ -278,7 +278,7 @@ _PLATFORM_CONNECTORS: Dict[str, Dict[str, Any]] = {
                 "fieldDescription": "If your bucket uses KMS encryption, provide the key ARN",
                 "fieldRequired": False,
                 "fieldInputType": "text",
-                "fieldValidation": "",
+                "fieldValidation": r"^arn:aws(-[\w]+)*:kms:.+:[0-9]{12}:[\w]+\/[\w-]+$",
             },
         ],
     },
@@ -293,7 +293,7 @@ async def create_platform_connector_hitl_task(
     Creates and starts a HITL task that asks the user to create or select a platform connector. A platform connector
     gives the job scoped, temporary access to a resource in the user's AWS account. Platform connectors work for every
     agent, with no allowlisting. After the user submits the task, retrieve_hitl_output_as_string returns the
-    connector id.
+    connector id. Each call creates a new task, so call it once per plan step.
 
     :param step_id: The step id for the step associated with the HITL task. This must be a valid step in the current job plan.
     :param connector: Which platform connector to ask for. "s3": an Amazon S3 bucket

@@ -773,4 +773,4 @@ task = client.wait_for_human_submission(task_id)
 - Search `keyword_search("HITL getting started domTreeJson")` for building custom HITL UI JSON with DynamicHITLRenderEngine
 - Search `keyword_search("HITL common patterns templates")` for 10+ ready-to-use UI templates
 - See the developer guide FAQ "How can my agent read files from a customer's S3 bucket?" for connector-specific HITL integration
-- See `orchestrator-patterns.md` for agent setup and runtime architecture
+- See the developer guide section "Base Agent Code Walkthrough" for agent setup and runtime architecture
