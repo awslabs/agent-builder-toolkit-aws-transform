@@ -10,7 +10,7 @@ from agent_builder_types import TransformAgenticServiceClient
 
 logger = logging.getLogger(__name__)
 
-_BOTOCORE_LOG_LEVEL_LOCK = threading.Lock()
+_BOTOCORE_LOG_LEVEL_LOCK = threading.RLock()
 _T = TypeVar("_T")
 
 
@@ -21,6 +21,7 @@ def _with_quiet_parser_logger(call: Callable[[], _T]) -> _T:
     keeps a concurrent call from restoring DEBUG during this one; at DEBUG it also serializes these
     calls for the network call and retries. The level check takes the lock too: a call that saw
     INFO only because another call raised it would run unguarded once that call restores DEBUG.
+    The lock is re-entrant, so a guarded call made inside another one does not block.
     """
     parser_logger = logging.getLogger("botocore.parsers")
     with _BOTOCORE_LOG_LEVEL_LOCK:

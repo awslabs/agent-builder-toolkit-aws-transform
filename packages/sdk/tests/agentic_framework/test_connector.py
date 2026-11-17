@@ -46,6 +46,22 @@ def credentials_response():
     }
 
 
+def _held_by_another_thread(lock):
+    """Whether some thread holds the lock. A re-entrant lock has no `locked()` before Python 3.14,
+    and the thread that holds it can take it again, so the probe runs in a new thread."""
+    acquired = []
+
+    def probe():
+        acquired.append(lock.acquire(blocking=False))
+        if acquired[0]:
+            lock.release()
+
+    thread = threading.Thread(target=probe)
+    thread.start()
+    thread.join(timeout=5)
+    return acquired != [True]
+
+
 class TestGetConnector:
     """Test cases for get_connector method."""
 
@@ -216,7 +232,7 @@ class TestGetTemporaryCredentialsForConnector:
         levels_in_call = []
 
         def respond(**kwargs):
-            locked_in_call.append(connector_module._BOTOCORE_LOG_LEVEL_LOCK.locked())
+            locked_in_call.append(_held_by_another_thread(connector_module._BOTOCORE_LOG_LEVEL_LOCK))
             levels_in_call.append(parser_logger.level)
             return credentials_response
 
@@ -227,6 +243,31 @@ class TestGetTemporaryCredentialsForConnector:
         assert locked_in_call == [False]
         assert levels_in_call == [logging.NOTSET]
         assert parser_logger.level == logging.NOTSET
+
+    def test_nested_guarded_call_does_not_block(self, caplog):
+        """At DEBUG, a guarded call made inside another one finishes, while the outer call holds
+        the lock."""
+        caplog.set_level(logging.DEBUG)
+        caplog.set_level(logging.NOTSET, logger="botocore")
+        lock = connector_module._BOTOCORE_LOG_LEVEL_LOCK
+        held_in_call = []
+        results = []
+
+        def outer():
+            held_in_call.append(_held_by_another_thread(lock))
+            return connector_module._with_quiet_parser_logger(lambda: "inner")
+
+        thread = threading.Thread(
+            target=lambda: results.append(connector_module._with_quiet_parser_logger(outer)),
+            daemon=True,
+        )
+        thread.start()
+        thread.join(timeout=5)
+
+        assert not thread.is_alive()
+        assert results == ["inner"]
+        assert held_in_call == [True]
+        assert logging.getLogger("botocore.parsers").level == logging.NOTSET
 
     @pytest.mark.parametrize(
         "aws_credentials",

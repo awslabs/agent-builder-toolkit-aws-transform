@@ -591,6 +591,9 @@ class TestCreatePlatformConnectorHitlTask:
             "arn:aws:s3:::ab",
             "arn:aws:s3:::my-bucket/prefix",
             "arn:aws:s3:us-east-1:123456789012:accesspoint/my-ap",
+            "arn:awsx:s3:::my-bucket",
+            "arn:aws:s3:::...",
+            "arn:aws:s3:::-ab-",
         ):
             assert not re.search(patterns["s3BucketArn"], value), value
         for value in (
@@ -599,7 +602,11 @@ class TestCreatePlatformConnectorHitlTask:
         ):
             assert re.search(patterns["s3BucketKmsKeyArn"], value), value
         # An IAM policy on an alias ARN does not grant access to the key.
-        for value in ("arn:aws:kms:us-east-1:123456789012:alias/my-key", "1234abcd-12ab-34cd-56ef-1234567890ab"):
+        for value in (
+            "arn:aws:kms:us-east-1:123456789012:alias/my-key",
+            "1234abcd-12ab-34cd-56ef-1234567890ab",
+            "arn:aws:kms:us-east-1:x:y:123456789012:key/abc",
+        ):
             assert not re.search(patterns["s3BucketKmsKeyArn"], value), value
 
 

@@ -270,7 +270,7 @@ _PLATFORM_CONNECTORS: Dict[str, Dict[str, Any]] = {
                 "fieldDescription": "ARN of the S3 bucket for this job's files",
                 "fieldRequired": True,
                 "fieldInputType": "text",
-                "fieldValidation": r"^arn:aws[\w\-]*:s3:::[a-zA-Z0-9._\-]{3,255}$",
+                "fieldValidation": r"^arn:aws(-[a-z]+)*:s3:::[a-zA-Z0-9][a-zA-Z0-9._\-]{1,253}[a-zA-Z0-9]$",
             },
             {
                 "fieldName": "s3BucketKmsKeyArn",
@@ -278,7 +278,7 @@ _PLATFORM_CONNECTORS: Dict[str, Dict[str, Any]] = {
                 "fieldDescription": "If your bucket uses KMS encryption, provide the key ARN",
                 "fieldRequired": False,
                 "fieldInputType": "text",
-                "fieldValidation": r"^arn:aws(-[\w]+)*:kms:.+:[0-9]{12}:key\/[\w\-]+$",
+                "fieldValidation": r"^arn:aws(-[a-z]+)*:kms:[a-z0-9\-]+:[0-9]{12}:key\/[a-zA-Z0-9\-]+$",
             },
         ],
     },
