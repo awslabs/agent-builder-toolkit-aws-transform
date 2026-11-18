@@ -39,7 +39,7 @@ def async_subagent(mock_model):
 def test_initialization_defaults(subagent):
     """Test subagent initialization with default parameters."""
     assert subagent.system_prompt == "Test prompt"
-    assert subagent.model_id == "anthropic.claude-sonnet-4-5-20250929-v1:0"
+    assert subagent.model_id == "anthropic.claude-sonnet-5-5"
     assert subagent.region_name == "us-east-1"
     assert subagent.custom_tools == []
     assert hasattr(subagent, "model")
@@ -150,7 +150,7 @@ def test_initialize_bedrock_model_default_credentials(mock_factory, mock_model):
 
     # Verify BedrockModelFactory was called with default parameters
     mock_factory.assert_called_once_with(
-        model_id="anthropic.claude-sonnet-4-5-20250929-v1:0",
+        model_id="anthropic.claude-sonnet-5-5",
         region_name="us-east-1",
         guardrail_id=None,
         guardrail_version=None,

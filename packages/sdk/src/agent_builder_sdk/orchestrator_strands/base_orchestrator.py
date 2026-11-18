@@ -71,7 +71,7 @@ if TYPE_CHECKING:
 from agent_builder_sdk.util.suggestions_manager import (
     begin_turn_scope as begin_suggestions_turn_scope,
 )
-from agent_builder_sdk.utils import combine_tools, mcp_session_active
+from agent_builder_sdk.utils import _StripReplayedThinking, combine_tools, mcp_session_active
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +119,7 @@ class _BaseOrchestrator(StrandsAgent):
         excluded_tool_names: Optional[Set[str]] = None,
         excluded_mcp_tool_names: Optional[Set[str]] = None,
         region_name: str = "us-east-1",
-        model_id: str = "anthropic.claude-sonnet-4-5-20250929-v1:0",
+        model_id: str = "anthropic.claude-sonnet-5-5",
         model: Union[Model, str, None] = None,
         boto_client_config: Optional[BotocoreConfig] = None,
         evaluation_card: Optional[EvaluationCard] = None,
@@ -228,6 +228,7 @@ class _BaseOrchestrator(StrandsAgent):
             hooks=cast(List[Any], list(hooks)) if hooks else None,
             **kwargs,
         )
+        self.hooks.add_hook(_StripReplayedThinking())
 
         logger.info(f"Orchestrator initialized: model={model_id}")
 
@@ -393,7 +394,7 @@ class BaseOrchestrator(_BaseOrchestrator, BaseAgent[ProcessMessageRequest, Agent
 
             orchestrator = BaseOrchestrator(
                 system_prompt="You are an orchestrator managing multiple agents.",
-                model_id="anthropic.claude-sonnet-4-5-20250929-v1:0"
+                model_id="anthropic.claude-sonnet-5-5"
             )
 
             request = ProcessMessageRequest(

@@ -84,8 +84,8 @@ class TestAutoPatcher:
 
     def test_custom_model_id(self):
         client = FakeLLMClient(response="+fix")
-        p = AutoPatcher(llm_client=client, model_id="anthropic.claude-opus-4-0-20250514")
-        assert p.model_id == "anthropic.claude-opus-4-0-20250514"
+        p = AutoPatcher(llm_client=client, model_id="anthropic.claude-opus-5-5")
+        assert p.model_id == "anthropic.claude-opus-5-5"
 
     def test_generate_with_file_context(self):
         client = FakeLLMClient(response="+improved")

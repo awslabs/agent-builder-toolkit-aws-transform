@@ -6,10 +6,21 @@ import tempfile
 from importlib.resources import read_text
 from multiprocessing import Process
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Set
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set
 
 from pydantic import BaseModel
 from strands.agent import AgentResult
+from strands.hooks import (
+    AfterModelCallEvent,
+    BeforeInvocationEvent,
+    BeforeModelCallEvent,
+    HookOrder,
+    HookProvider,
+    HookRegistry,
+)
+from strands.models import Model
+from strands.types.content import Message
+from strands.types.exceptions import ContextWindowOverflowException
 
 from agent_builder_sdk.custom_types.common_types import (
     A2AError,
@@ -258,6 +269,97 @@ def extract_text_from_strands_agent_response(response: AgentResult) -> str:
             text_blocks.append(text)
 
     return "\n".join(text_blocks).strip()
+
+
+# Strands' placeholder for empty assistant content. The model reads it in history, and
+# BlankReplyHookProvider counts a reply that copies it back as empty.
+_BLANK_TEXT_SENTINEL = "[blank text]"
+
+
+class _StripReplayedThinking(HookProvider):
+    """Drop reasoning blocks from history before they are replayed behind a changed prefix.
+
+    Claude 5.5 models bind each thinking block to the system prompt, the tools and every
+    message before it; where that check is enforced, a replayed block whose prefix changed is
+    rejected with HTTP 400. The SDK reorders history (notifications are merged into user
+    conversations) and trims it (sliding window), so earlier turns' thinking can't be replayed
+    safely. The strip runs at three points:
+
+    - every invocation start;
+    - before a model call, when a message that an earlier model call saw is gone or replaced
+      (a per-turn trim or proactive compression by the conversation manager);
+    - after a context-window overflow, before Strands trims or truncates history and retries.
+
+    Thinking produced during an invocation otherwise stays in place for its own tool loop.
+
+    A model set to manual extended thinking (``thinking`` of type ``enabled`` in the Bedrock
+    provider's ``additional_request_fields`` or in the Anthropic provider's ``params``) is never
+    stripped: the mode requires the tool call in progress to start with its thinking block, also
+    when the invocation resumes that call after an interrupt, and the models that accept it
+    (Claude 4.6 and earlier) do not bind thinking to the prefix. This follows the published API
+    rules and was not checked against a live model. A manual-mode setting under any other config
+    key is not read: that model is stripped, and its overflow retry or resumed tool call is then
+    rejected.
+    """
+
+    def __init__(self) -> None:
+        self._seen: list[Message] = []
+
+    def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
+        # SDK_LAST: run after hooks that swap in or trim the history, such as
+        # ConversationHookProvider and the conversation manager.
+        registry.add_callback(BeforeInvocationEvent, self._strip, order=HookOrder.SDK_LAST)
+        registry.add_callback(
+            BeforeModelCallEvent, self._strip_after_history_change, order=HookOrder.SDK_LAST
+        )
+        registry.add_callback(AfterModelCallEvent, self._strip_before_overflow_retry)
+
+    @staticmethod
+    def _strip(event: BeforeInvocationEvent | BeforeModelCallEvent | AfterModelCallEvent) -> None:
+        if _uses_manual_thinking(event.agent.model):
+            return
+        messages = event.agent.messages
+        for i, message in enumerate(messages):
+            content = [block for block in message["content"] if "reasoningContent" not in block]
+            if len(content) < len(message["content"]):
+                # Replace in place so message positions (session restore offsets) and unchanged
+                # message objects (shared with the conversation repository) stay as they are.
+                # A thinking-only turn, such as a content-filtered reply, gets Strands' own
+                # placeholder for empty assistant content; Bedrock rejects empty messages.
+                messages[i] = {**message, "content": content or [{"text": _BLANK_TEXT_SENTINEL}]}
+
+    def _strip_after_history_change(self, event: BeforeModelCallEvent) -> None:
+        # Compared by identity: a summary that replaces another summary leaves the message count
+        # and the conversation manager's removed_message_count as they were. Invocation start
+        # strips without this check: a restored session has no earlier call to compare with.
+        messages = event.agent.messages
+        if any(seen is not message for seen, message in zip(self._seen, messages)):
+            self._strip(event)
+        self._seen = list(messages)
+
+    @classmethod
+    def _strip_before_overflow_retry(cls, event: AfterModelCallEvent) -> None:
+        if isinstance(event.exception, ContextWindowOverflowException):
+            cls._strip(event)
+
+
+def _uses_manual_thinking(model: Model) -> bool:
+    """Whether a model's config asks for extended thinking with a fixed token budget.
+
+    Reads ``thinking`` under ``additional_request_fields`` (Bedrock provider) and under
+    ``params`` (Anthropic provider). The LiteLLM provider keeps the setting under ``params``
+    too and so matches, but Strands sends no reasoning blocks back through it: the strip does
+    not change its requests.
+    """
+    config = model.get_config()
+    if not isinstance(config, Mapping):
+        return False
+    for key in ("additional_request_fields", "params"):
+        fields = config.get(key)
+        thinking = fields.get("thinking") if isinstance(fields, Mapping) else None
+        if isinstance(thinking, Mapping) and thinking.get("type") == "enabled":
+            return True
+    return False
 
 
 def describe_agent_result(result: Any) -> str:

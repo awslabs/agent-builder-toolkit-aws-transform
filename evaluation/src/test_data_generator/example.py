@@ -37,8 +37,7 @@ def example_basic_generation():
     # Initialize generator
     generator = IntelligentTestGenerator(
         region_name='us-west-2',
-        model_id='us.anthropic.claude-opus-4-5-20251101-v1:0',
-        temperature=0.8
+        model_id='us.anthropic.claude-opus-5-5'
     )
 
     # Generate 5 tests
@@ -80,8 +79,7 @@ def example_with_power_md():
     # Initialize generator
     generator = IntelligentTestGenerator(
         region_name='us-west-2',
-        model_id='us.anthropic.claude-opus-4-5-20251101-v1:0',
-        temperature=0.8
+        model_id='us.anthropic.claude-opus-5-5'
     )
 
     # Generate tests with POWER.md context
@@ -116,7 +114,7 @@ def example_domain_analysis():
     # Initialize analyzer
     analyzer = DomainAnalyzer(
         region_name='us-west-2',
-        model_id='us.anthropic.claude-opus-4-5-20251101-v1:0'
+        model_id='us.anthropic.claude-opus-5-5'
     )
 
     # Load source context (required for domain understanding)
@@ -164,8 +162,7 @@ def example_high_diversity():
     # Initialize generator
     generator = IntelligentTestGenerator(
         region_name='us-west-2',
-        model_id='us.anthropic.claude-opus-4-5-20251101-v1:0',
-        temperature=0.9  # Higher temperature for more creativity
+        model_id='us.anthropic.claude-opus-5-5'
     )
 
     # Generate with high diversity
@@ -198,7 +195,7 @@ def example_specific_complexity():
     # Initialize generator
     generator = IntelligentTestGenerator(
         region_name='us-west-2',
-        model_id='us.anthropic.claude-opus-4-5-20251101-v1:0'
+        model_id='us.anthropic.claude-opus-5-5'
     )
 
     # Generate only complex tests

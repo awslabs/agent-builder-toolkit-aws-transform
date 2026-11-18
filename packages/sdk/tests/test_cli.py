@@ -50,7 +50,7 @@ def test_create_parser_defaults(parser):
 
     assert args.binaryLocation == "/path/to/binary"
     # Check default values
-    assert args.model_id == "anthropic.claude-sonnet-4-5-20250929-v1:0"
+    assert args.model_id == "anthropic.claude-sonnet-5-5"
     assert args.region == "us-west-2"
     assert args.storage_dir == "/ramdisk/orchestrator_agent"
     assert args.queueStoragePath == "/tmp/agent_queue"

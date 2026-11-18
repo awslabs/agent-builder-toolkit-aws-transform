@@ -1,19 +1,22 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 import copy
-import importlib.util
 import json
 from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock, Mock, create_autospec
 
 import pytest
-import strands.hooks
 from strands import ModelRetryStrategy, tool
 from strands.event_loop._recover_message_on_max_tokens_reached import (
     recover_message_on_max_tokens_reached,
 )
-from strands.hooks import AfterModelCallEvent, BeforeInvocationEvent, MessageAddedEvent
+from strands.hooks import (
+    AfterModelCallEvent,
+    BeforeInvocationEvent,
+    HookOrder,
+    MessageAddedEvent,
+)
 from strands.models import Model
 from strands.types.exceptions import (
     EventLoopException,
@@ -31,7 +34,6 @@ from agent_builder_sdk.orchestrator_strands.hooks import ConversationHookProvide
 from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
     _ANSWER_MARKER,
     _CONTINUATION_TEXT,
-    _RUN_LATE,
     _STATE_KEY,
     BLANK_REPLY_CONTINUATION_MARKER,
     BlankReplyHookProvider,
@@ -51,8 +53,6 @@ def record_note(note: str) -> str:
 
 
 _THROTTLE = "throttle"
-
-_HOOK_ORDER = getattr(strands.hooks, "HookOrder", None)  # added in strands 1.43
 
 
 def _text(text: str, stop_reason: str = "end_turn") -> list[dict[str, Any]]:
@@ -307,10 +307,6 @@ async def test_an_answered_ask_is_replayed_whatever_the_answer(tmpdir, answer):
     assert [i for i, m in enumerate(_history(tmpdir)) if _is_answer(m)] == [4]
 
 
-@pytest.mark.skipif(
-    _HOOK_ORDER is None,
-    reason="no HookOrder on this strands: the continuation cannot be ordered after the retry strategy",
-)
 async def test_continuation_gets_its_own_throttling_budget(tmpdir):
     """The empty call used up five of six attempts; the continuation must still be retried."""
     orchestrator = _orchestrator(
@@ -323,7 +319,6 @@ async def test_continuation_gets_its_own_throttling_budget(tmpdir):
     assert extract_text_from_strands_agent_response(result) == "Three steps."
 
 
-@pytest.mark.skipif(_HOOK_ORDER is None, reason="no HookOrder on this strands: hooks are unordered")
 async def test_a_partner_hook_that_raises_on_the_answer_leaves_no_ask_stored(tmpdir):
     orchestrator = _orchestrator(
         [_text_and_tool("Plan."), _EMPTY, _text("Answer."), _text("Turn 2."), _text("Turn 3.")],
@@ -337,7 +332,7 @@ async def test_a_partner_hook_that_raises_on_the_answer_leaves_no_ask_stored(tmp
             if len(answers) == 3:
                 raise RuntimeError("partner hook failed on the continuation's answer")
 
-    orchestrator.hooks.add_callback(AfterModelCallEvent, partner, order=_HOOK_ORDER.DEFAULT + 2)
+    orchestrator.hooks.add_callback(AfterModelCallEvent, partner, order=HookOrder.DEFAULT + 2)
 
     with pytest.raises(EventLoopException):
         await orchestrator.invoke_async("What is the plan?")
@@ -365,7 +360,6 @@ def _discard_the_third_answer(
     orchestrator.hooks.add_callback(AfterModelCallEvent, discard, **order)
 
 
-@pytest.mark.skipif(_HOOK_ORDER is None, reason="no HookOrder on this strands: hooks are unordered")
 @pytest.mark.parametrize(
     "feedback", [(), ("Reply in English.", "Be brief.")], ids=["discard", "with-feedback"]
 )
@@ -374,7 +368,7 @@ async def test_an_answer_a_later_hook_discards_leaves_its_replacement_marked(tmp
         [_text_and_tool("Plan."), _EMPTY, _text("Discarded."), _text("Kept."), _text("Turn 2.")],
         tmpdir,
     )
-    _discard_the_third_answer(orchestrator, feedback, order=_HOOK_ORDER.DEFAULT + 200)
+    _discard_the_third_answer(orchestrator, feedback, order=HookOrder.DEFAULT + 200)
 
     await orchestrator.invoke_async("What is the plan?")
     await orchestrator.invoke_async("Second question?")
@@ -429,18 +423,6 @@ async def test_memory_recall_skips_the_ask_through_a_discarded_answer(tmpdir):
     recalled_for = [c.kwargs["message"] for c in memory.get_context_for_message.call_args_list]
     assert recalled_for == ["What is the plan?"]
     assert _history(tmpdir)[3]["content"] == [{"text": _CONTINUATION_TEXT}]
-
-
-def test_registers_unordered_when_strands_has_no_hookorder(monkeypatch):
-    if _HOOK_ORDER is not None:
-        assert _RUN_LATE == {"order": _HOOK_ORDER.DEFAULT + 100}
-    spec = importlib.util.find_spec(BlankReplyHookProvider.__module__)
-    assert spec is not None and spec.loader is not None
-    monkeypatch.delattr(strands.hooks, "HookOrder", raising=False)
-    fresh = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(fresh)  # a separate module object: the class under test is untouched
-
-    assert fresh._RUN_LATE == {}
 
 
 async def test_failed_continuation_call_keeps_the_pending_prompt():

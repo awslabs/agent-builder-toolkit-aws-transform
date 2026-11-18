@@ -143,15 +143,8 @@ Examples:
 
     parser.add_argument(
         '--model-id',
-        default='us.anthropic.claude-opus-4-5-20251101-v1:0',
-        help='Bedrock model ID (default: Claude Opus 4.5)'
-    )
-
-    parser.add_argument(
-        '--temperature',
-        type=float,
-        default=0.8,
-        help='Generation temperature (0-1, default: 0.8)'
+        default='us.anthropic.claude-opus-5-5',
+        help='Bedrock model ID (default: Claude Opus 5.5)'
     )
 
     parser.add_argument(
@@ -231,8 +224,7 @@ Examples:
         # Initialize generator
         generator = IntelligentTestGenerator(
             region_name=args.region,
-            model_id=args.model_id,
-            temperature=args.temperature
+            model_id=args.model_id
         )
 
         if args.analyze_only:
@@ -247,6 +239,10 @@ Examples:
 
             analysis_file = output_path / "domain_analysis.json"
             analyzer.save_analysis(analysis, str(analysis_file))
+            # The analyzer logs and swallows Bedrock and parse errors into these keys.
+            if {"error", "raw_response"} & analysis["domain_understanding"].keys():
+                logger.error(f"FAIL: Domain analysis failed; see the errors above and {analysis_file}")
+                sys.exit(1)
 
             logger.info(f"\n{'=' * 80}")
             logger.info("ANALYSIS COMPLETE")
@@ -277,6 +273,11 @@ Examples:
                 deduplicate=not args.no_deduplicate,
                 ensure_complex_tests=not args.no_ensure_complex
             )
+
+            if not generated_tests:
+                # Bedrock errors are logged per batch and swallowed; don't report them as success.
+                logger.error("FAIL: No test cases were generated; see the errors above")
+                sys.exit(1)
 
             logger.info(f"\n{'=' * 80}")
             logger.info("GENERATION COMPLETE")

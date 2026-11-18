@@ -36,7 +36,7 @@ from agent_builder_sdk.custom_types.orchestrator_agent_types import (
 from agent_builder_sdk.interfaces import AsyncBaseAgent, BaseAgent, StreamingCapable
 from agent_builder_sdk.metrics.metrics_config import MetricsConfig
 from agent_builder_sdk.streaming.config import DEFAULT_STREAMING_CONFIG, StreamingConfig
-from agent_builder_sdk.utils import combine_tools, mcp_session_active
+from agent_builder_sdk.utils import _StripReplayedThinking, combine_tools, mcp_session_active
 
 if TYPE_CHECKING:
     # Type-only; the runtime import stays lazy inside the streaming methods so non-streaming
@@ -58,7 +58,7 @@ class _BaseSubagent(StrandsAgent):
         excluded_tool_names: Optional[Set[str]] = None,
         excluded_mcp_tool_names: Optional[Set[str]] = None,
         region_name: str = "us-east-1",
-        model_id: str = "anthropic.claude-sonnet-4-5-20250929-v1:0",
+        model_id: str = "anthropic.claude-sonnet-5-5",
         model: Union[Model, str, None] = None,
         metrics_config: Optional[MetricsConfig] = None,
         **kwargs,
@@ -111,6 +111,7 @@ class _BaseSubagent(StrandsAgent):
             hooks=cast(List[Any], list(hooks)) if hooks else None,
             **kwargs,
         )
+        self.hooks.add_hook(_StripReplayedThinking())
 
         logger.info(
             f"BaseSubagent initialized: model={model_id if model is None else type(model).__name__}"
@@ -195,7 +196,7 @@ class BaseSubagent(_BaseSubagent, BaseAgent[Union[str, ProcessMessageRequest], A
 
             agent = BaseSubagent(
                 system_prompt="You are a helpful assistant.",
-                model_id="anthropic.claude-sonnet-4-5-20250929-v1:0"
+                model_id="anthropic.claude-sonnet-5-5"
             )
             result = agent.process_message("Hello, how can you help me?")
             print(result.message)

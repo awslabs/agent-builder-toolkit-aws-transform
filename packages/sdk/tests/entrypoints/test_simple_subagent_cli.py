@@ -23,7 +23,7 @@ class TestSimpleSubagentCLI:
         assert args.port == 8080
         assert args.storage_dir == "/tmp/sub_agent"
         assert args.region == os.getenv("AWS_REGION", "us-west-2")
-        assert args.model_id == "anthropic.claude-sonnet-4-5-20250929-v1:0"
+        assert args.model_id == "anthropic.claude-sonnet-5-5"
         assert (
             args.binary_location == "/home/amazon/AgentBuilderAgenticMCP/bin/agent-builder-agentic-mcp"
         )

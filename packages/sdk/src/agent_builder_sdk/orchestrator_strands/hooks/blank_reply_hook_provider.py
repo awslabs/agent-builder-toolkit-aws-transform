@@ -6,6 +6,7 @@ from typing import Any
 from strands.hooks import (
     AfterModelCallEvent,
     BeforeInvocationEvent,
+    HookOrder,
     HookProvider,
     HookRegistry,
     MessageAddedEvent,
@@ -16,24 +17,13 @@ from agent_builder_sdk.orchestrator_strands.conversation.constants import Messag
 from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     conversation_source_type,
 )
-
-# HookOrder is strands >= 1.43.
-try:
-    from strands.hooks import HookOrder  # type: ignore[attr-defined, unused-ignore]
-
-    _RUN_LATE: dict[str, Any] = {"order": HookOrder.DEFAULT + 100}
-except ImportError:
-    _RUN_LATE = {}
+from agent_builder_sdk.utils import _BLANK_TEXT_SENTINEL
 
 logger = logging.getLogger(__name__)
 
 BLANK_REPLY_CONTINUATION_MARKER = "blank_reply_continuation"
 """Key set in ``metadata.custom`` of the continuation message (metadata never reaches the model).
 ``MessageAddedEvent`` hooks that treat user text as input should skip messages carrying it."""
-
-# Strands shows the model this text in place of an empty assistant message from history; a model
-# that copies it back has still written nothing.
-_BLANK_TEXT_SENTINEL = "[blank text]"
 
 _CONTINUATION_TEXT = (
     "Your last response was empty, so nothing has reached the user. Write your reply to the user "
@@ -57,13 +47,15 @@ class BlankReplyHookProvider(HookProvider):
     (https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons).
 
     The continuation reaches the conversation store only once the model answers it, and that answer
-    is marked as its answer: the answer's signed thinking was produced with the ask in context, so
-    replayed history must keep the ask, and it is never removed. An ask whose call raises (a
-    terminal model error, or the turn timing out) is never stored. One stored without its marked
-    answer right after it, because something failed between storing the two or the process died
-    there, stays in the store; ``drop_unanswered_continuations`` removes it from every history
-    ``ConversationHookProvider`` loads, with or without this hook, so it never reaches the model
-    again.
+    is marked as its answer. An answered ask is never removed: the answer's signed thinking was
+    produced with the ask in context, and it is replayed for the rest of that invocation (the
+    answer can call tools). The SDK's base agents drop earlier turns' thinking when an invocation
+    starts, so later turns need the ask only on an agent that still replays that thinking. An ask
+    whose call raises (a terminal model error, or the turn timing out) is never stored. One stored
+    without its marked answer right after it, because something failed between storing the two or
+    the process died there, stays in the store; ``drop_unanswered_continuations`` removes it from
+    every history ``ConversationHookProvider`` loads, with or without this hook, so it never
+    reaches the model again.
 
     Runs late among ``AfterModelCallEvent`` hooks (a high ``HookOrder``). After Strands'
     ``ModelRetryStrategy``, because a retry requested before the strategy runs makes it skip
@@ -72,8 +64,7 @@ class BlankReplyHookProvider(HookProvider):
     so before the ask is stored. A message that such a hook stores on that answer lands ahead of
     the ask. Any message stored between the ask and its answer instead makes the ask look
     unanswered, and replay drops it: one that a hook ordered after this one stores on the answer,
-    or any message stored before the replacement once such a hook discards the answer. Without
-    ``HookOrder`` it registers unordered and accepts all of this.
+    or any message stored before the replacement once such a hook discards the answer.
 
     Left alone:
     - turns served over message/stream (``stream_state`` in ``invocation_state``): the streaming
@@ -84,7 +75,9 @@ class BlankReplyHookProvider(HookProvider):
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(BeforeInvocationEvent, self._reset)
-        registry.add_callback(AfterModelCallEvent, self._continue_if_blank, **_RUN_LATE)
+        registry.add_callback(
+            AfterModelCallEvent, self._continue_if_blank, order=HookOrder.DEFAULT + 100
+        )
 
     def _reset(self, event: BeforeInvocationEvent) -> None:
         event.invocation_state.pop(_STATE_KEY, None)
@@ -114,8 +107,7 @@ class BlankReplyHookProvider(HookProvider):
         if pending is not None:
             if response is None or event.retry:
                 # The call raised, or an earlier hook discarded its answer. Leave the ask in place:
-                # a retry is still the continuation, and without HookOrder this runs before the
-                # retry strategy has decided whether to retry. _reset drops an unanswered leftover.
+                # a retry is still the continuation. _reset drops an unanswered leftover.
                 return
             state[_STATE_KEY] = True
             await event.agent.hooks.invoke_callbacks_async(
