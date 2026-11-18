@@ -6,11 +6,18 @@ Unit tests for Base Server implementation.
 Tests the BaseServer abstract class functionality including setup_tracing.
 """
 
+import functools
+import logging
+from typing import Any, Callable, Optional
 from unittest import mock
 
 import pytest
 
-from agent_builder_sdk.server.base_server import BaseServer
+from agent_builder_sdk.server.base_server import (
+    BaseServer,
+    _locale_kwargs,
+    _log_locale_not_passed,
+)
 
 
 class ConcreteBaseServer(BaseServer):
@@ -528,3 +535,131 @@ class TestHandleStreamingTerminalGuarantee:
         body = "".join([c async for c in resp.body_iterator])
         frames = self._parse_frames(body)
         assert frames[-1]["status"]["state"] == "completed"  # stream completed, no crash
+
+
+class _CallableFactory:
+    def __call__(self, mcp_client: Any, storage_dir: str, locale: Optional[str] = None) -> None:
+        return None
+
+
+def _wrapped(*wrappers: Callable[..., Any]) -> Callable[..., Any]:
+    """``wrappers``, outermost first, as ``functools.wraps`` wrappers of a factory that names
+    ``locale``."""
+    return functools.reduce(
+        lambda factory, wrapper: functools.wraps(factory)(wrapper),
+        reversed(wrappers),
+        lambda mcp_client, storage_dir, locale=None: None,
+    )
+
+
+@pytest.mark.parametrize(
+    "factory, expected",
+    [
+        (lambda mcp_client, storage_dir, locale=None: None, {"locale": "ja"}),
+        (lambda mcp_client, storage_dir, *, locale=None: None, {"locale": "ja"}),
+        (lambda mcp_client, storage_dir, locale=None, **kwargs: None, {"locale": "ja"}),
+        (_CallableFactory(), {"locale": "ja"}),
+        (_wrapped(lambda *args, **kwargs: None), {"locale": "ja"}),
+        (_wrapped(lambda mcp_client, storage_dir: None), {}),
+        (functools.partial(_wrapped(lambda mcp_client, storage_dir: None)), {}),
+        (_wrapped(lambda *args, **kwargs: None, lambda mcp_client, storage_dir: None), {}),
+        (
+            functools.partial(
+                _wrapped(lambda *args, **kwargs: None, lambda mcp_client, storage_dir: None)
+            ),
+            {},
+        ),
+        (functools.lru_cache(lambda mcp_client, storage_dir, locale=None: None), {}),
+        (lambda mcp_client, storage_dir, locale=None, /: None, {}),
+        (lambda mcp_client, storage_dir, *locale: None, {}),
+        (lambda mcp_client, storage_dir, **locale: None, {}),
+        (lambda mcp_client, storage_dir, **kwargs: None, {}),
+        (lambda mcp_client, storage_dir: None, {}),
+    ],
+    ids=[
+        "named",
+        "keyword_only",
+        "named_and_kwargs",
+        "callable_object",
+        "wrapper_with_kwargs",
+        "wrapper_with_fixed_signature",
+        "partial_of_wrapper_with_fixed_signature",
+        "wrapper_with_kwargs_around_wrapper_with_fixed_signature",
+        "partial_of_wrapper_with_kwargs_around_wrapper_with_fixed_signature",
+        "wrapper_without_a_readable_signature",
+        "positional_only",
+        "var_positional",
+        "var_keyword_named_locale",
+        "kwargs_only",
+        "no_locale",
+    ],
+)
+def test_locale_kwargs_needs_a_locale_parameter_that_takes_a_keyword(
+    factory: Callable[..., Any], expected: dict[str, str]
+) -> None:
+    assert _locale_kwargs(factory, "ja") == expected
+
+
+@pytest.mark.parametrize("locale", [None, ""])
+def test_locale_kwargs_leaves_out_an_unset_locale(locale: Optional[str]) -> None:
+    assert _locale_kwargs(lambda mcp_client, storage_dir, locale="de": None, locale) == {}
+
+
+@pytest.mark.parametrize("locale", [123, {"a": 1}], ids=repr)
+def test_locale_kwargs_leaves_out_a_locale_that_is_not_a_string(locale: Any) -> None:
+    assert _locale_kwargs(lambda mcp_client, storage_dir, locale="de": None, locale) == {}
+
+
+def test_locale_kwargs_replaces_a_locale_that_the_factory_pins() -> None:
+    def factory(mcp_client: Any, storage_dir: str, locale: Optional[str] = None) -> None:
+        return None
+
+    assert _locale_kwargs(functools.partial(factory, locale="de"), "ja") == {"locale": "ja"}
+
+
+@pytest.mark.parametrize(
+    "factory",
+    [
+        lambda mcp_client, storage_dir, locale=None: None,
+        lambda mcp_client, storage_dir, **kwargs: None,
+        lambda mcp_client, storage_dir: None,
+    ],
+    ids=["named", "kwargs_only", "no_locale"],
+)
+def test_locale_kwargs_does_not_log(
+    factory: Callable[..., Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.DEBUG, logger="agent_builder_sdk.server.base_server"):
+        _locale_kwargs(factory, "ja")
+
+    assert caplog.records == []
+
+
+@pytest.mark.parametrize(
+    "factory_kwargs", [{}, {"workspace_id": "test-workspace"}], ids=["empty", "other_keys"]
+)
+def test_log_locale_not_passed_logs_a_set_locale_that_the_factory_call_lacks(
+    factory_kwargs: dict[str, Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
+        _log_locale_not_passed("ja", factory_kwargs)
+
+    (record,) = caplog.records
+    assert record.levelno == logging.INFO
+    assert record.getMessage().startswith(
+        "Locale 'ja' is set but the agent factory is called without a 'locale' argument"
+    )
+
+
+@pytest.mark.parametrize(
+    "locale, factory_kwargs",
+    [("ja", {"locale": "ja"}), ("ja", {"locale": "fr"}), (None, {}), ("", {})],
+    ids=["passed", "passed_another_value", "unset", "empty"],
+)
+def test_log_locale_not_passed_is_silent_when_the_locale_is_passed_or_unset(
+    locale: Optional[str], factory_kwargs: dict[str, Any], caplog: pytest.LogCaptureFixture
+) -> None:
+    with caplog.at_level(logging.DEBUG, logger="agent_builder_sdk.server.base_server"):
+        _log_locale_not_passed(locale, factory_kwargs)
+
+    assert caplog.records == []

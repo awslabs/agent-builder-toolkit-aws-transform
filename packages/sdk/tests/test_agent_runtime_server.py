@@ -8,8 +8,11 @@ agent execution environments through JSON-RPC endpoints.
 """
 
 import asyncio
+import dataclasses
+import functools
 import logging
 from multiprocessing import Event as MPEvent
+from typing import Any, Optional
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec, patch
 
@@ -467,6 +470,7 @@ class TestAgentRuntimeServer:
                             "userMetadata": {
                                 "accountId": "XXXXXXXXXXXX",
                                 "invocationUserId": "user-456",
+                                "invocationUserCurrentLocale": "ja",
                             },
                             "authorizationToken": "token-2",
                         },
@@ -476,6 +480,7 @@ class TestAgentRuntimeServer:
                 "expected_agent_id": "agent-123",
                 "expected_agent_version": "1.0",
                 "expected_tenant_account_id": "XXXXXXXXXXXX",
+                "expected_locale": "ja",
             },
             # 3. atx_agent/notify format
             {
@@ -564,6 +569,8 @@ class TestAgentRuntimeServer:
                     )
                 else:
                     assert agent_runtime_server.context.tenant_account_id is None
+
+                assert agent_runtime_server.context.locale == test_case.get("expected_locale")
 
                 mock_init.assert_called_once()
 
@@ -2820,3 +2827,235 @@ class TestConcurrentStreaming:
                 server._setup_concurrent_streaming()
 
         assert server._shared_mcp_client is caller_client  # caller's ref left intact
+
+
+def named_locale_factory(
+    mcp_client: Any, storage_dir: str, locale: Optional[str] = "de"
+) -> dict[str, Any]:
+    return {"locale": locale}
+
+
+def keyword_only_locale_factory(
+    mcp_client: Any, storage_dir: str, *, locale: Optional[str] = "de", **kwargs: Any
+) -> dict[str, Any]:
+    return {"locale": locale}
+
+
+async def async_named_locale_factory(
+    mcp_client: Any, storage_dir: str, locale: Optional[str] = "de", **kwargs: Any
+) -> dict[str, Any]:
+    return {"locale": locale}
+
+
+def kwargs_only_factory(mcp_client: Any, storage_dir: str, **kwargs: Any) -> dict[str, Any]:
+    return kwargs
+
+
+async def async_kwargs_only_factory(
+    mcp_client: Any, storage_dir: str, **kwargs: Any
+) -> dict[str, Any]:
+    return kwargs
+
+
+def fixed_signature_factory(
+    mcp_client: Any,
+    storage_dir: str,
+    workspace_id: str,
+    job_id: str,
+    agent_instance_id: str,
+    hitl_notifier: Any,
+    task_manager: Any,
+) -> dict[str, Any]:
+    return {}
+
+
+def forwarding_factory(mcp_client: Any, storage_dir: str, **kwargs: Any) -> dict[str, Any]:
+    return fixed_signature_factory(mcp_client, storage_dir, **kwargs)
+
+
+async def async_fixed_signature_factory(
+    mcp_client: Any,
+    storage_dir: str,
+    workspace_id: str,
+    job_id: str,
+    agent_instance_id: str,
+    hitl_notifier: Any,
+    task_manager: Any,
+) -> dict[str, Any]:
+    return {}
+
+
+def legacy_factory(mcp_client: Any, storage_dir: str) -> dict[str, Any]:
+    return {}
+
+
+@functools.wraps(named_locale_factory)
+def fixed_wrapper_factory(mcp_client: Any, storage_dir: str) -> dict[str, Any]:
+    return {}
+
+
+cached_factory = functools.lru_cache(named_locale_factory)
+
+NAMED_LOCALE_FACTORIES = [
+    named_locale_factory,
+    keyword_only_locale_factory,
+    async_named_locale_factory,
+]
+
+LOCALE_NOT_PASSED_LINE = (
+    "Locale 'ja' is set but the agent factory is called without a 'locale' argument. "
+    "The server adds one only for a string locale and a factory that names a 'locale' "
+    "keyword parameter, and only when every wrapper around the factory has a signature "
+    "that takes it too"
+)
+
+
+class _LocaleParamsServer(AgentRuntimeServer):
+    """Passes the locale through ``_get_agent_params``, as a partner subclass can."""
+
+    def _get_agent_params(self) -> dict[str, Any]:
+        assert self.context
+        return {**super()._get_agent_params(), "locale": self.context.locale}
+
+
+class TestLocaleDelivery:
+    """The server passes the context locale to agent factories that name a ``locale`` parameter."""
+
+    @staticmethod
+    def _server(
+        factory: Any,
+        locale: Optional[str],
+        server_class: type[AgentRuntimeServer] = AgentRuntimeServer,
+        **server_kwargs: Any,
+    ) -> AgentRuntimeServer:
+        with (
+            mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"),
+            mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"),
+        ):
+            server = server_class(
+                agent_factory=factory,
+                mcp_client=MagicMock(),
+                storage_dir="/tmp/test_storage",
+                auto_transition_job_to_executing=False,
+                **server_kwargs,
+            )
+        server.context = AgentRuntimeContext(
+            workspace_id="test-workspace",
+            job_id="test-job",
+            agent_instance_id="test-agent",
+            locale=locale,
+        )
+        return server
+
+    async def _build_agent(self, factory: Any, locale: Optional[str]) -> Any:
+        server = self._server(factory, locale)
+        await server._finalize_agent_setup("STOPPED")
+        return server.agent
+
+    @pytest.mark.parametrize("factory", NAMED_LOCALE_FACTORIES)
+    async def test_factory_that_names_locale_receives_it(self, factory: Any) -> None:
+        assert await self._build_agent(factory, "ja") == {"locale": "ja"}
+
+    @pytest.mark.parametrize("factory", NAMED_LOCALE_FACTORIES)
+    @pytest.mark.parametrize("locale", [None, ""])
+    async def test_factory_default_applies_when_no_locale_is_set(
+        self, factory: Any, locale: Optional[str]
+    ) -> None:
+        assert await self._build_agent(factory, locale) == {"locale": "de"}
+
+    @pytest.mark.parametrize("factory", [kwargs_only_factory, async_kwargs_only_factory])
+    async def test_kwargs_only_factory_gets_no_locale_key(self, factory: Any) -> None:
+        agent = await self._build_agent(factory, "ja")
+
+        assert agent["workspace_id"] == "test-workspace"
+        assert "locale" not in agent
+
+    @pytest.mark.parametrize(
+        "factory",
+        [forwarding_factory, legacy_factory, fixed_wrapper_factory, async_fixed_signature_factory],
+    )
+    async def test_factory_without_locale_parameter_is_called_as_before(
+        self, factory: Any
+    ) -> None:
+        assert await self._build_agent(factory, "ja") == {}
+
+    @staticmethod
+    def _locale_log_lines(caplog: pytest.LogCaptureFixture) -> list[str]:
+        return [r.getMessage() for r in caplog.records if r.getMessage().startswith("Locale ")]
+
+    @pytest.mark.parametrize(
+        "factory",
+        [
+            kwargs_only_factory,
+            async_kwargs_only_factory,
+            legacy_factory,
+            fixed_wrapper_factory,
+            pytest.param(cached_factory, id="cached_factory"),
+        ],
+    )
+    async def test_locale_that_is_not_passed_is_logged_once_per_build(
+        self, factory: Any, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
+            await self._build_agent(factory, "ja")
+
+        assert self._locale_log_lines(caplog) == [LOCALE_NOT_PASSED_LINE]
+
+    async def test_streaming_setup_does_not_log_the_locale_again(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        server = self._server(kwargs_only_factory, "ja", streaming_config=StreamingConfig())
+        with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
+            await server._create_agent(MagicMock(), **server._get_agent_params())
+            with mock.patch(
+                "agent_builder_sdk.server.agent_runtime_server.mcp_session_active",
+                return_value=True,
+            ):
+                server._setup_concurrent_streaming()
+            assert self._locale_log_lines(caplog) == [LOCALE_NOT_PASSED_LINE]
+
+            assert server._streaming_agent_pool is not None
+            await server._streaming_agent_pool._create_agent("/tmp/test_storage/user-1")
+        assert self._locale_log_lines(caplog) == [LOCALE_NOT_PASSED_LINE] * 2
+
+    async def test_locale_added_by_overridden_agent_params_is_not_logged(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        server = self._server(kwargs_only_factory, "ja", server_class=_LocaleParamsServer)
+        with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
+            await server._finalize_agent_setup("STOPPED")
+
+        assert server.agent["locale"] == "ja"
+        assert self._locale_log_lines(caplog) == []
+
+    async def test_locale_dropped_for_a_two_argument_factory_is_logged_once(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        server = self._server(legacy_factory, "ja", server_class=_LocaleParamsServer)
+        with caplog.at_level(logging.INFO, logger="agent_builder_sdk.server.base_server"):
+            await server._finalize_agent_setup("STOPPED")
+
+        assert server.agent == {}
+        assert self._locale_log_lines(caplog) == [LOCALE_NOT_PASSED_LINE]
+
+    async def test_overridden_agent_params_decide_the_locale(self) -> None:
+        server = self._server(named_locale_factory, "ja")
+        with mock.patch.object(server, "_get_agent_params", return_value={"locale": "fr"}):
+            await server._finalize_agent_setup("STOPPED")
+
+        assert server.agent == {"locale": "fr"}
+
+    async def test_streaming_agents_get_the_locale_captured_at_setup(self) -> None:
+        server = self._server(
+            keyword_only_locale_factory, "ja", streaming_config=StreamingConfig()
+        )
+        with mock.patch(
+            "agent_builder_sdk.server.agent_runtime_server.mcp_session_active", return_value=True
+        ):
+            server._setup_concurrent_streaming()
+        assert server.context is not None and server._streaming_agent_pool is not None
+        server.context = dataclasses.replace(server.context, locale="fr")
+
+        agent = await server._streaming_agent_pool._create_agent("/tmp/test_storage/user-1")
+
+        assert agent == {"locale": "ja"}

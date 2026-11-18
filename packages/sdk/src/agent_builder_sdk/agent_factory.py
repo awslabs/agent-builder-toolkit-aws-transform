@@ -201,6 +201,9 @@ def create_default_orchestrator(
         model_id: Optional model ID for Bedrock inference
         model: Optional Strands Model instance or model ID string (takes precedence over model_id)
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        locale: Optional user locale code (e.g. "ja", "pt-BR"). A code listed in
+            locale_utils.LOCALE_TO_LANGUAGE appends a respond-in-that-language instruction to
+            the system prompt; any other value leaves the prompt unchanged.
 
     Returns:
         Configured BaseOrchestrator instance with memory, hooks, and tools
@@ -257,6 +260,9 @@ def create_default_async_orchestrator(
         model_id: Optional model ID for Bedrock inference
         model: Optional Strands Model instance or model ID string (takes precedence over model_id)
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        locale: Optional user locale code (e.g. "ja", "pt-BR"). A code listed in
+            locale_utils.LOCALE_TO_LANGUAGE appends a respond-in-that-language instruction to
+            the system prompt; any other value leaves the prompt unchanged.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
@@ -316,6 +322,9 @@ def create_default_orchestrator_with_subagent(
         model_id: Optional model ID for Bedrock inference
         model: Optional Strands Model instance or model ID string (takes precedence over model_id)
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        locale: Optional user locale code (e.g. "ja", "pt-BR"). A code listed in
+            locale_utils.LOCALE_TO_LANGUAGE appends a respond-in-that-language instruction to
+            the system prompt; any other value leaves the prompt unchanged.
 
     Returns:
         Configured BaseOrchestrator instance with memory, hooks, and tools
@@ -397,6 +406,9 @@ def create_default_async_orchestrator_with_subagent(
             empty right after tool results (see BlankReplyHookProvider).
         enable_prompt_caching: Turn on Bedrock prompt caching for the orchestrator's model (see
             AsyncBaseOrchestrator). Off by default.
+        locale: Optional user locale code (e.g. "ja", "pt-BR"). A code listed in
+            locale_utils.LOCALE_TO_LANGUAGE appends a respond-in-that-language instruction to
+            the system prompt; any other value leaves the prompt unchanged.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools

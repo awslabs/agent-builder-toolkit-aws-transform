@@ -99,6 +99,33 @@ if __name__ == "__main__":
 
 **Custom agent initialization**: Extend `AgentRuntimeServer` and override `_get_agent_params` to pass additional arguments to your factory. See `_get_agent_params` in `agent_runtime_server.py` for the defaults.
 
+### Locale support
+
+When the `invoke` or `restore` request carries the user's locale (for example `ja` or `pt-BR`), `AgentRuntimeServer` and `StatelessAgentRuntimeServer` pass it as `locale=...` to an agent factory that names a `locale` parameter. Give the parameter a default, because it is not passed when no locale is set. Forward it to the orchestrator factory, which appends to the system prompt an instruction to respond in that language:
+
+```python
+def agent_factory(mcp_client, storage_dir, locale=None):
+    return create_default_orchestrator(
+        mcp_client=mcp_client,
+        storage_dir=storage_dir,
+        system_prompt="Your custom system prompt here",
+        locale=locale,
+    )
+```
+
+Limits:
+
+- The locale is read once, when the agent is built. Only `invoke` and `restore` carry it, so an agent built from the context of another request (for example a health check) gets no locale. A later change of the user's language does not reach a running agent.
+- With streaming on, every per-user agent gets the locale that the server had when it was set up, not the locale of its own user.
+- Codes match exactly against `LOCALE_TO_LANGUAGE` in `agent_builder_sdk.locale_utils`: `ja` matches, `ja-JP` and `JA` do not. Any other value leaves the system prompt unchanged, and a non-English code that is not listed is logged as a warning.
+- A factory that takes only `**kwargs` does not receive `locale`; the server logs this at INFO. Name the parameter.
+- A decorated factory receives `locale` only when every wrapper around it (`functools.wraps` or `functools.partial`) takes it too, by name or through `**kwargs`. When one wrapper has a fixed `(mcp_client, storage_dir)` signature, the factory is called without a locale, and the server logs the same INFO line. The same holds for a wrapper whose own signature Python cannot read, such as `functools.lru_cache`. A wrapper that does not use `functools.wraps` hides the factory, so only the wrapper's own signature counts.
+- A set user locale replaces the `locale` that the factory pins, either as its default (`locale="de"`) or with `functools.partial(factory, locale="de")`. To pin a language, do not name a `locale` parameter, and pass the fixed code to the orchestrator factory inside the agent factory. The INFO line above is then expected.
+- A locale in the request that is not a string is not passed.
+- The `INVOCATION_USER_CURRENT_LOCALE` environment variable is read only when the server starts with `WORKSPACE_ID`, `JOB_ID`, `AGENT_INSTANCE_ID` and `AUTHORIZATION_TOKEN` set and so initializes from the environment. On a Bedrock AgentCore runtime it has no effect.
+
+To build a prompt by hand, call `get_locale_instruction(locale)` from `agent_builder_sdk.locale_utils`.
+
 ## Building a subagent
 
 ### 1. Create your subagent class

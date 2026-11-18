@@ -4,13 +4,15 @@
 Abstract base server interface.
 """
 
+import functools
+import inspect
 import json
 import logging
 import os
 import uuid
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, Mapping, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -54,6 +56,56 @@ if TYPE_CHECKING:
     from agent_builder_sdk.streaming.config import StreamingConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _locale_kwargs(factory: Callable[..., Any], locale: Optional[str]) -> Dict[str, str]:
+    """Return ``{"locale": locale}`` for an agent factory that should receive it, else ``{}``.
+
+    The locale is passed only when it is a non-empty string and ``factory`` names a ``locale``
+    parameter that takes a keyword. An unset locale is left out so the factory's own default
+    applies. The request value is not type-checked before it gets here, so a value that is
+    not a string is left out too. A bare ``**kwargs`` does not count, because such factories
+    often forward it to a callable with a fixed signature. Every wrapper around the factory
+    (``functools.wraps`` or ``functools.partial``) must itself take the keyword, by name or
+    through ``**kwargs``. A wrapper whose own signature Python cannot read (for example
+    ``functools.lru_cache``) gets no locale.
+    """
+    if not locale or not isinstance(locale, str):
+        return {}
+    parameter = inspect.signature(factory).parameters.get("locale")
+    if parameter is None or parameter.kind not in (
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        inspect.Parameter.KEYWORD_ONLY,
+    ):
+        return {}
+    try:
+        # The signature read above follows functools.wraps to the wrapped callable, but the
+        # server calls the outermost wrapper, and the keyword must pass through each one.
+        wrapper: Any = factory
+        while wrapper is not None:
+            inspect.signature(wrapper, follow_wrapped=False).bind_partial(locale=locale)
+            wrapper = (
+                wrapper.func
+                if isinstance(wrapper, functools.partial)
+                else getattr(wrapper, "__wrapped__", None)
+            )
+    except (TypeError, ValueError):
+        # ValueError: a wrapper has no readable signature.
+        return {}
+    return {"locale": locale}
+
+
+def _log_locale_not_passed(locale: Optional[str], factory_kwargs: Mapping[str, Any]) -> None:
+    """Log at INFO a set ``locale`` when ``factory_kwargs``, the keyword arguments of the agent
+    factory call, hold no ``locale`` key."""
+    if locale and "locale" not in factory_kwargs:
+        logger.info(
+            "Locale %r is set but the agent factory is called without a 'locale' argument. "
+            "The server adds one only for a string locale and a factory that names a 'locale' "
+            "keyword parameter, and only when every wrapper around the factory has a signature "
+            "that takes it too",
+            locale,
+        )
 
 
 class BaseServer(ABC):
@@ -186,7 +238,7 @@ class BaseServer(ABC):
                 init_request.get("agentInstanceId"),
             ]
         ):
-            # Extract locale from invocationContext.userMetadata (injected by Compute AgentCoreMapper)
+            # Only invoke and restore carry invocationContext; other methods leave the locale unset.
             invocation_context = params.get("invocationContext", {})
             user_metadata = invocation_context.get("userMetadata", {})
             locale = user_metadata.get("invocationUserCurrentLocale")
