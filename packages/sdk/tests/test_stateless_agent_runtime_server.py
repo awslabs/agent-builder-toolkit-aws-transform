@@ -7,12 +7,23 @@ Tests the StatelessAgentRuntimeServer class which provides compatibility with mu
 agent execution environments through JSON-RPC endpoints.
 """
 
+import asyncio
+from typing import Iterator
 from unittest import mock
 
 import pytest
 
 from agent_builder_sdk.custom_types.common_types import A2AMessage
 from agent_builder_sdk.server.stateless_agent_runtime_server import StatelessAgentRuntimeServer
+
+
+@pytest.fixture(autouse=True)
+def mock_heartbeat_service() -> Iterator[mock.MagicMock]:
+    """Keep server tests off the heartbeat's API calls; HeartbeatService has its own tests."""
+    with mock.patch(
+        "agent_builder_sdk.server.stateless_agent_runtime_server.HeartbeatService", autospec=True
+    ) as heartbeat_cls:
+        yield heartbeat_cls
 
 
 @pytest.fixture
@@ -753,3 +764,122 @@ class TestStatelessAgentRuntimeServer:
                             # Verify set_agent_running was NOT called for RUNNING status
                             mock_set_running.assert_not_called()
                             assert stateless_agent_runtime_server.initialized is True
+
+
+@pytest.mark.asyncio
+async def test_stop_request_stops_heartbeat(
+    stateless_agent_runtime_server: StatelessAgentRuntimeServer,
+) -> None:
+    """Test that atx_agent/stop stops the heartbeat, so no beat follows the stop."""
+    mock_heartbeat = mock.AsyncMock()
+    stateless_agent_runtime_server.heartbeat_service = mock_heartbeat
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "atx_agent/stop",
+        "params": {"agentInstanceId": "test-agent"},
+    }
+
+    result = await stateless_agent_runtime_server.handle_jsonrpc(request)
+
+    assert result["error"] is None
+    mock_heartbeat.stop.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_stops_heartbeat_on_shutdown(
+    stateless_agent_runtime_server: StatelessAgentRuntimeServer,
+) -> None:
+    """Test that lifespan stops heartbeat service during shutdown."""
+    mock_heartbeat = mock.AsyncMock()
+    stateless_agent_runtime_server.heartbeat_service = mock_heartbeat
+
+    with mock.patch.object(
+        stateless_agent_runtime_server, "_startup", new_callable=mock.AsyncMock
+    ):
+        async with stateless_agent_runtime_server._lifespan(stateless_agent_runtime_server.app):
+            pass  # simulate server running
+
+    mock_heartbeat.stop.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_no_error_without_heartbeat(
+    stateless_agent_runtime_server: StatelessAgentRuntimeServer,
+) -> None:
+    """Test that lifespan shutdown works when heartbeat was never started."""
+    with mock.patch.object(
+        stateless_agent_runtime_server, "_startup", new_callable=mock.AsyncMock
+    ):
+        async with stateless_agent_runtime_server._lifespan(stateless_agent_runtime_server.app):
+            pass  # should not raise
+
+
+@pytest.mark.asyncio
+async def test_finalize_twice_starts_one_heartbeat(
+    stateless_agent_runtime_server: StatelessAgentRuntimeServer,
+    mock_heartbeat_service: mock.MagicMock,
+) -> None:
+    """Setup can run twice (INVOKING poller + a later request); only one heartbeat loop starts."""
+    from agent_builder_sdk.server.server_models import AgentRuntimeContext
+
+    stateless_agent_runtime_server.context = AgentRuntimeContext(
+        workspace_id="test-workspace", job_id="test-job", agent_instance_id="test-agent"
+    )
+
+    with mock.patch.multiple(
+        "agent_builder_sdk.server.stateless_agent_runtime_server",
+        build_agentic_api_endpoint_from_env=mock.DEFAULT,
+        MCPClientFactory=mock.DEFAULT,
+        get_agentic_api_client=mock.DEFAULT,
+        JobManager=mock.DEFAULT,
+    ):
+        await stateless_agent_runtime_server._finalize_agent_setup("RUNNING")
+        await stateless_agent_runtime_server._finalize_agent_setup("RUNNING")
+
+    mock_heartbeat_service.assert_called_once()
+    mock_heartbeat_service.return_value.start.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_setup_that_ends_after_stop_starts_no_heartbeat(
+    stateless_agent_runtime_server: StatelessAgentRuntimeServer,
+    mock_heartbeat_service: mock.MagicMock,
+) -> None:
+    """A stop request during the INVOKING wait leaves no heartbeat behind when setup ends."""
+    from agent_builder_sdk.server.server_models import AgentRuntimeContext
+
+    server = stateless_agent_runtime_server
+    server.context = AgentRuntimeContext(
+        workspace_id="test-workspace", job_id="test-job", agent_instance_id="test-agent"
+    )
+    invoking_ended = asyncio.Event()
+
+    async def wait_for_invoking_to_end(*args: str) -> str:
+        await invoking_ended.wait()
+        return "RUNNING"
+
+    with mock.patch.multiple(
+        "agent_builder_sdk.server.stateless_agent_runtime_server",
+        wait_for_agent_non_invoking=wait_for_invoking_to_end,
+        build_agentic_api_endpoint_from_env=mock.DEFAULT,
+        MCPClientFactory=mock.DEFAULT,
+        get_agentic_api_client=mock.DEFAULT,
+        JobManager=mock.DEFAULT,
+    ):
+        setup = asyncio.create_task(server._wait_for_non_invoking_and_initialize())
+        await asyncio.sleep(0)
+        result = await server.handle_jsonrpc(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "atx_agent/stop",
+                "params": {"agentInstanceId": "test-agent"},
+            }
+        )
+        invoking_ended.set()
+        await asyncio.wait_for(setup, timeout=5)
+
+    assert result["error"] is None
+    assert server.initialized is True
+    mock_heartbeat_service.return_value.start.assert_not_awaited()

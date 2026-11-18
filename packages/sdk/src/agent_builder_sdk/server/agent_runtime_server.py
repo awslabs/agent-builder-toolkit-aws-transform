@@ -59,6 +59,7 @@ from agent_builder_sdk.checkpoint.checkpoint_triggers import CheckpointStrategy
 from agent_builder_sdk.constants import (
     DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS,
     DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS,
+    NON_RETRYABLE_ERROR_CODES,
 )
 from agent_builder_sdk.custom_types.notification_types import NotificationType
 from agent_builder_sdk.env_var import has_mde_environment, set_runtime_env_vars
@@ -66,6 +67,7 @@ from agent_builder_sdk.extensions.acknowledgments.acknowledgment_handler import 
     AcknowledgmentHandler,
 )
 from agent_builder_sdk.extensions.base_extension_handler import BaseExtensionHandler
+from agent_builder_sdk.heartbeat import HeartbeatService
 from agent_builder_sdk.interfaces import AnyBaseAgent, StreamingCapable
 from agent_builder_sdk.mcp_client_factory import MCPClientFactory
 from agent_builder_sdk.memory.episodic_memory import EpisodicMemory
@@ -98,11 +100,6 @@ from agent_builder_sdk.utils import build_agentic_api_endpoint_from_env, mcp_ses
 
 if TYPE_CHECKING:
     from multiprocessing.synchronize import Event as EventType
-
-# ClientError codes that indicate a permanent failure — do not retry.
-_NON_RETRYABLE_ERROR_CODES = frozenset(
-    {"ValidationException", "AccessDeniedException", "ResourceNotFoundException"}
-)
 
 logger = logging.getLogger(__name__)
 
@@ -293,6 +290,8 @@ class AgentRuntimeServer(BaseServer):
 
         # Create notification handler with queue access
         self.notification_handler = NotificationHandler(queue=self.queue)
+        self.heartbeat_service: Optional[HeartbeatService] = None
+        self._cleanup_started = False
 
         # Register default processors
         self.notification_handler.register_processor(
@@ -412,7 +411,7 @@ class AgentRuntimeServer(BaseServer):
 
         Retries connection timeouts and endpoint connectivity failures with exponential
         backoff (attempt count and timing set by the @retry decorator below); permanent
-        client errors in _NON_RETRYABLE_ERROR_CODES are not retried.
+        client errors in NON_RETRYABLE_ERROR_CODES are not retried.
 
         Runs in a thread executor so the backoff sleeps do not block the asyncio event
         loop (health checks must keep responding).
@@ -427,7 +426,7 @@ class AgentRuntimeServer(BaseServer):
             """Retry all exceptions except permanent client errors."""
             if isinstance(exception, ClientError):
                 error_code = exception.response.get("Error", {}).get("Code", "")
-                if error_code in _NON_RETRYABLE_ERROR_CODES:
+                if error_code in NON_RETRYABLE_ERROR_CODES:
                     return False
             return True
 
@@ -446,7 +445,7 @@ class AgentRuntimeServer(BaseServer):
             return await loop.run_in_executor(None, _get_status)
         except ClientError as e:
             error_code = e.response.get("Error", {}).get("Code", "")
-            if error_code in _NON_RETRYABLE_ERROR_CODES:
+            if error_code in NON_RETRYABLE_ERROR_CODES:
                 logger.error(f"Non-retryable error during agent initialization: {error_code} - {e}")
             else:
                 logger.error(f"Failed to get agent status after retries: {error_code} - {e}")
@@ -565,6 +564,13 @@ class AgentRuntimeServer(BaseServer):
                 client=client,
             )
             job_manager.transition_to_executing_if_assessing()
+
+        # Start heartbeat service (opt-in based on agent's MonitoringType). Setup can run again
+        # after _cleanup (a stop request cancels a background setup and the next request re-runs
+        # it); a heartbeat started then would run until the server shuts down.
+        if not self._cleanup_started:
+            self.heartbeat_service = HeartbeatService(self.context)
+            await self.heartbeat_service.start()
 
         self.initialized = True
         self.agent_ready_event.set()
@@ -905,6 +911,7 @@ class AgentRuntimeServer(BaseServer):
         default path it's None and the step is skipped entirely.)
         """
         logger.info("Starting graceful shutdown...")
+        self._cleanup_started = True
 
         try:
             # 1. Cancel message processor task
@@ -934,7 +941,11 @@ class AgentRuntimeServer(BaseServer):
             if self.checkpoint_service:
                 await self.checkpoint_service.shutdown()
 
-            # 5. Stop auth token refresher process
+            # 5. Stop heartbeat service
+            if self.heartbeat_service:
+                await self.heartbeat_service.stop()
+
+            # 6. Stop auth token refresher process
             if self.auth_token_refresher:
                 logger.info("Shutting down the auth_token_refresher")
                 self.auth_token_refresher.shutdown()

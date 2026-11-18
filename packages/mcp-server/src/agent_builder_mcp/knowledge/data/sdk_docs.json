@@ -450,7 +450,7 @@
     "module": "agent_builder_sdk.agentic_framework.agent_registry",
     "docstring": "Client for interacting with ATX Agent Registry.",
     "signature": "AgentRegistry()",
-    "description": "Extends: AgenticApiHelper\n\nMethods:\n  get_agent_skill_names(agent_id: str, version: Optional[str] = None) -> List[str]\n  create_download_skill_url(skill_id: str, idempotency_token: Optional[str] = None) -> dict\n  download_skill(skill_id: str, destination_dir: str, idempotency_token: Optional[str] = None) -> str"
+    "description": "Extends: AgenticApiHelper\n\nMethods:\n  get_agent_configuration(agent_id: str, version: Optional[str] = None) -> Dict[str, Any]\n  get_agent_skill_names(agent_id: str, version: Optional[str] = None) -> List[str]\n  create_download_skill_url(skill_id: str, idempotency_token: Optional[str] = None) -> dict\n  download_skill(skill_id: str, destination_dir: str, idempotency_token: Optional[str] = None) -> str"
   },
   {
     "name": "AgentRegistry.create_download_skill_url",
@@ -467,6 +467,14 @@
     "module": "agent_builder_sdk.agentic_framework.agent_registry",
     "docstring": "Download and extract skill to destination directory.\n\nArgs:\n    skill_id: The skill identifier\n    destination_dir: Directory to extract skill contents\n    idempotency_token: Optional idempotency token, auto-generated if not provided\n\nReturns:\n    Path to the extracted skill directory\n\nRaises:\n    ValueError: If zip contains path traversal attempts",
     "signature": "download_skill(skill_id: str, destination_dir: str, idempotency_token: Optional[str] = None) -> str"
+  },
+  {
+    "name": "AgentRegistry.get_agent_configuration",
+    "kind": "method",
+    "file": "agent_builder_sdk/agentic_framework/agent_registry.py",
+    "module": "agent_builder_sdk.agentic_framework.agent_registry",
+    "docstring": "Get the configuration of an agent version (agentCard, monitoringType, ...).\n\nArgs:\n    agent_id: The agent identifier\n    version: Optional specific version, defaults to the latest active version\n\nReturns:\n    The version's configuration, empty dict if the version has none\n\nRaises:\n    botocore.exceptions.ClientError: If the GetAgentVersion call fails",
+    "signature": "get_agent_configuration(agent_id: str, version: Optional[str] = None) -> Dict[str, Any]"
   },
   {
     "name": "AgentRegistry.get_agent_skill_names",
@@ -2134,6 +2142,31 @@
     "docstring": "Start the FastAPI server.",
     "signature": "start_api_server(queue_service: QueueService, notification_handler: Optional[NotificationHandler] = None, host: str = '0.0.0.0', port: int = 8080)",
     "description": "Parameters:\n  queue_service: QueueService (required)\n  notification_handler: Optional[NotificationHandler] (default=None)\n  host: str (default='0.0.0.0')\n  port: int (default=8080)"
+  },
+  {
+    "name": "HeartbeatService",
+    "kind": "class",
+    "file": "agent_builder_sdk/heartbeat/heartbeat_service.py",
+    "module": "agent_builder_sdk.heartbeat.heartbeat_service",
+    "docstring": "Periodically emits heartbeat (update_agent_instance RUNNING) to the platform.",
+    "signature": "HeartbeatService(context: AgentRuntimeContext, interval_minutes: int = HEARTBEAT_INTERVAL_MINUTES) -> None",
+    "description": "Parameters:\n  context: AgentRuntimeContext (required)\n  interval_minutes: int (default=HEARTBEAT_INTERVAL_MINUTES)\n\nMethods:\n  async start() -> None\n  async stop() -> None"
+  },
+  {
+    "name": "HeartbeatService.start",
+    "kind": "method",
+    "file": "agent_builder_sdk/heartbeat/heartbeat_service.py",
+    "module": "agent_builder_sdk.heartbeat.heartbeat_service",
+    "docstring": "Start the background task and return at once.\n\nThe task reads the monitoring type itself, so the caller does not wait for the\nregistry. It beats only when the type is HEARTBEAT. One instance runs one task: a\nlater call does nothing, and no call starts a task after stop().",
+    "signature": "async start() -> None"
+  },
+  {
+    "name": "HeartbeatService.stop",
+    "kind": "method",
+    "file": "agent_builder_sdk/heartbeat/heartbeat_service.py",
+    "module": "agent_builder_sdk.heartbeat.heartbeat_service",
+    "docstring": "Stop the heartbeat background task.\n\nA beat that has not written yet skips its RUNNING write, and a write already in\nflight is waited for (up to STOP_TIMEOUT_SECONDS), so the heartbeat does not\noverwrite a status the caller sets next (such as STOPPED).",
+    "signature": "async stop() -> None"
   },
   {
     "name": "AsyncBaseAgent",
