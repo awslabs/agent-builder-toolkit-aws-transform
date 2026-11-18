@@ -32,9 +32,16 @@ enter the PR number and the head commit you reviewed. Or:
 gh workflow run simulated-builder.yml --ref main -f pr=<number> -f sha=<head commit>
 ```
 
-The PR needs a scenario that exercises its change, either an existing one in `e2e/scenarios/` or
-a new one added by the PR. A new push is not tested until a maintainer reviews it and starts a
-new run with the new SHA.
+The run reads `e2e/scenarios/` from the PR at the commit you reviewed and follows the scenario whose
+`pr` field is the PR number, so the PR must contain it: add the scenario in the PR, or merge `main`
+into the PR if the scenario is already on `main`. A scenario tells an AI agent what to type in a
+real AWS account: review all of it like code, in the source diff and not the rendered view, before
+you start the run. A new push is not tested until a maintainer reviews it and starts a new run with
+the new SHA. So that the diff shows the whole scenario, the run stops when the scenario has more
+than 400 lines or 20,000 bytes, or when a `.gitattributes` file at the top, in `e2e/` or in
+`e2e/scenarios/` is not the same as on `main`: merge such a change on its own first. Start no run
+when **Files changed** says that a file or a part of the diff is not shown. The run starts at the
+earliest 10 minutes after you ask for it, and later while other runs use all build slots.
 
 ## Write a scenario
 
