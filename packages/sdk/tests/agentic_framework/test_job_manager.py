@@ -4,6 +4,7 @@
 Unit tests for JobManager.
 """
 
+import logging
 from unittest import mock
 
 import pytest
@@ -95,6 +96,24 @@ class TestJobManager:
         call_args = mock_client.update_job_status.call_args[1]
         assert call_args["status"] == "COMPLETED"
 
+    def test_update_job_status_proceeds_when_status_check_fails(
+        self, job_manager: JobManager, mock_client: mock.Mock, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A failed terminal-state check does not hold back the update."""
+        mock_client.get_job.side_effect = RuntimeError("GetJob throttled")
+        mock_client.update_job_status.return_value = {"status": "success"}
+
+        with caplog.at_level(logging.WARNING):
+            result = job_manager.update_job_status(JobStatus.FAILED, {"message": "boom"})
+
+        assert result == {"status": "success"}
+        mock_client.get_job.assert_called_once()
+        mock_client.update_job_status.assert_called_once()
+        call_args = mock_client.update_job_status.call_args[1]
+        assert call_args["status"] == "FAILED"
+        assert call_args["statusInfo"] == {"message": "boom"}
+        assert "without the terminal-state check: GetJob throttled" in caplog.text
+
     def test_get_job_status_success(self, job_manager, mock_client):
         """Test successful job status retrieval."""
         mock_client.get_job.return_value = {"job": {"statusDetails": {"status": "EXECUTING"}}}
@@ -126,6 +145,18 @@ class TestJobManager:
         mock_client.update_job_status.assert_called_once()
         call_args = mock_client.update_job_status.call_args[1]
         assert call_args["status"] == "EXECUTING"
+
+    def test_transition_goes_through_update_job_status(
+        self, job_manager: JobManager, mock_client: mock.Mock
+    ) -> None:
+        """A subclass that overrides update_job_status also gets the automatic transition."""
+        mock_client.get_job.return_value = {"job": {"statusDetails": {"status": "ASSESSING"}}}
+
+        with mock.patch.object(job_manager, "update_job_status") as update_job_status:
+            job_manager.transition_to_executing_if_assessing()
+
+        update_job_status.assert_called_once_with(JobStatus.EXECUTING)
+        mock_client.update_job_status.assert_not_called()
 
     def test_transition_to_executing_when_not_assessing(self, job_manager, mock_client):
         """Test no transition when not in ASSESSING status."""

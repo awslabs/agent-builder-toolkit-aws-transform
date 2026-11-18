@@ -49,6 +49,10 @@ class JobManager(AgenticApiHelper):
     ) -> dict:
         """Update job status.
 
+        Reads the current status first (one GetJob call) and skips the update when the
+        job is already in a terminal state. When that read fails, the update is sent
+        without the check.
+
         Args:
             status: The new job status
             status_info: Optional status information
@@ -61,10 +65,15 @@ class JobManager(AgenticApiHelper):
             Exception: If there's an error updating the job status
         """
         try:
-            # Guard against updating a job that has already reached a terminal
-            # state. The service rejects such calls with a 400 ValidationException,
-            # so skip the call instead.
             current_job_status = self.get_job_status()
+        except Exception as e:
+            # The check only saves a call that the service would reject with a 400
+            # ValidationException. A failed check must not hold back the update.
+            logger.warning(
+                f"Could not read the job status before UpdateJobStatus to {status.value}, "
+                f"sending the update without the terminal-state check: {e}"
+            )
+        else:
             if current_job_status in TERMINAL_STATES:
                 logger.warning(
                     f"Skipping UpdateJobStatus to {status.value}: job is already in "
@@ -72,6 +81,7 @@ class JobManager(AgenticApiHelper):
                 )
                 return {}
 
+        try:
             input_data: Dict[str, Any] = {"status": status.value}
 
             if status_info:

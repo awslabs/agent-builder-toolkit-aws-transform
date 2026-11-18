@@ -7,6 +7,7 @@ Client factory for ATX Agentic API.
 import functools
 import logging
 import os
+import warnings
 from typing import Optional
 
 import boto3
@@ -142,8 +143,10 @@ def create_agentic_api_client(
     region: Optional[str] = None,
     endpoint_url: Optional[str] = None,
     max_retries: int = 3,
-    connect_timeout: int = 5,
-    read_timeout: int = 30,
+    connect_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    *,
+    timeout: Optional[int] = None,
 ) -> BaseClient:
     """
     Create boto3 client for AWS Transform Agentic API.
@@ -153,12 +156,31 @@ def create_agentic_api_client(
         region: AWS region (defaults to env var)
         endpoint_url: Direct endpoint URL (overrides stage/region)
         max_retries: Maximum retries for API calls
-        connect_timeout: TCP connect timeout in seconds
-        read_timeout: Read timeout in seconds
+        connect_timeout: TCP connect timeout in seconds (default: 5)
+        read_timeout: Read timeout in seconds (default: 30)
+        timeout: Deprecated, keyword-only. Use connect_timeout and read_timeout instead.
+            Sets both timeouts to this number of seconds.
 
     Returns:
         Configured boto3 client
+
+    Raises:
+        ValueError: If timeout is passed together with connect_timeout or read_timeout, or
+            if neither endpoint_url nor both stage and region are available.
     """
+    if timeout is not None:
+        if connect_timeout is not None or read_timeout is not None:
+            raise ValueError(
+                "timeout is deprecated and cannot be combined with connect_timeout or "
+                "read_timeout; pass only connect_timeout and read_timeout."
+            )
+        warnings.warn(
+            "timeout is deprecated; use connect_timeout and read_timeout instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        connect_timeout = read_timeout = timeout
+
     # Get values from environment if not provided
     stage = stage or os.environ.get("STAGE")
     endpoint_url = endpoint_url or os.environ.get("QT_AGENTIC_API_ENDPOINT")
@@ -169,8 +191,8 @@ def create_agentic_api_client(
 
     boto_config = BotocoreConfig(
         retries={"max_attempts": max_retries, "mode": "standard"},
-        connect_timeout=connect_timeout,
-        read_timeout=read_timeout,
+        connect_timeout=5 if connect_timeout is None else connect_timeout,
+        read_timeout=30 if read_timeout is None else read_timeout,
     )
 
     resolved_endpoint_url = endpoint_url or _resolve_agentic_api_endpoint_url(stage, region)

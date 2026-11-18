@@ -5,6 +5,7 @@
 import json
 import textwrap
 from pathlib import Path
+from types import ModuleType
 
 
 def _write_module(pkg: Path, name: str, content: str) -> Path:
@@ -413,6 +414,23 @@ class TestRealSDK:
         reloaded = json.loads(output.read_text())
         assert len(reloaded) == len(entries)
         assert reloaded[0] == entries[0]
+
+    def test_factory_boto_client_config_description_is_complete(
+        self, generate_sdk_docs: ModuleType, real_sdk_path: Path
+    ) -> None:
+        """A continuation line that holds ': ' ends a parameter description early."""
+        descriptions = {
+            e["name"]: e["description"]
+            for e in generate_sdk_docs.extract_sdk(real_sdk_path)
+            if e["file"] == "agent_builder_sdk/agent_factory.py"
+        }
+        for name in (
+            "create_default_orchestrator",
+            "create_default_async_orchestrator",
+            "create_default_orchestrator_with_subagent",
+            "create_default_async_orchestrator_with_subagent",
+        ):
+            assert "(120 seconds), not botocore's 60." in descriptions[name], name
 
     def test_committed_file_matches_generator(self, generate_sdk_docs, real_sdk_path, sdk_docs_json_path):
         """The committed sdk_docs.json must match what the generator produces."""

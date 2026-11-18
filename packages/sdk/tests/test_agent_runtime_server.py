@@ -9,7 +9,10 @@ agent execution environments through JSON-RPC endpoints.
 
 import asyncio
 import logging
+import threading
 from multiprocessing import Event as MPEvent
+from types import SimpleNamespace
+from typing import Iterator
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec, patch
 
@@ -2820,3 +2823,134 @@ class TestConcurrentStreaming:
                 server._setup_concurrent_streaming()
 
         assert server._shared_mcp_client is caller_client  # caller's ref left intact
+
+
+_SERVER_MODULE = "agent_builder_sdk.server.agent_runtime_server"
+
+_INVOKE_REQUEST = {
+    "jsonrpc": "2.0",
+    "id": "1",
+    "method": JsonRpcMethods.INVOKE,
+    "params": {
+        "agentInstanceId": "ai-1",
+        "invocationContext": {
+            "jobMetadata": {"workspaceId": "ws-1", "jobId": "job-1"},
+            "agentMetadata": {"agentId": "agent-1", "agentVersion": "1.0"},
+            "userMetadata": {"accountId": "acct-1", "invocationUserCurrentLocale": "ja-JP"},
+            "authorizationToken": "token-1",
+        },
+    },
+}
+_INVOKE_CONTEXT = AgentRuntimeContext(
+    workspace_id="ws-1",
+    job_id="job-1",
+    agent_instance_id="ai-1",
+    agent_id="agent-1",
+    agent_version="1.0",
+    initial_auth_token="token-1",
+    tenant_account_id="acct-1",
+    locale="ja-JP",
+)
+
+
+class TestRequestsDuringInitialization:
+    """A request that arrives before initialization finishes must not damage its context."""
+
+    @pytest.fixture
+    def platform(self, agent_runtime_server: AgentRuntimeServer) -> Iterator[SimpleNamespace]:
+        """Replace the platform calls of initialization; the server logic under test is real."""
+        with (
+            patch(f"{_SERVER_MODULE}.get_agent_status") as get_agent_status,
+            patch(f"{_SERVER_MODULE}.set_agent_running") as set_agent_running,
+            patch(f"{_SERVER_MODULE}.setup_initial_auth_token"),
+            patch(f"{_SERVER_MODULE}.get_auth_token_refresher"),
+            patch(f"{_SERVER_MODULE}.build_agentic_api_endpoint_from_env"),
+            patch(f"{_SERVER_MODULE}.MCPClientFactory.setup_ab_mcp_client") as setup_mcp_client,
+            patch(f"{_SERVER_MODULE}.get_agentic_api_client"),
+            patch(f"{_SERVER_MODULE}.JobManager"),
+            patch.object(agent_runtime_server.checkpoint_service, "initialize"),
+            patch.object(
+                agent_runtime_server.checkpoint_service, "start_background_checkpointing"
+            ) as start_checkpointing,
+        ):
+            yield SimpleNamespace(
+                get_agent_status=get_agent_status,
+                set_agent_running=set_agent_running,
+                setup_mcp_client=setup_mcp_client,
+                start_checkpointing=start_checkpointing,
+            )
+
+    @pytest.mark.parametrize("agent_status", ["INVOKED", "RUNNING", "IDLE"])
+    async def test_handshake_during_status_lookup_does_not_break_initialization(
+        self, agent_runtime_server: AgentRuntimeServer, platform: SimpleNamespace, agent_status: str
+    ) -> None:
+        lookup_started = threading.Event()
+        release_lookup = threading.Event()
+
+        def slow_get_agent_status(*_args: str) -> str:
+            lookup_started.set()
+            release_lookup.wait(timeout=5)
+            return agent_status
+
+        platform.get_agent_status.side_effect = slow_get_agent_status
+        handshake = {"jsonrpc": "2.0", "id": "2", "method": JsonRpcMethods.HANDSHAKE}
+
+        init = asyncio.create_task(agent_runtime_server.ensure_initialized(_INVOKE_REQUEST))
+        assert await asyncio.to_thread(lookup_started.wait, 5)
+        await agent_runtime_server.ensure_initialized(handshake)
+        release_lookup.set()
+        await asyncio.wait_for(init, timeout=5)
+        if agent_runtime_server._initialization_task:  # RUNNING and IDLE finish in the background
+            await asyncio.wait_for(agent_runtime_server._initialization_task, timeout=5)
+
+        assert agent_runtime_server.initialized is True
+        assert agent_runtime_server.context == _INVOKE_CONTEXT
+        if agent_status == "RUNNING":
+            platform.set_agent_running.assert_not_called()
+        else:
+            platform.set_agent_running.assert_called_once_with("ws-1", "job-1", "ai-1")
+
+    async def test_health_check_during_background_initialization_keeps_context(
+        self, agent_runtime_server: AgentRuntimeServer, platform: SimpleNamespace
+    ) -> None:
+        setup_started = asyncio.Event()
+        release_setup = asyncio.Event()
+
+        async def slow_start_checkpointing() -> None:
+            setup_started.set()
+            await release_setup.wait()
+
+        platform.get_agent_status.return_value = "RUNNING"
+        platform.start_checkpointing.side_effect = slow_start_checkpointing
+        health_check = {
+            "jsonrpc": "2.0",
+            "id": "2",
+            "method": JsonRpcMethods.HEALTHCHECK,
+            "params": {
+                "agentInstanceId": "ai-1",
+                "jobMetadata": {"workspaceId": "ws-1", "jobId": "job-1"},
+            },
+        }
+
+        await agent_runtime_server.ensure_initialized(_INVOKE_REQUEST)
+        await asyncio.wait_for(setup_started.wait(), timeout=5)
+        await agent_runtime_server.ensure_initialized(health_check)
+        assert agent_runtime_server.initialized is False
+        release_setup.set()
+        await asyncio.wait_for(agent_runtime_server._initialization_task, timeout=5)
+
+        assert agent_runtime_server.initialized is True
+        assert agent_runtime_server.context == _INVOKE_CONTEXT
+
+    async def test_invoke_after_failed_initialization_initializes_again(
+        self, agent_runtime_server: AgentRuntimeServer, platform: SimpleNamespace
+    ) -> None:
+        platform.get_agent_status.return_value = "INVOKED"
+        platform.setup_mcp_client.side_effect = [RuntimeError("MCP server not ready"), MagicMock()]
+
+        await agent_runtime_server.ensure_initialized(_INVOKE_REQUEST)
+        assert agent_runtime_server.initialized is False
+
+        await agent_runtime_server.ensure_initialized(_INVOKE_REQUEST)
+        assert agent_runtime_server.initialized is True
+        assert agent_runtime_server.context == _INVOKE_CONTEXT

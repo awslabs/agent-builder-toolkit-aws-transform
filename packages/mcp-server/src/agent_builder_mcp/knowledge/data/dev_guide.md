@@ -2256,8 +2256,12 @@ def create_agentic_api_client(
     region: Optional[str] = None,
     endpoint_url: Optional[str] = None,
     max_retries: int = 3,
-    timeout: int = 30,
+    connect_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    *,
+    timeout: Optional[int] = None,
 ) -> BaseClient:
+    ...
     # Get values from environment if not provided
     stage = stage or os.environ.get("STAGE")
     endpoint_url = endpoint_url or os.environ.get("QT_AGENTIC_API_ENDPOINT")
@@ -2267,8 +2271,8 @@ def create_agentic_api_client(
     combined_ca_bundle_path = '/path/to/my-combined-ca-bundle.pem'
     boto_config = BotocoreConfig(
         retries={"max_attempts": max_retries, "mode": "standard"},
-        connect_timeout=timeout,
-        read_timeout=timeout,
+        connect_timeout=5 if connect_timeout is None else connect_timeout,
+        read_timeout=30 if read_timeout is None else read_timeout,
         proxies={
             'http': 'http://your_proxy_address:port',
             'https': 'https://your_proxy_address:port'
@@ -2304,7 +2308,10 @@ def create_agentic_api_client(
     region: Optional[str] = None,
     endpoint_url: Optional[str] = None,
     max_retries: int = 3,
-    timeout: int = 30,
+    connect_timeout: Optional[int] = None,
+    read_timeout: Optional[int] = None,
+    *,
+    timeout: Optional[int] = None,
 ) -> BaseClient:
     """
     Create boto3 client for AWS Transform Agentic API.
@@ -2313,10 +2320,14 @@ def create_agentic_api_client(
         region: AWS region (defaults to env var)
         endpoint_url: Direct endpoint URL (overrides stage/region)
         max_retries: Maximum retries for API calls
-        timeout: Timeout in seconds
+        connect_timeout: TCP connect timeout in seconds (default: 5)
+        read_timeout: Read timeout in seconds (default: 30)
+        timeout: Deprecated, keyword-only. Use connect_timeout and read_timeout instead.
+            Sets both timeouts to this number of seconds.
     Returns:
         Configured boto3 client
     """
+    ...
     # Get values from environment if not provided
     stage = stage or os.environ.get("STAGE")
     endpoint_url = endpoint_url or os.environ.get("QT_AGENTIC_API_ENDPOINT")

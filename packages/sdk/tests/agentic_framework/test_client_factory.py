@@ -28,6 +28,46 @@ def test_create_agentic_api_client_with_endpoint_url(mock_boto_client):
     assert call_args[1]["region_name"] == "us-west-2"
 
 
+def _timeouts(mock_boto_client: mock.Mock) -> tuple[int, int]:
+    config = mock_boto_client.call_args[1]["config"]
+    return config.connect_timeout, config.read_timeout
+
+
+@mock.patch("agent_builder_sdk.agentic_framework.client_factory.boto3.client")
+def test_create_agentic_api_client_timeouts(mock_boto_client: mock.Mock) -> None:
+    """Timeouts default to 5 s connect and 30 s read, and are positional after max_retries."""
+    create_agentic_api_client(endpoint_url="https://test-endpoint.com")
+    assert _timeouts(mock_boto_client) == (5, 30)
+
+    create_agentic_api_client(None, "us-west-2", "https://test-endpoint.com", 3, 2, 90)
+    assert _timeouts(mock_boto_client) == (2, 90)
+
+    create_agentic_api_client(endpoint_url="https://test-endpoint.com", read_timeout=90)
+    assert _timeouts(mock_boto_client) == (5, 90)
+
+
+@mock.patch("agent_builder_sdk.agentic_framework.client_factory.boto3.client")
+def test_create_agentic_api_client_deprecated_timeout(mock_boto_client: mock.Mock) -> None:
+    """The deprecated keyword timeout still sets both timeouts, with a warning."""
+    with pytest.warns(DeprecationWarning, match="timeout is deprecated") as warned:
+        create_agentic_api_client(endpoint_url="https://test-endpoint.com", timeout=60)
+
+    assert _timeouts(mock_boto_client) == (60, 60)
+    assert warned[0].filename == __file__
+
+
+@pytest.mark.parametrize("explicit", [{"connect_timeout": 5}, {"read_timeout": 30}])
+@mock.patch("agent_builder_sdk.agentic_framework.client_factory.boto3.client")
+def test_create_agentic_api_client_rejects_timeout_with_new_timeouts(
+    mock_boto_client: mock.Mock, explicit: dict[str, int]
+) -> None:
+    """The deprecated timeout cannot silently override a timeout the caller also passed."""
+    with pytest.raises(ValueError, match="cannot be combined"):
+        create_agentic_api_client(endpoint_url="https://test-endpoint.com", timeout=60, **explicit)
+
+    mock_boto_client.assert_not_called()
+
+
 @mock.patch("agent_builder_sdk.agentic_framework.client_factory.boto3.client")
 def test_create_agentic_api_client_with_stage_region(mock_boto_client):
     """Test client creation with stage and region."""

@@ -34,6 +34,7 @@ from strands import Agent as StrandsAgent
 from strands.agent import AgentResult
 from strands.hooks import HookCallback, HookProvider
 from strands.models import CacheConfig
+from strands.models.bedrock import DEFAULT_READ_TIMEOUT
 from strands.models.model import Model
 from strands.tools.mcp import MCPClient
 from strands.types.content import Messages
@@ -158,8 +159,11 @@ class _BaseOrchestrator(StrandsAgent):
                 is equivalent to not passing it and existing callers are unchanged. When set,
                 Strands merges its ``user_agent_extra`` onto the supplied config, so e.g.
                 ``Config(read_timeout=300)`` raises the read timeout while keeping the
-                ``strands-agents`` user agent. This is the Strands BedrockModel path only; the
-                deprecated ``agent.py`` uses a separate ``DEFAULT_BOTO_CONFIG`` and is unaffected.
+                ``strands-agents`` user agent. A config that does not set ``read_timeout``, e.g.
+                ``Config(retries={"mode": "adaptive"})``, keeps that Strands default read timeout
+                instead of the botocore default of 60 seconds. This is the Strands BedrockModel
+                path only; the deprecated ``agent.py`` uses a separate ``DEFAULT_BOTO_CONFIG`` and
+                is unaffected.
             metrics_config: Optional metrics configuration (default: disabled with standard settings)
             locale: Optional user locale (e.g. "ja", "pt-BR"). When set, a localization
                 instruction is appended to the system prompt so the agent responds in the
@@ -207,6 +211,11 @@ class _BaseOrchestrator(StrandsAgent):
         cache_extra: Dict[str, Any] = (
             {"cache_config": CacheConfig(strategy="auto")} if enable_prompt_caching else {}
         )
+        if boto_client_config is not None:
+            # Strands applies its default read timeout only when it gets no Config at all.
+            boto_client_config = BotocoreConfig(read_timeout=DEFAULT_READ_TIMEOUT).merge(
+                boto_client_config
+            )
         bedrock_model = (
             None
             if model is not None

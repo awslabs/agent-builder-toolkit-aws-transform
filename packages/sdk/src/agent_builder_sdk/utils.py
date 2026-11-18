@@ -338,12 +338,11 @@ class TransformEndpointConfig:
     @staticmethod
     def get_root_dns_domain(region: str) -> str:
         """
-        Resolves the Elastic Gumby DNS apex for a region's partition.
+        Resolves the AWS Transform DNS apex for a region's partition.
 
-        GovCloud endpoints live under a separate child zone
-        (us-gov.elastic-gumby.ai.aws.dev), not the commercial apex. Building a gov
-        endpoint on the commercial apex yields a hostname with no DNS record in the
-        gov partition, causing SdkClientException "Unable to execute HTTP request".
+        GovCloud endpoints live under a separate child zone, not the commercial apex.
+        Building a GovCloud endpoint on the commercial apex yields a hostname with no
+        DNS record, so calls fail with botocore's EndpointConnectionError.
         """
         if region.lower().startswith("us-gov-"):
             return "us-gov.elastic-gumby.ai.aws.dev"
