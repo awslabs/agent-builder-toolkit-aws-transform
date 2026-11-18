@@ -21,8 +21,6 @@ Usage:
 The frontend strips the fenced block before rendering markdown and passes the
 JSON payload to ``SourceRenderer`` which displays each entry as a downloadable
 link using the ``aws-transform://`` deeplink scheme.
-
-See: https://quip-amazon.com/yssKApcGR6qi
 """
 
 import json

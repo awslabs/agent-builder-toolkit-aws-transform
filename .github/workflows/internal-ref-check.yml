@@ -1,0 +1,23 @@
+name: Internal Reference Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  internal-ref-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # A rule edit that stops flagging a known sample fails here, before the scan.
+      - name: Self-test the rules
+        run: python3 scripts/check_public_refs.py --self-test
+
+      - name: Check for non-public references and access keys
+        run: python3 scripts/check_public_refs.py

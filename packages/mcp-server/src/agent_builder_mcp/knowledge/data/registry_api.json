@@ -1426,11 +1426,11 @@
         "atxAccessRoleArn":{"shape":"RoleArn"},
         "bootstrapRoleArn":{
           "shape":"RoleArn",
-          "documentation":"<p>Used for MDE service to setup the container during launch by pulling ECR image etc. https://w.amazon.com/bin/view/Moontide/MDE/DeveloperGuide#HBootstrapRole</p>"
+          "documentation":"<p>Used for MDE service to setup the container during launch by pulling ECR image etc.</p>"
         },
         "environmentRoleArn":{
           "shape":"RoleArn",
-          "documentation":"<p>Role used by MDE container during runtime. https://w.amazon.com/bin/view/Moontide/MDE/DeveloperGuide#HEnvironmentcredentials</p>"
+          "documentation":"<p>Role used by MDE container during runtime.</p>"
         },
         "storageSize":{"shape":"MDEConfigurationStorageSizeInteger"},
         "devfile":{"shape":"String"},
