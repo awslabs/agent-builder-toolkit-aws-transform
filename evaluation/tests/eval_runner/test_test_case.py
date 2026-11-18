@@ -74,6 +74,24 @@ class TestTestCase:
         with pytest.raises((KeyError, ValueError)):
             TestCase.from_dict({"name": "no id or message"})
 
+    def test_to_scenario_carries_complexity(self):
+        from eval_runner.test_case import TestCase
+
+        tc = TestCase(
+            id="t1", name="t", user_message="m", complexity="hard", tags=["x", "y"]
+        )
+        scenario = tc.to_scenario()
+        assert scenario.complexity == "hard"
+        assert scenario.tags == ["x", "y"]
+
+    def test_eval_case_complexity_default_medium(self):
+        from eval_runner.execution.runner import EvalCase
+
+        case = EvalCase(
+            id="c1", name="c", prompt="p", description="d", assertions=[]
+        )
+        assert case.complexity == "medium"
+
 
 class TestTestCaseLoader:
     def _write_test_file(self, path: Path, data: list[dict]):

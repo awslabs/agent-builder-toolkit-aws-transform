@@ -238,6 +238,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--cwd", default="/tmp", help="Working directory for bridge sessions")
     p_run.add_argument("--report", action="store_true", help="Generate HTML dashboard after run")
     p_run.add_argument("--clean", action="store_true", help="Remove eval-results/ before running")
+    p_run.add_argument(
+        "--baseline", help="Path to a baseline summary.json to compare against for regressions"
+    )
 
     # report
     p_report = sub.add_parser("report", help="Generate HTML dashboard from eval results")
