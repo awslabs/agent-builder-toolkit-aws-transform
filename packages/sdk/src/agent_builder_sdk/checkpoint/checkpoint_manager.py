@@ -29,7 +29,7 @@ class CheckpointManager:
         self._late_restore_attempted = False
         # Serializes checkpoint execution across threads. attempt_checkpoint()
         # now runs on a worker thread (asyncio.to_thread) while force_checkpoint()
-        # can run from the heartbeat loop / shutdown; without this lock both could
+        # can run from other callers (for example at shutdown); without this lock both could
         # observe an empty list_checkpoint() and each create_checkpoint(), yielding
         # duplicate checkpoint artifacts.
         self._checkpoint_lock = threading.Lock()
@@ -118,7 +118,14 @@ class CheckpointManager:
             return False
 
     def restore_checkpoint(self, artifact_id: str) -> bool:
-        """Roll back to a specific checkpoint, serialized against background checkpointing."""
+        """Roll back to a specific checkpoint, serialized against background checkpointing.
+
+        Replaces the files only; it does not rebuild a running agent, queue or response store.
+        If the directory is read-only or an entry in it cannot be moved, the checkpoint is
+        extracted over the existing files and files that are not in it remain; the return
+        value is still True. If that extract fails partway, the return value is False and
+        only some of the files are restored.
+        """
         with self._checkpoint_lock:
             try:
                 self.checkpoint_repository.restore_checkpoint(artifact_id)

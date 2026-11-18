@@ -349,7 +349,7 @@ class TestCheckpointManagerConcurrency:
     """Test that _execute_checkpoint serializes concurrent callers.
 
     Since attempt_checkpoint() runs on a worker thread (asyncio.to_thread) and
-    force_checkpoint() can run from the heartbeat loop / shutdown, two callers
+    force_checkpoint() can run from other callers (for example at shutdown), two callers
     could otherwise both observe an empty list_checkpoint() and each create a
     checkpoint, producing duplicate artifacts.
     """

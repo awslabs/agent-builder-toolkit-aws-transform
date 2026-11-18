@@ -948,7 +948,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/checkpoint/checkpoint_manager.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_manager",
-    "docstring": "Roll back to a specific checkpoint, serialized against background checkpointing.",
+    "docstring": "Roll back to a specific checkpoint, serialized against background checkpointing.\n\nReplaces the files only; it does not rebuild a running agent, queue or response store.\nIf the directory is read-only or an entry in it cannot be moved, the checkpoint is\nextracted over the existing files and files that are not in it remain; the return\nvalue is still True. If that extract fails partway, the return value is False and\nonly some of the files are restored.",
     "signature": "restore_checkpoint(artifact_id: str) -> bool"
   },
   {
@@ -981,7 +981,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
-    "docstring": "STATE checkpoint artifacts for this agent, newest first.\n\nThe store returns artifacts in descending sort key order, so a limit\nfetches only the newest N instead of every artifact. A page can be short\nbecause of server side filtering, so keep paging until limit is met.",
+    "docstring": "STATE checkpoint artifacts for this agent, newest first.\n\nA page may hold fewer items than requested even when more exist, so this\nkeeps paging until limit is met or there is no nextToken. Each page asks for\nat most 100 items, so a larger limit takes more than one request.",
     "signature": "list_checkpoint(limit: Optional[int] = None) -> list[ArtifactTypeDef]"
   },
   {
@@ -989,7 +989,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
-    "docstring": "Newest checkpoints first, capped at max_checkpoints.\n\nSorts the small fetched set so the artifactId tiebreak keeps same second\nentries deterministic.",
+    "docstring": "Newest checkpoints first, capped at max_checkpoints.\n\nCheckpoints that share a created timestamp are ordered by the write time\nrecorded in their label, then by artifactId.",
     "signature": "list_restorable_checkpoints() -> list[ArtifactTypeDef]"
   },
   {
@@ -997,7 +997,7 @@
     "kind": "method",
     "file": "agent_builder_sdk/checkpoint/checkpoint_repository.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_repository",
-    "docstring": "Restore a specific past checkpoint by artifact id.",
+    "docstring": "Restore a specific past checkpoint by artifact id.\n\nReplaces the files only; it does not rebuild a running agent, queue or response store.\nIf the directory is read-only or an entry in it cannot be moved, the checkpoint is\nextracted over the existing files and files that are not in it remain. If that\nextract fails partway, it raises and only some of the files are restored.",
     "signature": "restore_checkpoint(artifact_id: str, destination_path: Optional[str] = None) -> None"
   },
   {
