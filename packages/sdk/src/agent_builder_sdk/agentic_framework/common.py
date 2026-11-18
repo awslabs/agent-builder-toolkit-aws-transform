@@ -6,6 +6,7 @@ Common utilities for agentic framework.
 
 import base64
 import hashlib
+import io
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,15 +41,33 @@ _PRESIGNED_URL_RETRY = Retry(
 )
 
 # (connect, read) seconds. requests applies no timeout by default, so a wedged socket
-# would otherwise block the caller forever. The upload read timeout is the wait for S3 to
-# acknowledge a PUT after the body has been sent, which for a large artifact runs longer
-# than any single read while streaming a download, so it is not held to the same bound.
+# would otherwise block the caller forever. Each value bounds one socket operation, not
+# the whole call. urllib3 applies the connect value to every socket write while it sends
+# the request, not only to connecting, which is why the upload body is streamed (see
+# upload_from_presigned_url). The upload read timeout is the wait for S3 to acknowledge
+# the PUT after the body has been sent, which for a large artifact runs longer than any
+# single read while streaming a download, so it is not held to the same bound.
+#
+# _PRESIGNED_URL_RETRY also retries an attempt that timed out. urllib3 counts a read
+# timeout and a dropped connection as the same kind of error, so Retry(read=0) would stop
+# the retry of both. There is no whole-call bound. For example, an endpoint that takes
+# the request and never answers holds an upload for 4 attempts x 300 s plus 3 s of backoff
+# (about 20 minutes) and a download for 4 x 60 s plus 3 s (about 4 minutes); an endpoint
+# that trickles data can hold it longer.
 _PRESIGNED_UPLOAD_TIMEOUT = (5, 300)
 _PRESIGNED_DOWNLOAD_TIMEOUT = (5, 60)
 
 # ConnectTimeout subclasses ConnectionError, but ReadTimeout does not, so catching only
 # ConnectionError would let the timeouts above escape as an unhandled ReadTimeout.
-_TRANSPORT_ERRORS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
+# ChunkedEncodingError subclasses neither: requests raises it when urllib3 reports that
+# the connection dropped while the response body was read. urllib3 2.x reports a body cut
+# short of its Content-Length that way; 1.x returns the short body as a success, which is
+# why download_from_presigned_url checks the length itself.
+_TRANSPORT_ERRORS = (
+    requests.exceptions.ConnectionError,
+    requests.exceptions.Timeout,
+    requests.exceptions.ChunkedEncodingError,
+)
 
 
 @dataclass
@@ -89,7 +108,16 @@ def upload_from_presigned_url(
             session.mount("https://", HTTPAdapter(max_retries=_PRESIGNED_URL_RETRY))
             response = session.put(
                 presigned_url_string,
-                data=content,
+                # Streamed, so the connect timeout bounds each small write rather than one
+                # write of the whole body; urllib3 rewinds the stream for a retry. An empty
+                # body stays bytes: requests sends an empty stream chunked, which S3 rejects,
+                # but empty bytes with Content-Length: 0. Anything that is not bytes-like (a
+                # str, a file object) goes out as it did in release 1.1.0.
+                data=(
+                    io.BytesIO(content)
+                    if content and isinstance(content, (bytes, bytearray, memoryview))
+                    else content
+                ),
                 headers=headers,
                 timeout=_PRESIGNED_UPLOAD_TIMEOUT,
             )
@@ -128,6 +156,10 @@ def download_from_presigned_url(
             )
     except _TRANSPORT_ERRORS as e:
         raise InternalBaseAgentError("Artifact download failed: connection error") from e
+
+    # Bytes of the declared Content-Length that never arrived; None when none was declared.
+    if response.raw.length_remaining:
+        raise InternalBaseAgentError("Artifact download failed: incomplete body")
 
     raise_for_s3_error_response(
         response.status_code,
