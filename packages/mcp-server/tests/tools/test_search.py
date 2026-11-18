@@ -3,8 +3,12 @@
 """Unit tests for search tools (BM25 keyword search)."""
 
 import json
+import re
 
-from agent_builder_mcp.tools.search import _lite
+from mcp.server.fastmcp import FastMCP
+
+from agent_builder_mcp.knowledge._lite import SOURCE_NAMES
+from agent_builder_mcp.tools.search import _lite, register_search_tools
 
 
 class TestKeywordSearch:
@@ -35,3 +39,23 @@ class TestSearchBySource:
         assert len(parsed) >= 1
         for item in parsed:
             assert item["source"] == "TransformAgenticApiModel"
+
+    def test_description_lists_exactly_the_registered_sources(self) -> None:
+        """The tool description is the only place a client learns the valid sources."""
+        mcp = FastMCP(name="test")
+        register_search_tools(mcp)
+
+        description = mcp._tool_manager.get_tool("search_by_source").description
+        listed = re.search(r"Valid sources: ([^.]+)\.", description)
+        assert listed is not None
+        assert sorted(listed.group(1).split(", ")) == sorted(SOURCE_NAMES)
+
+
+class TestHitlGenerationPrompt:
+    """Tests for get_hitl_generation_prompt function."""
+
+    def test_prompt_holds_the_test_steps(self) -> None:
+        """The prompt gives the test steps itself: a search preview can cut them off."""
+        prompt = _lite.get_hitl_generation_prompt()
+        assert 'uxComponentId: "DynamicHITLRenderEngine"' in prompt
+        assert "open the task in the web app" in prompt

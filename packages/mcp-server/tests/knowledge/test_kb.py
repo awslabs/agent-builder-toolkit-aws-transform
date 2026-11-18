@@ -3,6 +3,7 @@
 """Tests for knowledge base setup and search."""
 
 import json
+import re
 
 import pytest
 
@@ -73,6 +74,20 @@ class TestLoadDocuments:
         loaded_sources = {meta["source"] for _, meta in docs}
         for source_name in SOURCE_NAMES.values():
             assert source_name in loaded_sources, f"Source {source_name} not loaded"
+
+    def test_docs_name_only_registered_sources(self) -> None:
+        """Every search_by_source example in the Markdown data names a registered source."""
+        from agent_builder_mcp.knowledge._lite import DATA_DIR, SOURCE_NAMES
+
+        example = re.compile(r'search_by_source\("[^"]*",\s*"([^"]+)"\)')
+        named = {
+            (path.name, source)
+            for path in DATA_DIR.glob("*.md")
+            for source in example.findall(path.read_text(encoding="utf-8"))
+        }
+        assert named, "no search_by_source example found"
+        unknown = sorted((name, source) for name, source in named if source not in SOURCE_NAMES)
+        assert unknown == []
 
 
 class TestSetupKb:

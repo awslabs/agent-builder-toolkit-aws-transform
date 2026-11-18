@@ -33,7 +33,7 @@ def register_search_tools(mcp: FastMCP) -> None:
             "Search AWS Transform docs filtered by source. "
             "Valid sources: dev-guide, sdk, agentic-api, registry-api, "
             "hitl-sdk-python, hitl-sdk-java, hitl-component-library, "
-            "hitl-common-patterns, hitl-custom-components, hitl-validation, "
+            "hitl-common-patterns, hitl-validation, "
             "hitl-generation-rules, hitl-agent-integration, hitl-architecture, "
             "hitl-render-limitations. "
             "Returns previews with source file paths (file/module) when available."

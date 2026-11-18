@@ -105,7 +105,7 @@ SpaceBetween (direction="vertical", size="l")
 - VERIFY: No `Box variant="h1|h2|h3"` (use Header)
 - VERIFY: User-provided data values used exactly
 
-After generating JSON, suggest previewing in Storybook: tell the developer to open `Simple Browser: Open` from the command palette (Ctrl+Shift+P / Cmd+Shift+P), navigate to `https://assets.transform-alpha-intg.us-west-2.on.aws/storybook/index.html`, and paste the JSON into the playground input area.
+After generating JSON, tell the developer how to test it: save the JSON as an agent artifact (under `properties.domTreeJson`), create a HITL task with `uxComponentId: "DynamicHITLRenderEngine"` and that artifact's `artifactId`, then open the task in the web app.
 
 ---
 

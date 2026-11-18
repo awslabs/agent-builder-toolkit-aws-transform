@@ -889,14 +889,11 @@ Note: No submit button needed — the platform handles submission automatically.
 ## Next Steps
 
 - See `common-patterns.md` for complete UI templates
-- See `custom-components.md` to add your own components
 - Search `keyword_search("HITL validation testing")` to test your JSON
 
 ---
 
 ## JSON Schema Reference
-
-The authoritative schema is in `TransformUIComponents/schemaRegistry/DynamicHITLRenderEngine.schema.json`.
 
 **Key schema rules:**
 - Every component must have a `"type"` field from the allowed enum (~53 CloudScape components + Markdown, ContentLoader)
