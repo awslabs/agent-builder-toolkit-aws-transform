@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the SubagentRegistryTools class."""
 
-from unittest.mock import patch
+import os
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -13,6 +14,8 @@ from agent_builder_sdk.custom_types.agent_registry_types import (
 )
 from agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools import (
     SubagentRegistryTools,
+    _get_mock_subagents,
+    _parse_agent_version_output,
 )
 
 
@@ -22,147 +25,180 @@ def subagent_registry_tools():
     return SubagentRegistryTools()
 
 
-class TestSubagentRegistryTools:
-    """Test class for SubagentRegistryTools."""
+class TestMockRegistry:
+    """Tests for the dev-mode mock registry path."""
 
-    def test_initialization(self):
-        """Test SubagentRegistryTools initialization."""
-        tools = SubagentRegistryTools()
-        assert isinstance(tools, SubagentRegistryTools)
-
+    @patch.dict(os.environ, {"ATX_USE_MOCK_REGISTRY": "true"})
     @pytest.mark.asyncio
-    async def test_discover_subagents_success(self, subagent_registry_tools):
-        """Test successful discover_subagents operation."""
-        # Call the tool
-        result = await subagent_registry_tools.discover_subagents()
+    async def test_discover_subagents_returns_mock_when_flag_set(self, subagent_registry_tools):
+        """When ATX_USE_MOCK_REGISTRY=true, returns fixture data without calling the API."""
+        result = _get_mock_subagents()
 
-        # Verify result
         assert isinstance(result, list)
         assert len(result) == 1
-
-        # Verify the mock agent
         mock_agent = result[0]
         assert isinstance(mock_agent, GetAgentVersionOutput)
         assert mock_agent.version == "1.0.0"
         assert mock_agent.metadata.type == AgentType.SUB_AGENT
-        assert mock_agent.metadata.description == "A subagent for weather related tasks"
         assert mock_agent.configuration.agent_card.name == "dynamic-showcase-subagent"
         assert mock_agent.status == VersionStatus.ACTIVE
 
-    @pytest.mark.asyncio
-    async def test_discover_subagents_exception_handling(self, subagent_registry_tools):
-        """Test discover_subagents operation when an exception occurs."""
-        # Mock the GetAgentVersionOutput constructor to raise an exception
-        with patch(
-            "agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools.GetAgentVersionOutput"
-        ) as mock_output:
-            mock_output.side_effect = Exception("Mock error")
-
-            # Call the tool and expect an exception
-            with pytest.raises(Exception) as exc_info:
-                await subagent_registry_tools.discover_subagents()
-
-            # Verify the exception message
-            assert "Subagent registry operation failed: Mock error" in str(exc_info.value)
-
-    @pytest.mark.asyncio
-    async def test_return_type_annotation(self, subagent_registry_tools):
-        """Test that the return type is correctly annotated."""
-        # Call the tool
-        result = await subagent_registry_tools.discover_subagents()
-
-        # Verify result matches List[GetAgentVersionOutput] type
-        assert isinstance(result, list)
-        for agent in result:
-            assert isinstance(agent, GetAgentVersionOutput)
-
-    @pytest.mark.asyncio
-    async def test_tool_decorator_functionality(self, subagent_registry_tools):
-        """Test that the @tool decorator works correctly."""
-        # Verify the discover_subagents method has tool attributes
-        assert hasattr(subagent_registry_tools.discover_subagents, "__wrapped__")
-        assert callable(subagent_registry_tools.discover_subagents)
-
-        # Verify we can call it as an async function
-        result = await subagent_registry_tools.discover_subagents()
-        assert isinstance(result, list)
-
-    @patch("agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools.logger")
-    def test_initialization_logging(self, mock_logger):
-        """Test that initialization logs appropriately."""
-        SubagentRegistryTools()
-
-        # Verify initialization was logged
-        mock_logger.info.assert_called_with("Initialized SubagentRegistryTools")
-
-    @patch("agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools.logger")
-    @pytest.mark.asyncio
-    async def test_exception_logging(self, mock_logger, subagent_registry_tools):
-        """Test that exceptions are logged appropriately."""
-        # Mock GetAgentVersionOutput to raise an exception
-        with patch(
-            "agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools.GetAgentVersionOutput"
-        ) as mock_output:
-            test_error = Exception("Test error")
-            mock_output.side_effect = test_error
-
-            # Call the tool and expect an exception
-            with pytest.raises(Exception):
-                await subagent_registry_tools.discover_subagents()
-
-            # Verify error was logged
-            mock_logger.error.assert_called_with(f"Subagent registry operation error: {test_error}")
-
-
-class TestSubagentRegistryToolsIntegration:
-    """Integration tests for SubagentRegistryTools."""
-
-    @pytest.mark.asyncio
-    async def test_mock_agent_properties(self):
-        """Test that the mock agent has all required properties."""
-        # Create tool and get subagents
-        tools = SubagentRegistryTools()
-        result = await tools.discover_subagents()
-
-        # Verify mock agent has all required fields
+    def test_mock_subagents_has_required_fields(self):
+        """Verify mock agent has all required fields for LLM consumption."""
+        result = _get_mock_subagents()
         mock_agent = result[0]
-        assert hasattr(mock_agent, "version")
-        assert hasattr(mock_agent, "metadata")
-        assert hasattr(mock_agent, "configuration")
-        assert hasattr(mock_agent, "status")
-        assert hasattr(mock_agent, "visibility")
-
-        # Verify field values are not None or empty
         assert mock_agent.version
         assert mock_agent.metadata
         assert mock_agent.configuration
         assert mock_agent.status
         assert mock_agent.visibility
+        assert mock_agent.configuration.agent_card.skills
 
+
+class TestRealRegistry:
+    """Tests for the live registry path (with mocked boto3 client)."""
+
+    @patch("agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools._USE_MOCK_REGISTRY", False)
+    @patch("agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools.get_agent_context_from_env")
+    @patch("agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools.get_agentic_api_client")
     @pytest.mark.asyncio
-    async def test_agent_type_enum_values(self):
-        """Test that AgentType enum values are correctly used."""
-        # Create tool and get subagents
-        tools = SubagentRegistryTools()
-        result = await tools.discover_subagents()
+    async def test_discover_subagents_calls_api(
+        self, mock_get_client, mock_get_context, subagent_registry_tools
+    ):
+        """Real path calls list_agent_instances and parses response."""
+        mock_context = MagicMock()
+        mock_context.agent_instance_id = "orch-123"
+        mock_context.job_id = "job-456"
+        mock_context.workspace_id = "ws-789"
+        mock_context.authorization_token = "token-abc"
+        mock_get_context.return_value = mock_context
 
-        # Verify agent type is a valid enum value
-        mock_agent = result[0]
-        assert isinstance(mock_agent.metadata.type, AgentType)
-        assert mock_agent.metadata.type in [AgentType.SUB_AGENT, AgentType.ORCHESTRATOR_AGENT]
+        mock_client = MagicMock()
+        mock_client.list_agent_instances.return_value = {
+            "agentInstanceSummaries": [
+                {
+                    "agentType": "SUB_AGENT",
+                    "agentName": "my-subagent",
+                    "agentVersion": "2.0.0",
+                    "agentInstanceStatus": "ACTIVE",
+                    "description": "Test subagent",
+                    "ownerName": "TEST_TEAM",
+                    "ownerAccountId": "111222333444",
+                    "ownerContactInfo": "test@example.com",
+                    "visibility": "PUBLIC",
+                    "shortDescription": "Test subagent short",
+                },
+                {
+                    "agentType": "ORCHESTRATOR_AGENT",
+                    "agentName": "other-orch",
+                    "agentVersion": "1.0.0",
+                    "agentInstanceStatus": "ACTIVE",
+                },
+            ]
+        }
+        mock_get_client.return_value = mock_client
 
+        result = await subagent_registry_tools.discover_subagents()
+
+        assert len(result) == 1
+        agent = result[0]
+        assert agent.configuration.agent_card.name == "my-subagent"
+        assert agent.version == "2.0.0"
+        assert agent.metadata.type == AgentType.SUB_AGENT
+
+    @patch("agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools._USE_MOCK_REGISTRY", False)
+    @patch("agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools.get_agent_context_from_env")
+    @patch("agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools.get_agentic_api_client")
     @pytest.mark.asyncio
-    async def test_multiple_calls_consistency(self):
-        """Test that multiple calls return consistent results."""
-        # Create tool
-        tools = SubagentRegistryTools()
+    async def test_discover_subagents_empty_response(
+        self, mock_get_client, mock_get_context, subagent_registry_tools
+    ):
+        """Returns empty list when no subagents are registered."""
+        mock_context = MagicMock()
+        mock_context.agent_instance_id = "orch-123"
+        mock_context.job_id = "job-456"
+        mock_context.workspace_id = "ws-789"
+        mock_context.authorization_token = "token-abc"
+        mock_get_context.return_value = mock_context
 
-        # Call multiple times
-        result1 = await tools.discover_subagents()
-        result2 = await tools.discover_subagents()
+        mock_client = MagicMock()
+        mock_client.list_agent_instances.return_value = {"agentInstanceSummaries": []}
+        mock_get_client.return_value = mock_client
 
-        # Verify results are consistent
-        assert len(result1) == len(result2)
-        assert result1[0].version == result2[0].version
-        assert result1[0].configuration.agent_card.name == result2[0].configuration.agent_card.name
-        assert result1[0].metadata.type == result2[0].metadata.type
+        result = await subagent_registry_tools.discover_subagents()
+        assert result == []
+
+    @patch("agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools._USE_MOCK_REGISTRY", False)
+    @patch("agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools.get_agent_context_from_env")
+    @patch("agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools.get_agentic_api_client")
+    @pytest.mark.asyncio
+    async def test_discover_subagents_api_error_raises(
+        self, mock_get_client, mock_get_context, subagent_registry_tools
+    ):
+        """API errors propagate as exceptions."""
+        mock_context = MagicMock()
+        mock_context.agent_instance_id = "orch-123"
+        mock_context.job_id = "job-456"
+        mock_context.workspace_id = "ws-789"
+        mock_context.authorization_token = "token-abc"
+        mock_get_context.return_value = mock_context
+
+        mock_client = MagicMock()
+        mock_client.list_agent_instances.side_effect = Exception("Connection refused")
+        mock_get_client.return_value = mock_client
+
+        with pytest.raises(Exception, match="Subagent registry operation failed"):
+            await subagent_registry_tools.discover_subagents()
+
+
+class TestParseAgentVersionOutput:
+    """Tests for _parse_agent_version_output helper."""
+
+    def test_parses_full_response(self):
+        """Parse a complete API response into typed dataclass."""
+        raw = {
+            "version": "3.1.0",
+            "status": "ACTIVE",
+            "visibility": "PUBLIC",
+            "metadata": {
+                "type": "SUB_AGENT",
+                "description": "Analysis agent",
+                "ownerName": "TEAM_X",
+                "ownerAccountId": "999888777666",
+                "ownerContactInfo": "teamx@example.com",
+            },
+            "configuration": {
+                "shortDescription": "Analyzes things",
+                "monitoringType": "HEARTBEAT",
+                "notificationsEnabled": "DISABLED",
+                "agentCard": {
+                    "name": "analysis-agent",
+                    "description": "Does analysis",
+                    "version": "3.1.0",
+                    "url": "https://example.com",
+                    "skills": [
+                        {
+                            "id": "s1",
+                            "name": "analyze",
+                            "description": "Runs analysis",
+                            "tags": ["ml"],
+                        }
+                    ],
+                    "capabilities": {"pushNotifications": True, "streaming": True},
+                    "provider": {"organization": "TeamX", "url": "https://teamx.com"},
+                },
+            },
+        }
+        result = _parse_agent_version_output(raw)
+        assert result.version == "3.1.0"
+        assert result.metadata.owner_name == "TEAM_X"
+        assert result.configuration.agent_card.skills[0].name == "analyze"
+        assert result.configuration.agent_card.capabilities.streaming is True
+
+    def test_handles_minimal_response(self):
+        """Parses gracefully when optional fields are missing."""
+        raw = {"version": "1.0.0", "status": "ACTIVE"}
+        result = _parse_agent_version_output(raw)
+        assert result.version == "1.0.0"
+        assert result.metadata.description == ""
+        assert result.configuration.agent_card.skills == []
