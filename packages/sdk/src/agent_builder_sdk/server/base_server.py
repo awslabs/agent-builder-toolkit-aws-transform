@@ -4,9 +4,12 @@
 Abstract base server interface.
 """
 
+import asyncio
 import json
 import logging
 import os
+import sys
+import threading
 import uuid
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
@@ -55,6 +58,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Longest wait for the code-interpreter sessions to stop during a shutdown.
+_SESSION_STOP_TIMEOUT_SECONDS = 10
+
 
 class BaseServer(ABC):
     """Abstract base class for all server implementations."""
@@ -85,7 +91,51 @@ class BaseServer(ABC):
 
     async def _cleanup(self) -> None:
         """Cleanup all components during shutdown - (optional)"""
-        pass
+        await self._stop_code_interpreter_sessions()
+
+    async def _stop_code_interpreter_sessions(self) -> None:
+        """Stop the sandbox sessions of the code-interpreter tools, which are billed until they end.
+
+        Safe to run more than once in a shutdown: a session is stopped once. The module
+        is looked up instead of imported, so a server whose agent does not use the tools
+        does not need the code-interpreter extra.
+
+        Waits at most ``_SESSION_STOP_TIMEOUT_SECONDS`` so that a service endpoint that
+        does not answer cannot hold up the rest of the shutdown or the exit of the process.
+        The stop requests then go on in a daemon thread, which ends with the process; a
+        session they do not stop ends at its timeout.
+        """
+        tools = sys.modules.get("agent_builder_sdk.experimental.code_interpreter.code_interpreter_tool")
+        if tools is None:
+            return
+        loop = asyncio.get_running_loop()
+        done = asyncio.Event()
+
+        def stop() -> None:
+            try:
+                tools.stop_all_sessions()
+            except Exception as e:
+                logger.warning(f"Could not stop the code-interpreter sessions: {e}")
+            finally:
+                try:
+                    loop.call_soon_threadsafe(done.set)
+                except RuntimeError:
+                    # The wait below timed out and the loop is closed; nothing waits for this.
+                    pass
+
+        # One blocking StopCodeInterpreterSession request per session. A daemon thread, not
+        # the loop's executor: the loop and the interpreter join executor threads when they
+        # close, so a request that does not return would hold the process after the wait.
+        # The wait is on the loop itself for the same reason: tool calls can hold every
+        # thread of the executor, and a wait queued behind them would have no limit.
+        threading.Thread(target=stop, name="stop-code-interpreter-sessions", daemon=True).start()
+        try:
+            await asyncio.wait_for(done.wait(), _SESSION_STOP_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"The code-interpreter sessions were not stopped within {_SESSION_STOP_TIMEOUT_SECONDS} "
+                "seconds; the shutdown goes on, and a session that stays running ends at its timeout"
+            )
 
     @abstractmethod
     def start(self) -> None:

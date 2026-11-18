@@ -103,6 +103,7 @@
       - [Optional Environment Variables](#optional-environment-variables)
       - [Bedrock Guardrails](#bedrock-guardrails)
       - [Available Tools & Integrations](#available-tools-integrations)
+      - [Experimental Tools: Shell and Code Interpreter](#experimental-tools-shell-and-code-interpreter)
   - [AWS Transform Agentic API Specification](#aws-transform-agentic-api-specification)
     - [Common Error Responses](#common-error-responses)
     - [Data Types and Constraints](#data-types-and-constraints)
@@ -2898,6 +2899,61 @@ Bedrock guardrails provide content filtering and safety controls for your agent 
 #### Available Tools & Integrations
 
 Your agent automatically has access to AWS Transform tools via MCP integration (AWS Transform MCP).
+
+#### Experimental Tools: Shell and Code Interpreter
+
+The default orchestrator has two opt-in tool sets. Both are experimental: the API can change, and the import emits a `FutureWarning`.
+
+```python
+from agent_builder_sdk.agent_factory import create_default_async_orchestrator_with_subagent
+
+agent = create_default_async_orchestrator_with_subagent(
+    system_prompt="...",
+    enable_shell=True,             # execute_shell
+    enable_code_interpreter=True,  # code_interpreter + stage_file_to_sandbox
+)
+```
+
+| Flag | Tools | Where the code runs | Install |
+|---|---|---|---|
+| `enable_shell` | `execute_shell` | The agent container | No extra |
+| `enable_code_interpreter` | `code_interpreter`, `stage_file_to_sandbox` | A Bedrock AgentCore Code Interpreter session | `pip install 'agent-builder-sdk-aws-transform[code-interpreter]'` (adds `bedrock-agentcore`) |
+
+| Environment variable | Default | Effect |
+|---|---|---|
+| `ATX_SHELL_ALLOW_PYTHON` | `true` | `false` removes `python` and `python3` from the shell allowlist. |
+| `ATX_CODE_INTERPRETER_ID` | `aws.codeinterpreter.v1` | Identifier of your own interpreter. The default interpreter has no internet access and no AWS credentials. The AgentCore documentation says that Sandbox network mode can reach Amazon S3, so do not treat the sandbox as a place from which data cannot leave. The network access of your own interpreter depends on its network mode. |
+| `ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS` | `900` | Lifetime of a sandbox session in seconds, 1 to 28800. A value over 28800 is used as 28800. A value that is not a whole number, or is below 1, raises `ValueError` when the agent is built. |
+
+`execute_shell` is not a shell. No shell reads the command: the tool reads it in the small grammar below and starts each program itself with the argument list it read.
+
+| Syntax | Meaning |
+|---|---|
+| `program arg ... \| program arg ...` | Allowlisted programs (file inspection, text processing, archives, `rm`/`mkdir`, `python`) joined by pipes. The exit code is that of the last program. A program is given by its name, not by a path, and is looked up in the absolute directories of `PATH`. |
+| `'...'`, `"..."`, `\x` | Single quotes make every character literal. In double quotes a backslash makes `"`, `\`, `$` and a backtick literal. Outside quotes a backslash makes the next character literal. |
+| Unquoted `*`, `?`, `[...]` | The word is replaced by the sorted file names that match in the working directory. The rules are those of Python `glob`: no pattern matches `.` or `..`, a name that starts with a dot needs a pattern that starts with a dot, `[!a]` negates and `[^a]` does not. A quoted or escaped character inside an unquoted `[...]`, and a class such as `[[:digit:]]`, are rejected. Without a match the word stays as written. A pattern with more than 10000 matches, or one that is not expanded within the command's time limit, is rejected. |
+| `2>&1`, `>/dev/null`, `2>/dev/null` | The only redirections, each as a word of its own. They apply in the order written. |
+
+- Everything else that a shell would act on is rejected and nothing runs: `;`, `&&`, `||`, `&`, `$NAME`, `$(...)`, `${...}`, backticks, every other redirection (`> file`, `>> file`, `< file`, `&>`, `>&-`, here-documents), parentheses, `{a,b}`, a leading `~`, an unquoted `#` at the start of a word, `NAME=value` in front of a program, a line break outside quotes and a backslash at the end of a line. The error message names the form. Put a literal `$` in single quotes, write paths in full, and make one call for each command.
+- There is no redirection to a file. Use an option of the program (`sort -o`, `tar -f`, `unzip -d`) or a script.
+- The options of `find`, `tar`, `sort` and `rg` that run another program are rejected, abbreviated or bundled. For `tar` that includes `-T` / `--files-from`: older GNU tar reads options from the list file. The check reads the argument list that the program gets, after pattern expansion.
+- Limits: 30 seconds per command by default (120 maximum); at the limit the process group of every program in the pipeline is killed. 20 KB of stdout and 10 KB of stderr are kept; the rest is read and dropped, so a large output does not grow the agent's memory. The command gets an empty stdin. Pattern expansion runs in the agent process and counts toward the time limit.
+- The AWS SDK and CLI find no credentials in the subprocess by default: credential environment variables are removed, and the shared credential files and the instance metadata lookup are switched off. Scripts that call AWS must use temporary credentials from a connector.
+
+Security limits of `execute_shell`. The allowlist is defense in depth. It is not a sandbox:
+
+- `awk`, `sed` and `python` can start other programs from their own scripts. `ATX_SHELL_ALLOW_PYTHON=false` removes `python` only.
+- The option rules cover `find`, `tar`, `sort` and `rg`. Do not rely on them to contain a hostile prompt.
+- A command can read and delete every file that the container user can. A program file that the container user can replace in a `PATH` directory runs under its allowlisted name.
+- The credentials of the agent are not out of reach. A command can read the environment of the agent process through `/proc`, and a script can call the credential endpoint of the container directly.
+- Treat the tool as able to run any program in the container. The container and its execution role are the security boundary.
+
+Code interpreter:
+
+- The agent's execution role needs `bedrock-agentcore:StartCodeInterpreterSession`, `InvokeCodeInterpreter`, `GetCodeInterpreterSession` and `StopCodeInterpreterSession`. Sessions start in `AWS_REGION` (`us-west-2` when unset).
+- `stage_file_to_sandbox` copies one file of at most 5 MiB from the agent container into the sandbox.
+- A session starts on first use and ends when its lifetime is over, also when it is in use. The next call starts a new, empty session and its result tells the model so.
+- A session is billed until it ends. `agent_builder_sdk.experimental.code_interpreter.stop_all_sessions()` stops the sessions of the process. `AgentRuntimeServer` and `StatelessAgentRuntimeServer` call it on a STOP request and on graceful shutdown (the SIGTERM of a container runtime starts one), and the Python interpreter calls it at a normal exit. The servers wait at most 10 seconds for the stop requests, and a request that is not done by then does not hold up the exit of the process. A call that is in flight when its session is stopped fails and is not run again. If you serve the agent in another way and a signal ends the process, call it from your shutdown code; otherwise the sessions run until their lifetime is over.
 
 ## AWS Transform Agentic API Specification
 

@@ -246,9 +246,14 @@ class StatelessAgentRuntimeServer(BaseServer):
 
     @asynccontextmanager
     async def _lifespan(self, app: FastAPI):
-        """FastAPI lifespan for graceful startup (no cleanup needed for stateless)."""
+        """FastAPI lifespan: startup, then the stop of the sandbox sessions on shutdown.
+
+        Shutdown does not run ``_cleanup()``: that hook runs on a STOP request only, so an
+        override is not called a second time here.
+        """
         await self._startup()
         yield
+        await self._stop_code_interpreter_sessions()
 
     async def _startup(self) -> None:
         """Unified startup logic."""

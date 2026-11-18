@@ -122,9 +122,9 @@
     "kind": "function",
     "file": "agent_builder_sdk/agent_factory.py",
     "module": "agent_builder_sdk.agent_factory",
-    "docstring": "Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.\n\nThis function creates a fully-featured orchestrator with:\n- Episodic memory for storing agent experiences\n- Conversation tracking across multiple sources\n- Memory tools for agent self-reflection\n- Lifecycle hooks for conversation and memory events\n- Subagent tools for communication and discovery (mocked)\n- Agent skills support via Strands AgentSkills plugin (when enable_skills=True)\n- Experimental code execution support (when enable_code_execution=True)\n\nArgs:\n    system_prompt: Custom system prompt for the orchestrator\n    mcp_client: Optional MCP client for tool integration\n    storage_dir: Directory for agent data storage\n    custom_tools: Optional list of additional custom tools to add to the orchestrator\n    model_id: Optional model ID for Bedrock inference\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)\n    with_base_guardrails: Whether to add base guardrail prompts\n    trace_attributes: Optional trace attributes for observability\n    excluded_mcp_tool_names: Set of MCP tool names to exclude\n    metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)\n    enable_skills: Enable agent skills via the Strands AgentSkills plugin.\n        When True, creates an AgentSkills plugin that registers a skills tool\n        and auto-injects skill metadata into the system prompt.\n    skills_dir: Directory containing skills. If None, uses STRANDS_SKILLS_DIR env var\n        or defaults to ./skills\n    enable_code_execution: Enable experimental local Python code execution tool.\n        WARNING: Code executes locally without sandboxing. Use with caution.\n        For sandboxed execution, AgentCore Code Interpreter integration is planned.\n    enable_blank_reply_continuation: Ask the model once more for its reply when a turn ends\n        empty right after tool results (see BlankReplyHookProvider).\n    enable_prompt_caching: Turn on Bedrock prompt caching for the orchestrator's model (see\n        AsyncBaseOrchestrator). Off by default.\n\nReturns:\n    Configured AsyncBaseOrchestrator instance with memory, hooks, and tools\n\nExample:\n    # Enable skills and code execution\n    agent = create_default_async_orchestrator_with_subagent(\n        system_prompt=\"You are a helpful assistant.\",\n        enable_skills=True,\n        skills_dir=\"./my_skills\",\n        enable_code_execution=True,\n    )",
-    "signature": "create_default_async_orchestrator_with_subagent(system_prompt: str, mcp_client: Optional[MCPClient] = None, storage_dir: str = '/tmp/orchestrator_agent', custom_tools: Optional[list[Any]] = None, model_id: str = 'anthropic.claude-sonnet-4-5-20250929-v1:0', model: Union[Model, str, None] = None, with_base_guardrails: bool = False, trace_attributes: Optional[dict[str, Any]] = None, excluded_mcp_tool_names: Optional[Set[str]] = None, metrics_config: Optional[MetricsConfig] = None, enable_skills: bool = False, skills_dir: Optional[str] = None, enable_code_execution: bool = False, locale: Optional[str] = None, conversation_repository: Optional[FileMultiSourceConversationRepository] = None, memory_manager: Optional[MemoryManager] = None, enable_blank_reply_continuation: bool = False, enable_prompt_caching: bool = False, boto_client_config: Optional[BotocoreConfig] = None) -> AsyncBaseOrchestrator",
-    "description": "Parameters:\n  system_prompt: str (required) - Custom system prompt for the orchestrator\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the orchestrator\n  model_id: str (default='anthropic.claude-sonnet-4-5-20250929-v1:0') - Optional model ID for Bedrock inference\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string (takes precedence over model_id)\n  with_base_guardrails: bool (default=False) - Whether to add base guardrail prompts\n  trace_attributes: Optional[dict[str, Any]] (default=None) - Optional trace attributes for observability\n  excluded_mcp_tool_names: Optional[Set[str]] (default=None) - Set of MCP tool names to exclude\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)\n  enable_skills: bool (default=False) - Enable agent skills via the Strands AgentSkills plugin. When True, creates an AgentSkills plugin that registers a skills tool and auto-injects skill metadata into the system prompt.\n  skills_dir: Optional[str] (default=None) - Directory containing skills. If None, uses STRANDS_SKILLS_DIR env var or defaults to ./skills\n  enable_code_execution: bool (default=False) - Enable experimental local Python code execution tool.\n  locale: Optional[str] (default=None)\n  conversation_repository: Optional[FileMultiSourceConversationRepository] (default=None)\n  memory_manager: Optional[MemoryManager] (default=None)\n  enable_blank_reply_continuation: bool (default=False) - Ask the model once more for its reply when a turn ends empty right after tool results (see BlankReplyHookProvider).\n  enable_prompt_caching: bool (default=False) - Turn on Bedrock prompt caching for the orchestrator's model (see AsyncBaseOrchestrator). Off by default.\n  boto_client_config: Optional[BotocoreConfig] (default=None)"
+    "docstring": "Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.\n\nThis function creates a fully-featured orchestrator with:\n- Episodic memory for storing agent experiences\n- Conversation tracking across multiple sources\n- Memory tools for agent self-reflection\n- Lifecycle hooks for conversation and memory events\n- Subagent tools for communication and discovery (mocked)\n- Agent skills support via Strands AgentSkills plugin (when enable_skills=True)\n- Experimental code execution support (when enable_code_execution=True)\n\nArgs:\n    system_prompt: Custom system prompt for the orchestrator\n    mcp_client: Optional MCP client for tool integration\n    storage_dir: Directory for agent data storage\n    custom_tools: Optional list of additional custom tools to add to the orchestrator\n    model_id: Optional model ID for Bedrock inference\n    model: Optional Strands Model instance or model ID string (takes precedence over model_id)\n    with_base_guardrails: Whether to add base guardrail prompts\n    trace_attributes: Optional trace attributes for observability\n    excluded_mcp_tool_names: Set of MCP tool names to exclude\n    metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)\n    enable_skills: Enable agent skills via the Strands AgentSkills plugin.\n        When True, creates an AgentSkills plugin that registers a skills tool\n        and auto-injects skill metadata into the system prompt.\n    skills_dir: Directory containing skills. If None, uses STRANDS_SKILLS_DIR env var\n        or defaults to ./skills\n    enable_code_execution: Enable experimental local Python code execution tool.\n        WARNING: Code executes locally without sandboxing. Use with caution.\n        For sandboxed execution, use enable_code_interpreter instead.\n    enable_blank_reply_continuation: Ask the model once more for its reply when a turn ends\n        empty right after tool results (see BlankReplyHookProvider).\n    enable_prompt_caching: Turn on Bedrock prompt caching for the orchestrator's model (see\n        AsyncBaseOrchestrator). Off by default.\n    enable_shell: Enable the experimental command-allowlisted execute_shell tool.\n        Off by default. The tool is not a shell: it reads the command itself\n        (programs joined by pipes, quotes, file-name patterns, and the redirections\n        2>&1, >/dev/null and 2>/dev/null), rejects every other shell form, and starts\n        each program without a shell. Runs allowlisted commands (and, unless\n        ATX_SHELL_ALLOW_PYTHON=false, python/python3) with an enforced\n        timeout and a sanitized environment in which the AWS SDK and CLI find no\n        credentials by default: credential env vars (AWS_PROFILE, container and\n        web-identity credentials) are dropped and the shared credential/config files\n        and instance metadata are switched off, so scripts must use connector-vended\n        temporary credentials. This is not a credential boundary: a command can still\n        read the environment of the agent process through /proc. The allowlist is\n        defense in depth, not a sandbox: awk, sed and python can start other programs\n        by design, so the container is the security boundary. Leave this off unless\n        you need in-container script execution.\n    enable_code_interpreter: Enable the experimental AgentCore Code Interpreter sandbox\n        tools (code_interpreter + stage_file_to_sandbox). Off by default. Runs\n        computation in a managed Python sandbox with pyarrow/pandas/numpy\n        preinstalled; data moves in via stage_file_to_sandbox. The default interpreter\n        (aws.codeinterpreter.v1) has no internet access and no AWS credentials (the\n        AgentCore documentation says that Sandbox network mode can reach Amazon S3, so\n        data can still leave it). Setting ATX_CODE_INTERPRETER_ID\n        selects a custom interpreter instead; its network access depends on its network\n        mode, and the tool tells the model not to assume either way. Each sandbox\n        session ends ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS (default 900, max\n        28800; a value that is not a whole number of 1 or more raises ValueError)\n        after it starts, regardless of activity, and takes its files with it; the\n        next call starts a new session and says so in its result. Sessions are\n        stopped when the SDK server gets a STOP request or shuts down, and at a\n        normal interpreter exit; a process that serves the agent in another way and\n        is ended by a signal must call\n        agent_builder_sdk.experimental.code_interpreter.stop_all_sessions itself.\n        Requires the code-interpreter extra:\n        pip install 'agent-builder-sdk-aws-transform[code-interpreter]'.\n\nReturns:\n    Configured AsyncBaseOrchestrator instance with memory, hooks, and tools\n\nExample:\n    # Enable skills and code execution\n    agent = create_default_async_orchestrator_with_subagent(\n        system_prompt=\"You are a helpful assistant.\",\n        enable_skills=True,\n        skills_dir=\"./my_skills\",\n        enable_code_execution=True,\n    )",
+    "signature": "create_default_async_orchestrator_with_subagent(system_prompt: str, mcp_client: Optional[MCPClient] = None, storage_dir: str = '/tmp/orchestrator_agent', custom_tools: Optional[list[Any]] = None, model_id: str = 'anthropic.claude-sonnet-4-5-20250929-v1:0', model: Union[Model, str, None] = None, with_base_guardrails: bool = False, trace_attributes: Optional[dict[str, Any]] = None, excluded_mcp_tool_names: Optional[Set[str]] = None, metrics_config: Optional[MetricsConfig] = None, enable_skills: bool = False, skills_dir: Optional[str] = None, enable_code_execution: bool = False, locale: Optional[str] = None, conversation_repository: Optional[FileMultiSourceConversationRepository] = None, memory_manager: Optional[MemoryManager] = None, enable_blank_reply_continuation: bool = False, enable_prompt_caching: bool = False, boto_client_config: Optional[BotocoreConfig] = None, enable_shell: bool = False, enable_code_interpreter: bool = False) -> AsyncBaseOrchestrator",
+    "description": "Parameters:\n  system_prompt: str (required) - Custom system prompt for the orchestrator\n  mcp_client: Optional[MCPClient] (default=None) - Optional MCP client for tool integration\n  storage_dir: str (default='/tmp/orchestrator_agent') - Directory for agent data storage\n  custom_tools: Optional[list[Any]] (default=None) - Optional list of additional custom tools to add to the orchestrator\n  model_id: str (default='anthropic.claude-sonnet-4-5-20250929-v1:0') - Optional model ID for Bedrock inference\n  model: Union[Model, str, None] (default=None) - Optional Strands Model instance or model ID string (takes precedence over model_id)\n  with_base_guardrails: bool (default=False) - Whether to add base guardrail prompts\n  trace_attributes: Optional[dict[str, Any]] (default=None) - Optional trace attributes for observability\n  excluded_mcp_tool_names: Optional[Set[str]] (default=None) - Set of MCP tool names to exclude\n  metrics_config: Optional[MetricsConfig] (default=None) - Optional MetricsConfig for CloudWatch metrics (default: disabled)\n  enable_skills: bool (default=False) - Enable agent skills via the Strands AgentSkills plugin. When True, creates an AgentSkills plugin that registers a skills tool and auto-injects skill metadata into the system prompt.\n  skills_dir: Optional[str] (default=None) - Directory containing skills. If None, uses STRANDS_SKILLS_DIR env var or defaults to ./skills\n  enable_code_execution: bool (default=False) - Enable experimental local Python code execution tool.\n  locale: Optional[str] (default=None)\n  conversation_repository: Optional[FileMultiSourceConversationRepository] (default=None)\n  memory_manager: Optional[MemoryManager] (default=None)\n  enable_blank_reply_continuation: bool (default=False) - Ask the model once more for its reply when a turn ends empty right after tool results (see BlankReplyHookProvider).\n  enable_prompt_caching: bool (default=False) - Turn on Bedrock prompt caching for the orchestrator's model (see AsyncBaseOrchestrator). Off by default.\n  boto_client_config: Optional[BotocoreConfig] (default=None)\n  enable_shell: bool (default=False) - Enable the experimental command-allowlisted execute_shell tool.\n  enable_code_interpreter: bool (default=False) - Enable the experimental AgentCore Code Interpreter sandbox tools (code_interpreter + stage_file_to_sandbox). Off by default. Runs computation in a managed Python sandbox with pyarrow/pandas/numpy preinstalled; data moves in via stage_file_to_sandbox. The default interpreter (aws.codeinterpreter.v1) has no internet access and no AWS credentials (the AgentCore documentation says that Sandbox network mode can reach Amazon S3, so data can still leave it). Setting ATX_CODE_INTERPRETER_ID selects a custom interpreter instead; its network access depends on its network mode, and the tool tells the model not to assume either way. Each sandbox session ends ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS (default 900, max 28800; a value that is not a whole number of 1 or more raises ValueError) after it starts, regardless of activity, and takes its files with it; the next call starts a new session and says so in its result. Sessions are stopped when the SDK server gets a STOP request or shuts down, and at a normal interpreter exit; a process that serves the agent in another way and is ended by a signal must call agent_builder_sdk.experimental.code_interpreter.stop_all_sessions itself. Requires the code-interpreter extra: pip install 'agent-builder-sdk-aws-transform[code-interpreter]'."
   },
   {
     "name": "create_default_async_subagent",
@@ -2012,6 +2012,147 @@
     "docstring": "Execute Python code and return the output.\n\nThis tool executes Python code locally and captures stdout/stderr.\nUse this for calculations, data analysis, or any task requiring code execution.\n\nWARNING: Code executes locally without sandboxing. Only use with trusted input.\n\nArgs:\n    code: Python code to execute. Can be multiple lines.\n    timeout_seconds: Maximum execution time in seconds. Default 30.\n\nReturns:\n    The captured stdout/stderr output, or error message if execution fails.\n\nExample:\n    python_repl(code=\"print(2 + 2)\")  # Returns: \"4\"\n    python_repl(code=\"import math; print(math.sqrt(16))\")  # Returns: \"4.0\"",
     "signature": "python_repl(code: str, timeout_seconds: Optional[int] = 30) -> str",
     "description": "Parameters:\n  code: str (required) - Python code to execute. Can be multiple lines.\n  timeout_seconds: Optional[int] (default=30) - Maximum execution time in seconds. Default 30."
+  },
+  {
+    "name": "AgentCoreCodeInterpreter",
+    "kind": "class",
+    "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
+    "docstring": "Runs sandbox actions in Bedrock AgentCore Code Interpreter sessions.\n\nA session is known by its name, starts on the first call that names it and lives until the\nservice ends it (``session_timeout_seconds`` after its start) or ``stop_all_sessions`` runs.\nSessions belong to this instance: two instances that use the same name get two sandboxes.\nCalls from several threads are safe and share the session of a name.",
+    "signature": "AgentCoreCodeInterpreter(region: str, identifier: str = DEFAULT_INTERPRETER_ID, session_timeout_seconds: int = 900) -> None",
+    "description": "Parameters:\n  region: str (required) - AWS region of the interpreter.\n  identifier: str (default=DEFAULT_INTERPRETER_ID) - Interpreter to start sessions on.\n  session_timeout_seconds: int (default=900) - Lifetime of each session, 1 to 28800 (the service limits).\n\nMethods:\n  run(action: Action) -> Dict[str, Any]\n  invoke(session_name: Optional[str], method: str, arguments: Dict[str, Any]) -> Dict[str, Any]\n  stop_all_sessions() -> None"
+  },
+  {
+    "name": "AgentCoreCodeInterpreter.invoke",
+    "kind": "method",
+    "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
+    "docstring": "Call a sandbox method in a session and return the outcome as a tool result.\n\nA call that fails because the service has ended the session runs once more, in a new\nsession of the same name. A call that fails after ``stop_all_sessions`` ran is not run\nagain.\n\nArgs:\n    session_name: Session to run in; ``None`` selects the default session.\n    method: InvokeCodeInterpreter method name, for example ``executeCode``.\n    arguments: Arguments of the method.\n\nReturns:\n    ``{\"status\": \"success\" | \"error\", \"content\": [{\"text\": ...}, ...]}``. The last content\n    block is the sandbox's answer. ``NEW_SESSION_NOTICE`` comes before it when the call\n    ran in a replacement session.\n\nRaises:\n    ClientError: The session could not be started, or the call failed on a session that\n        is still running or that ``stop_all_sessions`` stopped during the call.\n    BotoCoreError: The request did not reach the service (credentials, endpoint, timeout).",
+    "signature": "invoke(session_name: Optional[str], method: str, arguments: Dict[str, Any]) -> Dict[str, Any]"
+  },
+  {
+    "name": "AgentCoreCodeInterpreter.run",
+    "kind": "method",
+    "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
+    "docstring": "Run one ``code_interpreter`` action; see ``invoke`` for the result and the errors.",
+    "signature": "run(action: Action) -> Dict[str, Any]"
+  },
+  {
+    "name": "AgentCoreCodeInterpreter.stop_all_sessions",
+    "kind": "method",
+    "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
+    "docstring": "Stop every session this instance started, so none runs on until its timeout.\n\nA session that cannot be stopped is logged and skipped. A call that has its session\nwhen the stop runs, in flight or about to be sent, fails on the stopped session and is\nnot run again. The instance stays usable: a later call starts a new session.",
+    "signature": "stop_all_sessions() -> None"
+  },
+  {
+    "name": "CodeInterpreterInput",
+    "kind": "class",
+    "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
+    "docstring": "Input of the ``code_interpreter`` tool: one action, selected by its ``type``.",
+    "signature": "CodeInterpreterInput()",
+    "description": "Extends: BaseModel"
+  },
+  {
+    "name": "ExecuteCodeAction",
+    "kind": "class",
+    "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
+    "docstring": "Run code in the session. Variables and imports stay available to later executeCode calls.",
+    "signature": "ExecuteCodeAction()",
+    "description": "Extends: _SessionAction"
+  },
+  {
+    "name": "ExecuteCommandAction",
+    "kind": "class",
+    "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
+    "docstring": "Run a shell command in the sandbox.",
+    "signature": "ExecuteCommandAction()",
+    "description": "Extends: _SessionAction"
+  },
+  {
+    "name": "FileContent",
+    "kind": "class",
+    "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
+    "docstring": "A text file to write into the sandbox.",
+    "signature": "FileContent()",
+    "description": "Extends: BaseModel"
+  },
+  {
+    "name": "LanguageType",
+    "kind": "class",
+    "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
+    "docstring": "Languages the sandbox can execute.",
+    "signature": "LanguageType()",
+    "description": "Extends: str, Enum"
+  },
+  {
+    "name": "ListFilesAction",
+    "kind": "class",
+    "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
+    "docstring": "List the files in a sandbox directory.",
+    "signature": "ListFilesAction()",
+    "description": "Extends: _SessionAction"
+  },
+  {
+    "name": "ReadFilesAction",
+    "kind": "class",
+    "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
+    "docstring": "Read files from the sandbox.",
+    "signature": "ReadFilesAction()",
+    "description": "Extends: _SessionAction"
+  },
+  {
+    "name": "RemoveFilesAction",
+    "kind": "class",
+    "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
+    "docstring": "Delete files from the sandbox.",
+    "signature": "RemoveFilesAction()",
+    "description": "Extends: _SessionAction"
+  },
+  {
+    "name": "WriteFilesAction",
+    "kind": "class",
+    "file": "agent_builder_sdk/experimental/code_interpreter/agentcore_interpreter.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.agentcore_interpreter",
+    "docstring": "Create or overwrite text files in the sandbox.",
+    "signature": "WriteFilesAction()",
+    "description": "Extends: _SessionAction"
+  },
+  {
+    "name": "create_code_interpreter_tool",
+    "kind": "function",
+    "file": "agent_builder_sdk/experimental/code_interpreter/code_interpreter_tool.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.code_interpreter_tool",
+    "docstring": "Build the sandbox tool pair for one agent.\n\nReturns ``[code_interpreter, stage_file_to_sandbox]`` sharing one interpreter\ninstance, so files staged by one are visible to code run by the other (both\ndefault to the same sandbox session when ``session_name`` is omitted). Sessions\nbelong to this pair, so two agents in one process never share a sandbox session,\neven when their models pick the same session name.\n\nThe default interpreter (``aws.codeinterpreter.v1``) has no internet access and no AWS\ncredentials (the AgentCore documentation says that Sandbox network mode can reach\nAmazon S3, so data can still leave it). Set\n``ATX_CODE_INTERPRETER_ID`` to a custom interpreter's identifier to use it instead.\nWhether a custom interpreter has internet access depends on its network mode, so\nthe tool description then tells the model not to assume either way.\n\nSessions are stopped by :func:`stop_all_sessions`; see there for when it runs.\n\nArgs:\n    region: AWS region of the interpreter. Defaults to ``AWS_REGION``, then us-west-2.\n    session_timeout_seconds: Lifetime of each sandbox session. Defaults to\n        ``ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS``, then 900 (15 minutes).\n        At least 1; capped at the service maximum of 28800 (8 hours). The service\n        ends a session this long after it starts, regardless of activity, and its\n        files go with it; the next call starts a new session, and its result says\n        so, because files must be staged again.\n\nRaises:\n    ValueError: ``session_timeout_seconds`` is below 1, or\n        ``ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS`` is set and is not a whole\n        number of 1 or more. A session of 0 seconds cannot keep a staged file.",
+    "signature": "create_code_interpreter_tool(region: Optional[str] = None, session_timeout_seconds: Optional[int] = None) -> list",
+    "description": "Parameters:\n  region: Optional[str] (default=None) - AWS region of the interpreter. Defaults to ``AWS_REGION``, then us-west-2.\n  session_timeout_seconds: Optional[int] (default=None) - Lifetime of each sandbox session. Defaults to ``ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS``, then 900 (15 minutes). At least 1; capped at the service maximum of 28800 (8 hours). The service ends a session this long after it starts, regardless of activity, and its files go with it; the next call starts a new session, and its result says so, because files must be staged again."
+  },
+  {
+    "name": "stop_all_sessions",
+    "kind": "function",
+    "file": "agent_builder_sdk/experimental/code_interpreter/code_interpreter_tool.py",
+    "module": "agent_builder_sdk.experimental.code_interpreter.code_interpreter_tool",
+    "docstring": "Stop the sandbox sessions of every tool pair in this process that is still in use.\n\nA session that is not stopped keeps running, and is billed, until its timeout. This\nfunction runs in two places by itself: the SDK servers (``AgentRuntimeServer``,\n``StatelessAgentRuntimeServer``) call it on a STOP request and on their graceful\nshutdown (which is what a SIGTERM from the container runtime starts), and the Python\ninterpreter calls it at a normal exit. A process that serves the agent in another way\nand is ended by a signal must call it from its own shutdown path. Calling it again is\nsafe: a session is stopped once. The sessions of a tool pair that was garbage-collected\nearlier are not stopped; they end at their timeout.\n\nIt blocks for one StopCodeInterpreterSession request per session, so call it from a\nworker thread when an event loop is running.",
+    "signature": "stop_all_sessions() -> None",
+    "description": ""
+  },
+  {
+    "name": "execute_shell",
+    "kind": "function",
+    "file": "agent_builder_sdk/experimental/shell_execution/shell_execution_tool.py",
+    "module": "agent_builder_sdk.experimental.shell_execution.shell_execution_tool",
+    "docstring": "Run allowlisted programs in the agent's container. This is not a shell.\n\nUse this to explore downloaded artifact contents, extract archives, run\nbundled skill scripts (via ``python``/``python3``), or clean up temp files.\n\nOnly allowlisted programs are permitted: file inspection (ls, cat, head,\ntail, find, grep, wc, file, tree, diff), text processing (awk, sed, sort,\nuniq, cut, tr), archive handling (unzip, tar, gzip), cleanup (rm, rmdir,\nmkdir), and python/python3 (unless ATX_SHELL_ALLOW_PYTHON=false). Give the\nprogram by its name, not by a path. Blocked: network (curl, wget, ssh),\npackage managers (pip, npm), command wrappers that run an arbitrary binary\n(env, xargs), the options that run another program (find -exec,\ntar --to-command, tar -I, tar -T, sort --compress-program, rg --pre), and\nanything else.\n\nNo shell reads the command. The whole syntax is:\n\n- ``program arg ... | program arg ...``: pipes; the exit code is that of\n  the last program.\n- 'single quotes' (every character literal), \"double quotes\" and backslash\n  escapes.\n- An unquoted *, ? or [...] is matched against file names in the working\n  directory (sorted; left as written when nothing matches). Inside an unquoted\n  [...], quotes, backslashes and classes such as [[:digit:]] are rejected.\n- 2>&1, >/dev/null and 2>/dev/null, each as a word of its own.\n\nEverything else that a shell would act on is rejected and nothing runs:\n; && || &, $NAME, $(...), ${...}, backticks, any other redirection\n(> file, >> file, < file, <<EOF), parentheses, {a,b}, a leading ~ or #,\nNAME=value in front of a program, and a line break outside quotes. Put a\nliteral $ or backtick in single quotes and write paths in full (no $HOME,\nno ~). Make one call for each command instead of chaining. To write a\nfile, use an option of the program (sort -o, tar -f, unzip -d) or a script.\n\nThe command reads no input (stdin is empty). At most 20 KB of stdout and\n10 KB of stderr are kept; a result over that ends with \"[output truncated]\".\n\nThe AWS SDK and CLI find no credentials in the subprocess by default:\nAWS_PROFILE is stripped, no credential env vars are passed, and the shared\ncredential/config files and instance metadata are switched off, so a bare\nboto3 client will fail at call time even though `import boto3` resolves\n(PYTHONPATH is kept). Scripts that need AWS access must use connector-vended\ntemporary credentials rather than ambient ones.\n\nArgs:\n    command: The programs to run, in the syntax above. Only allowlisted programs are permitted.\n    working_directory: Working directory for the command. Defaults to /tmp.\n    timeout_seconds: Maximum execution time in seconds (1-120), file-name pattern\n        expansion included. Defaults to 30.\n\nReturns:\n    Command output (stdout/stderr) and exit code. A program that a signal ended has\n    the exit code 128 plus the signal number.",
+    "signature": "execute_shell(command: str, working_directory: Optional[str] = None, timeout_seconds: Optional[int] = None) -> str",
+    "description": "Parameters:\n  command: str (required) - The programs to run, in the syntax above. Only allowlisted programs are permitted.\n  working_directory: Optional[str] (default=None) - Working directory for the command. Defaults to /tmp.\n  timeout_seconds: Optional[int] (default=None) - Maximum execution time in seconds (1-120), file-name pattern expansion included. Defaults to 30."
   },
   {
     "name": "AcknowledgmentHandler",

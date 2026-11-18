@@ -70,6 +70,8 @@ def _create_default_orchestrator(
     locale: Optional[str] = None,
     conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
     memory_manager: Optional[MemoryManager] = None,
+    enable_shell: bool = False,
+    enable_code_interpreter: bool = False,
 ) -> OrchestratorT:
     logger.info("Creating default orchestrator with full feature set")
 
@@ -115,6 +117,22 @@ def _create_default_orchestrator(
 
         custom_tools.append(python_repl)
         logger.info("Added experimental python_repl tool to orchestrator")
+
+    # Add experimental shell execution tool if enabled
+    if enable_shell:
+        from agent_builder_sdk.experimental.shell_execution import execute_shell
+
+        custom_tools.append(execute_shell)
+        logger.info("Added experimental execute_shell tool to orchestrator")
+
+    # Add the AgentCore Code Interpreter sandbox tools if enabled
+    if enable_code_interpreter:
+        from agent_builder_sdk.experimental.code_interpreter import (
+            create_code_interpreter_tool,
+        )
+
+        custom_tools.extend(create_code_interpreter_tool())
+        logger.info("Added AgentCore code interpreter tools to orchestrator")
 
     # Add any additional custom tools provided by caller
     if additional_custom_tools:
@@ -362,6 +380,8 @@ def create_default_async_orchestrator_with_subagent(
     enable_blank_reply_continuation: bool = False,
     enable_prompt_caching: bool = False,
     boto_client_config: Optional[BotocoreConfig] = None,
+    enable_shell: bool = False,
+    enable_code_interpreter: bool = False,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.
 
@@ -392,11 +412,45 @@ def create_default_async_orchestrator_with_subagent(
             or defaults to ./skills
         enable_code_execution: Enable experimental local Python code execution tool.
             WARNING: Code executes locally without sandboxing. Use with caution.
-            For sandboxed execution, AgentCore Code Interpreter integration is planned.
+            For sandboxed execution, use enable_code_interpreter instead.
         enable_blank_reply_continuation: Ask the model once more for its reply when a turn ends
             empty right after tool results (see BlankReplyHookProvider).
         enable_prompt_caching: Turn on Bedrock prompt caching for the orchestrator's model (see
             AsyncBaseOrchestrator). Off by default.
+        enable_shell: Enable the experimental command-allowlisted execute_shell tool.
+            Off by default. The tool is not a shell: it reads the command itself
+            (programs joined by pipes, quotes, file-name patterns, and the redirections
+            2>&1, >/dev/null and 2>/dev/null), rejects every other shell form, and starts
+            each program without a shell. Runs allowlisted commands (and, unless
+            ATX_SHELL_ALLOW_PYTHON=false, python/python3) with an enforced
+            timeout and a sanitized environment in which the AWS SDK and CLI find no
+            credentials by default: credential env vars (AWS_PROFILE, container and
+            web-identity credentials) are dropped and the shared credential/config files
+            and instance metadata are switched off, so scripts must use connector-vended
+            temporary credentials. This is not a credential boundary: a command can still
+            read the environment of the agent process through /proc. The allowlist is
+            defense in depth, not a sandbox: awk, sed and python can start other programs
+            by design, so the container is the security boundary. Leave this off unless
+            you need in-container script execution.
+        enable_code_interpreter: Enable the experimental AgentCore Code Interpreter sandbox
+            tools (code_interpreter + stage_file_to_sandbox). Off by default. Runs
+            computation in a managed Python sandbox with pyarrow/pandas/numpy
+            preinstalled; data moves in via stage_file_to_sandbox. The default interpreter
+            (aws.codeinterpreter.v1) has no internet access and no AWS credentials (the
+            AgentCore documentation says that Sandbox network mode can reach Amazon S3, so
+            data can still leave it). Setting ATX_CODE_INTERPRETER_ID
+            selects a custom interpreter instead; its network access depends on its network
+            mode, and the tool tells the model not to assume either way. Each sandbox
+            session ends ATX_CODE_INTERPRETER_SESSION_TIMEOUT_SECONDS (default 900, max
+            28800; a value that is not a whole number of 1 or more raises ValueError)
+            after it starts, regardless of activity, and takes its files with it; the
+            next call starts a new session and says so in its result. Sessions are
+            stopped when the SDK server gets a STOP request or shuts down, and at a
+            normal interpreter exit; a process that serves the agent in another way and
+            is ended by a signal must call
+            agent_builder_sdk.experimental.code_interpreter.stop_all_sessions itself.
+            Requires the code-interpreter extra:
+            pip install 'agent-builder-sdk-aws-transform[code-interpreter]'.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
@@ -436,6 +490,8 @@ def create_default_async_orchestrator_with_subagent(
         locale=locale,
         conversation_repository=conversation_repository,
         memory_manager=memory_manager,
+        enable_shell=enable_shell,
+        enable_code_interpreter=enable_code_interpreter,
     )
 
 

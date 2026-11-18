@@ -2,16 +2,26 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for experimental code execution support."""
 
+import importlib
 import os
 import warnings
 from unittest import mock
+
+import pytest
 
 # Import once at module level and filter warnings
 warnings.filterwarnings(
     "ignore", category=FutureWarning, module="agent_builder_sdk.experimental"
 )
 
+from agent_builder_sdk.experimental import code_execution  # noqa: E402
 from agent_builder_sdk.experimental.code_execution import python_repl  # noqa: E402
+
+
+def test_import_warning_names_the_sandboxed_alternative() -> None:
+    with pytest.warns(FutureWarning, match="enable_code_interpreter=True") as caught:
+        importlib.reload(code_execution)
+    assert "planned" not in str(caught[0].message)
 
 
 class TestPythonReplTool:
