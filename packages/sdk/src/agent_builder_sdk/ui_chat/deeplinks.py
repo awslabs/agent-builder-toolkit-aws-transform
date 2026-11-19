@@ -22,6 +22,7 @@ Dynamic Deeplinks (aws-transform://~/):
 """
 
 from enum import Enum
+from typing import overload
 
 
 class SegmentName(Enum):
@@ -304,37 +305,72 @@ class Deeplinks:
             url_path = Deeplinks._generate_url([SegmentName.TAB, SegmentName.TASKS])
             return Deeplinks._format_deeplink(url_path, display_text, is_dynamic=True)
 
+    @overload
     @staticmethod
     def artifact(
         display_text: str,
+        artifact_id: str,
+        job_id: str | None = None,
+        workspace_id: str | None = None,
+    ) -> str:
+        """Link to the artifact with this ID."""
+
+    @overload
+    @staticmethod
+    def artifact(
+        display_text: str,
+        *,
         artifact_name: str,
         job_id: str | None = None,
         workspace_id: str | None = None,
     ) -> str:
+        """The same link, with the ID passed as the earlier keyword ``artifact_name``."""
+
+    @staticmethod
+    def artifact(
+        display_text: str,
+        artifact_id: str | None = None,
+        job_id: str | None = None,
+        workspace_id: str | None = None,
+        *,
+        artifact_name: str | None = None,
+    ) -> str:
         """
         Generate a deeplink to navigate to a specific artifact.
 
+        The final ``artifacts/<...>`` segment is the artifact ID: AWS Transform chat looks the
+        artifact up by it, so a link built from a file name or a label does not open.
+
         Args:
             display_text: Text to display in markdown link
-            artifact_name: The name of the artifact
+            artifact_id: The artifact's ``artifactId``
             job_id: Optional job ID. Required if workspace_id is provided.
             workspace_id: Optional workspace ID. If provided (with job_id), creates static deeplink.
                          If None, creates dynamic deeplink using current context.
+            artifact_name: Earlier name of ``artifact_id``, kept for keyword callers; it is the
+                artifact ID too. Give one of the two, not both.
 
         Returns:
             Markdown-formatted deeplink to the artifact
 
         Raises:
+            TypeError: If neither or both of artifact_id and artifact_name are given
             ValueError: If workspace_id is provided without job_id
 
         Example:
-            >>> Deeplinks.artifact("View Report", artifact_name="report.json", job_id="job-67890", workspace_id="ws-12345")
-            '[View Report](aws-transform://workspaces/ws-12345/jobs/job-67890/artifacts/report.json)'
-            >>> Deeplinks.artifact("View Report", artifact_name="report.json", job_id="job-67890")
-            '[View Report](aws-transform://~/jobs/job-67890/artifacts/report.json)'
-            >>> Deeplinks.artifact("View Report", artifact_name="report.json")
-            '[View Report](aws-transform://~/artifacts/report.json)'
+            >>> Deeplinks.artifact("View Report", artifact_id="a1b2c3d4", job_id="job-67890", workspace_id="ws-12345")
+            '[View Report](aws-transform://workspaces/ws-12345/jobs/job-67890/artifacts/a1b2c3d4)'
+            >>> Deeplinks.artifact("View Report", artifact_id="a1b2c3d4", job_id="job-67890")
+            '[View Report](aws-transform://~/jobs/job-67890/artifacts/a1b2c3d4)'
+            >>> Deeplinks.artifact("View Report", artifact_id="a1b2c3d4")
+            '[View Report](aws-transform://~/artifacts/a1b2c3d4)'
         """
+        if artifact_name is not None:
+            if artifact_id is not None:
+                raise TypeError("Deeplinks.artifact() got both artifact_id and artifact_name")
+            artifact_id = artifact_name
+        if artifact_id is None:
+            raise TypeError("Deeplinks.artifact() missing required argument: 'artifact_id'")
         Deeplinks._validate_workspace_job_dependency(workspace_id, job_id)
 
         if workspace_id is not None and job_id is not None:
@@ -345,17 +381,17 @@ class Deeplinks:
                     SegmentName.JOBS,
                     job_id,
                     SegmentName.ARTIFACTS,
-                    artifact_name,
+                    artifact_id,
                 ]
             )
             return Deeplinks._format_deeplink(url_path, display_text, is_dynamic=False)
         elif job_id:
             url_path = Deeplinks._generate_url(
-                [SegmentName.JOBS, job_id, SegmentName.ARTIFACTS, artifact_name]
+                [SegmentName.JOBS, job_id, SegmentName.ARTIFACTS, artifact_id]
             )
             return Deeplinks._format_deeplink(url_path, display_text, is_dynamic=True)
         else:
-            url_path = Deeplinks._generate_url([SegmentName.ARTIFACTS, artifact_name])
+            url_path = Deeplinks._generate_url([SegmentName.ARTIFACTS, artifact_id])
             return Deeplinks._format_deeplink(url_path, display_text, is_dynamic=True)
 
     @staticmethod

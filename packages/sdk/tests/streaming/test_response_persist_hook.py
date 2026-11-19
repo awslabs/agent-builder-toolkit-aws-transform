@@ -9,13 +9,20 @@ inspect the actual A2AMessage the hook would send, so a wrong field/branch fails
 """
 
 import asyncio
+import contextvars
 import uuid
 from types import SimpleNamespace
+from typing import Any, Coroutine, Dict, List, Optional
 from unittest.mock import patch
 
 import pytest
+from strands.agent.state import AgentState
 
 from agent_builder_sdk.custom_types.orchestrator_agent_types import A2AContext
+from agent_builder_sdk.orchestrator_strands.conversation.constants import MessageSourceType
+from agent_builder_sdk.orchestrator_strands.conversation.repository import (
+    conversation_source_type,
+)
 from agent_builder_sdk.streaming import StreamState
 from agent_builder_sdk.streaming.config import DEFAULT_STREAMING_CONFIG, StreamingConfig
 from agent_builder_sdk.streaming.response_persist_hook import (
@@ -27,6 +34,7 @@ from agent_builder_sdk.streaming.response_persist_hook import (
     _format_tool_uses,
     persist_stream_error,
 )
+from agent_builder_sdk.ui_chat.artifact_delivery import _DELIVERED_ARTIFACTS_STATE_KEY
 from agent_builder_sdk.utils import (
     A2A_CHAT_SUGGESTIONS_EXT,
     A2A_MESSAGE_TYPE_EXT,
@@ -37,8 +45,13 @@ HOOK_MODULE = "agent_builder_sdk.streaming.response_persist_hook"
 
 
 class FakeAgent:
-    """Stand-in Strands agent; the hook only reads event.agent when it cancels (it
-    never does on the persist path), so a bare object is enough."""
+    """Stand-in Strands agent; the persist path reads only ``state``, for the turn's delivered
+    artifacts."""
+
+    def __init__(self, delivered: Optional[List[Dict[str, Any]]] = None) -> None:
+        self.state = AgentState()
+        if delivered is not None:
+            self.state.set(_DELIVERED_ARTIFACTS_STATE_KEY, delivered)
 
 
 def make_event(
@@ -51,6 +64,7 @@ def make_event(
     reasoning_text=None,
     extra_blocks=None,
     with_stream_state=True,
+    delivered=None,
 ):
     """Build a real AfterModelCallEvent shaped exactly as strands' event loop builds it."""
     from strands.hooks import AfterModelCallEvent
@@ -78,7 +92,7 @@ def make_event(
         invocation_state["stream_state"] = stream_state
 
     return AfterModelCallEvent(
-        agent=FakeAgent(),
+        agent=FakeAgent(delivered),
         invocation_state=invocation_state,
         stop_response=AfterModelCallEvent.ModelStopResponse(
             message=message, stop_reason=stop_reason
@@ -510,6 +524,7 @@ def make_after_invocation_event(
     context_id="ctx-abc",
     with_stream_state=True,
     with_state=True,
+    delivered=None,
 ):
     """Build an AfterInvocationEvent shaped as strands' event loop builds it at end of stream_async:
     result.state carries the terminating tool's force_stop_response; invocation_state carries the
@@ -524,7 +539,7 @@ def make_after_invocation_event(
         stream_state = StreamState(thread_id="thread-1", context_id=context_id or "ctx-1")
         invocation_state["stream_state"] = stream_state
     return AfterInvocationEvent(
-        agent=FakeAgent(),
+        agent=FakeAgent(delivered),
         invocation_state=invocation_state,
         result=SimpleNamespace(state=state),
     )
@@ -951,3 +966,92 @@ async def test_persist_caps_a_slow_send():
     assert elapsed < 5  # bounded by the cap, not the 30s send
     # the send timed out => treated as a failed persist => no live chips
     assert event.invocation_state["stream_state"].side_events == []
+
+
+# ---- delivered artifacts are linked from the FINAL reply ------------------------------
+
+DELIVERED = [{"artifact_id": "art-1", "title": "Report"}]
+
+
+async def _in_a_user_turn(step: Coroutine[Any, Any, None]) -> None:
+    """Run a hook step in a fresh context with the source the orchestrator sets for a user turn."""
+    context = contextvars.Context()
+    context.run(conversation_source_type.set, MessageSourceType.USER)
+    await asyncio.create_task(step, context=context)
+
+
+async def test_final_reply_links_the_turns_delivered_artifacts(manager: RecordingManager) -> None:
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    event = make_event(text="Here is your report.", delivered=DELIVERED)
+    await _in_a_user_turn(hook._on_after_model_call(event))
+
+    _, message = manager.calls[0]
+    assert message.parts == [
+        {
+            "kind": "text",
+            "text": "Here is your report.\n\n[Report](aws-transform://~/artifacts/art-1)",
+        }
+    ]
+
+
+async def test_final_reply_without_a_stream_state_is_linked(manager: RecordingManager) -> None:
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    event = make_event(text="Here is your report.", with_stream_state=False, delivered=DELIVERED)
+    await _in_a_user_turn(hook._on_after_model_call(event))
+
+    _, message = manager.calls[0]
+    assert message.parts[0]["text"].endswith("[Report](aws-transform://~/artifacts/art-1)")
+
+
+async def test_partial_narration_is_not_given_artifact_links(manager: RecordingManager) -> None:
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    event = make_event(
+        stop_reason="tool_use",
+        text="Uploading now.",
+        extra_blocks=[{"toolUse": {"name": "get_artifact_metadata", "input": {}}}],
+        delivered=DELIVERED,
+    )
+    await _in_a_user_turn(hook._on_after_model_call(event))
+
+    texts = [m.parts[0]["text"] for _, m in manager.calls]
+    assert texts[0] == "Uploading now."
+    assert all("artifacts/art-1" not in t for t in texts)
+
+
+async def test_force_stop_reply_links_the_turns_delivered_artifacts(
+    manager: RecordingManager,
+) -> None:
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    event = make_after_invocation_event(
+        force_stop_response="All set.", delivered=[{"artifact_id": "art-2", "title": None}]
+    )
+    await _in_a_user_turn(hook._on_after_invocation(event))
+
+    _, message = manager.calls[0]
+    assert message.parts[0]["text"] == "All set.\n\n[View file](aws-transform://~/artifacts/art-2)"
+
+
+async def test_final_reply_persists_without_links_when_the_artifact_state_fails(
+    manager: RecordingManager,
+) -> None:
+    def fail(key: str) -> Any:
+        raise RuntimeError("boom")
+
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    event = make_event(text="Here is your report.")
+    event.agent.state = SimpleNamespace(get=fail)
+    await _in_a_user_turn(hook._on_after_model_call(event))
+
+    _, message = manager.calls[0]
+    assert message.parts == [{"kind": "text", "text": "Here is your report."}]
+
+
+async def test_guardrail_final_is_not_given_artifact_links(manager: RecordingManager) -> None:
+    hook = StreamingResponsePersistHook(DEFAULT_STREAMING_CONFIG)
+    event = make_event(
+        stop_reason="guardrail_intervened", text="Sorry, this is a refusal.", delivered=DELIVERED
+    )
+    await _in_a_user_turn(hook._on_after_model_call(event))
+
+    _, message = manager.calls[0]
+    assert message.parts == [{"kind": "text", "text": "Sorry, this is a refusal."}]

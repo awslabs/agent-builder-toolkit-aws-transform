@@ -45,6 +45,11 @@ def _get_docstring(node: ast.AST) -> str:
     return ast.get_docstring(node) or ""
 
 
+def _is_overload(func: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Return True for a ``typing.overload`` stub; only its implementation has the docstring."""
+    return any(ast.unparse(d) in ("overload", "typing.overload") for d in func.decorator_list)
+
+
 def _format_signature(func: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
     """Build a human-readable signature string from a function definition."""
     args = func.args
@@ -195,7 +200,7 @@ def _extract_class_methods(cls_node: ast.ClassDef) -> list[dict]:
     methods: list[dict] = []
     for node in ast.iter_child_nodes(cls_node):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name.startswith("_") and node.name != "__init__":
+            if (node.name.startswith("_") and node.name != "__init__") or _is_overload(node):
                 continue
             sig = _format_signature(node)
             prefix = "async " if isinstance(node, ast.AsyncFunctionDef) else ""
@@ -274,7 +279,7 @@ def extract_file(filepath: Path, sdk_path: Path) -> list[dict]:
                 })
 
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if node.name.startswith("_"):
+            if node.name.startswith("_") or _is_overload(node):
                 continue
             docstring = _get_docstring(node)
             sig = _format_signature(node)
