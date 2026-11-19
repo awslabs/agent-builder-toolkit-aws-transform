@@ -47,9 +47,17 @@ earliest 10 minutes after you ask for it, and later while other runs use all bui
 
 Copy `scenarios/a2ui-surfaces.md`. A scenario is plain Markdown that a person can follow too:
 
-- One ```` ```json scenario ```` block: `id`, `title`, `pr`, `agent` (a lowercase prefix ending
-  in `-`; the runner appends the account ID), `chat_label`, `workspace`, `job`, and `surface`,
-  what the feature check looks for in the job chat (`component`, `text`, `suggestions`).
+- One ```` ```json scenario ```` block: `id`, `title`, `pr`, `agent` (a lowercase prefix of at
+  most 11 characters ending in `-`; the runner appends the account ID), `chat_label`, `workspace`,
+  `job`, and the feature check: `surface` or `chat` (or both), and optionally `logs`.
+  - `surface`: an A2UI surface that the job chat must render (`component`, `text`, `suggestions`).
+  - `chat`: `{"<web block name>": {"has": [...], "lacks": [...]}}`. The text that the agent adds
+    to the job chat after that message must hold every `has` string and no `lacks` string.
+  - `logs`: `{"has": [...], "lacks": [...]}`, the same check on the deployed agent's own log
+    (CloudWatch), read after the last `web` block, one log event at a time.
+  - In `chat` and `logs`, matching is exact and case-sensitive, after commas between digits are
+    removed (write `165000`). No `has` string may be in a `kiro` or `web` block: a value from a
+    prompt can pass without the feature (the job chat shows your own message).
 - ```` ```kiro <name> ```` blocks: prompts typed into Kiro, in order. The first is `install`, the
   last ones `cleanup` (and `cleanup-force`).
 - ```` ```web <name> ```` blocks: messages typed into the AWS Transform job chat.
@@ -58,9 +66,10 @@ Copy `scenarios/a2ui-surfaces.md`. A scenario is plain Markdown that a person ca
 Placeholders the runner fills: `{pr}`, `{commit}`, `{short}`, `{repo}` (the PR's head repository),
 `{archive}`, `{pip}` (pip requirements for all five packages at the commit), `{pip_runtime}` (the
 four the agent image needs), `{mcp_from}` (the MCP server at the commit, for `uvx --from`),
-`{agent}`, `{chat_label}`, `{workspace}`. Write prompts the way a developer would; say what to
-build and what to check, not how the harness works. Never put account IDs in a scenario.
-`tests/test_e2e_scenarios.py` checks the format in CI.
+`{agent}`, `{chat_label}`, `{workspace}`, `{artifact_bucket}` (the test account's bucket for build
+sources), `{build_role}` (the existing CodeBuild service role for agent images). Write prompts the
+way a developer would; say what to build and what to check, not how the harness works. Never put
+account IDs in a scenario. `tests/test_e2e_scenarios.py` checks the format in CI.
 
 ## Known workarounds in the scenarios
 
