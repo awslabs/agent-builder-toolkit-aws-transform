@@ -184,6 +184,10 @@ The `simple_cli_agent_core.py` entry point exposes the same option as `--concurr
 
 **History repair**: when a turn is interrupted (timeout, client disconnect, crash), the next history load gives the unanswered message a placeholder reply, so the next turn answers its own prompt. A turn ended by a terminating tool (`stop_event_loop`) stores its `force_stop_response` as the reply.
 
+## Closing connections (opt-in)
+
+By default the server keeps HTTP connections alive between requests. If the first request after an idle period fails with a connection error, pass `close_connections=True` to `AgentRuntimeServer` or `StatelessAgentRuntimeServer`. The server then sends `Connection: close` on every response, so each request uses a new connection. A server with `streaming_config` always does this.
+
 ## Requirements
 
 - Python 3.11+

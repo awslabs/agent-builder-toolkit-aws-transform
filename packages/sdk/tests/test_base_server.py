@@ -6,6 +6,7 @@ Unit tests for Base Server implementation.
 Tests the BaseServer abstract class functionality including setup_tracing.
 """
 
+from typing import Any
 from unittest import mock
 
 import pytest
@@ -250,6 +251,83 @@ class TestBaseServer:
         await base_server.handle_jsonrpc(request)
 
         assert "Handshake request received" in caplog.text
+
+    @pytest.mark.parametrize(
+        "key", ["ATX_A2A.AgentInitializationContext", "agentInitializationContext"]
+    )
+    async def test_tasks_get_initializes_from_either_metadata_key(
+        self, base_server: ConcreteBaseServer, key: str
+    ) -> None:
+        request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tasks/get",
+            "params": {
+                "id": "task-1",
+                "metadata": {
+                    key: {
+                        "jobMetadata": {"workspaceId": "ws-1", "jobId": "job-1"},
+                        "agentInstanceId": "agent-1",
+                        "authorizationToken": "token-1",
+                    }
+                },
+            },
+        }
+
+        with mock.patch.object(base_server, "initialize_agent") as initialize_agent:
+            await base_server.extract_and_initialize(request)
+
+        initialize_agent.assert_awaited_once_with("token-1")
+        assert base_server.context.workspace_id == "ws-1"
+        assert base_server.context.job_id == "job-1"
+        assert base_server.context.agent_instance_id == "agent-1"
+
+    async def test_tasks_get_prefers_the_message_send_key_when_both_are_present(
+        self, base_server: ConcreteBaseServer
+    ) -> None:
+        def init_context(suffix: str) -> dict[str, Any]:
+            return {
+                "jobMetadata": {"workspaceId": f"ws-{suffix}", "jobId": f"job-{suffix}"},
+                "agentInstanceId": f"agent-{suffix}",
+                "authorizationToken": f"token-{suffix}",
+            }
+
+        request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tasks/get",
+            "params": {
+                "id": "task-1",
+                "metadata": {
+                    "agentInitializationContext": init_context("older"),
+                    "ATX_A2A.AgentInitializationContext": init_context("current"),
+                },
+            },
+        }
+
+        with mock.patch.object(base_server, "initialize_agent") as initialize_agent:
+            await base_server.extract_and_initialize(request)
+
+        initialize_agent.assert_awaited_once_with("token-current")
+        assert base_server.context.workspace_id == "ws-current"
+        assert base_server.context.job_id == "job-current"
+        assert base_server.context.agent_instance_id == "agent-current"
+
+    @pytest.mark.parametrize("metadata", [{}, {"agentInitializationContext": None}])
+    async def test_tasks_get_without_initialization_context_is_rejected(
+        self, base_server: ConcreteBaseServer, metadata: dict[str, Any]
+    ) -> None:
+        request = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tasks/get",
+            "params": {"id": "task-1", "metadata": metadata},
+        }
+
+        with pytest.raises(ValueError, match="Missing required initialization context"):
+            await base_server.extract_and_initialize(request)
+
+        assert base_server.context is None
 
 
 class TestHandleStreamingPartsParity:

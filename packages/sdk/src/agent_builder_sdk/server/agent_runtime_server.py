@@ -137,6 +137,7 @@ class AgentRuntimeServer(BaseServer):
         notification_processors: Optional[Dict[NotificationType, NotificationProcessor]] = None,
         tracing: Optional[str] = None,
         streaming_config: Optional["StreamingConfig"] = None,
+        close_connections: bool = False,
     ):
         """
         Initialize the Agent Runtime Server.
@@ -183,6 +184,11 @@ class AgentRuntimeServer(BaseServer):
                 ToolContext/invocation_state instead. (The SDK's own SuggestionsManager uses a
                 ContextVar for exactly this reason.) This constraint does NOT apply with streaming
                 off (turns are serialized).
+            close_connections: Send ``Connection: close`` on every response, so each request uses
+                a new connection and a proxy in front of the server cannot reuse a keep-alive
+                connection that the server has already closed. Turn it on when the first request
+                after an idle period fails with a connection error. False (default) keeps
+                connections alive; a server with ``streaming_config`` always sends the header.
         """
         self.stop_requested = False
         self.agent_factory = agent_factory
@@ -224,6 +230,7 @@ class AgentRuntimeServer(BaseServer):
         # agents served from this pool over a dedicated, persistently-open MCP client, shaped by
         # the config's idle-TTL and emit toggles.
         self.streaming_config = streaming_config
+        self.close_connections = close_connections
         self._streaming_agent_pool: Optional[StreamingAgentPool] = None
         # MCP client shared across the per-source streaming agents (opened once, kept open).
         self._shared_mcp_client: Optional[MCPClient] = None
@@ -1053,14 +1060,15 @@ class AgentRuntimeServer(BaseServer):
         """Start the Agent Runtime Server."""
         logger.info(f"Starting Agent Runtime Server on {self.host}:{self.port}")
 
-        # On streaming, send `Connection: close` on every response so the AgentCore in-guest proxy
-        # never reuses a pooled HTTP/1.1 socket this server has since closed (it does not liveness-check
-        # the pooled connection, so a reused-then-dead socket black-holes the next invoke).
+        # On streaming, or with close_connections, send `Connection: close` on every response so a
+        # proxy in front of the server never reuses a pooled HTTP/1.1 socket this server has since
+        # closed (a proxy that does not liveness-check its pool black-holes the next invoke).
+        close = self.close_connections or self.streaming_config is not None
         uvicorn.run(
             self.app,
             host=self.host,
             port=self.port,
-            headers=[("Connection", "close")] if self.streaming_config is not None else None,
+            headers=[("Connection", "close")] if close else None,
         )
 
 

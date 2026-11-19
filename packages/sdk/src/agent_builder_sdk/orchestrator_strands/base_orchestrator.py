@@ -13,7 +13,7 @@ import asyncio
 import logging
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, ExitStack
-from contextvars import ContextVar
+from contextvars import ContextVar, copy_context
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -493,8 +493,9 @@ class BaseOrchestrator(_BaseOrchestrator, BaseAgent[ProcessMessageRequest, Agent
         def execute() -> AgentResult:
             return asyncio.run(self._invoke_with_source(message, source_id, source_type, **kwargs))
 
+        context = copy_context()
         with ThreadPoolExecutor() as executor:
-            future = executor.submit(execute)
+            future = executor.submit(context.run, execute)
             return future.result()
 
 

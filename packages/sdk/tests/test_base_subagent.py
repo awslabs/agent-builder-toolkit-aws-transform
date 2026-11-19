@@ -2,6 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the BaseSubagent class."""
 
+from contextvars import ContextVar
+from typing import Any
 from unittest import mock
 from unittest.mock import AsyncMock, Mock, create_autospec, patch
 
@@ -17,6 +19,8 @@ from agent_builder_sdk.custom_types.orchestrator_agent_types import (
     ConversationContext,
     ProcessMessageRequest,
 )
+
+_caller_var: ContextVar[str] = ContextVar("caller_var", default="unset")
 
 
 @pytest.fixture(autouse=True)
@@ -76,6 +80,23 @@ def test_process_message(subagent, agent_result):
 
         invoke_async.assert_called_once_with("Test message")
         assert result == agent_result
+
+
+def test_process_message_runs_the_turn_in_the_callers_context(subagent: BaseSubagent) -> None:
+    seen: list[str] = []
+
+    async def invoke(*args: Any, **kwargs: Any) -> Mock:
+        seen.append(_caller_var.get())
+        return Mock()
+
+    token = _caller_var.set("caller")
+    try:
+        with patch.object(subagent, "invoke_async", side_effect=invoke):
+            subagent.process_message("Test message")
+    finally:
+        _caller_var.reset(token)
+
+    assert seen == ["caller"]
 
 
 async def test_process_message_async(async_subagent, agent_result):

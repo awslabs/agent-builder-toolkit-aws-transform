@@ -153,9 +153,13 @@ class BaseServer(ABC):
             return
 
         elif method == JsonRpcMethods.TASKS_GET:
-            # Method 3: tasks/get metadata
+            # Method 3: tasks/get metadata, under the key message/send uses or the older key
             metadata = params.get("metadata", {})
-            init_context = metadata.get("agentInitializationContext", {})
+            init_context = (
+                metadata.get("ATX_A2A.AgentInitializationContext")
+                or metadata.get("agentInitializationContext")
+                or {}
+            )
             job_metadata = init_context.get("jobMetadata", {})
             init_request = {
                 "workspaceId": job_metadata.get("workspaceId"),

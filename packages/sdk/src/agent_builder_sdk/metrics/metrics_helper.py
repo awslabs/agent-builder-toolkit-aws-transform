@@ -122,7 +122,7 @@ class MetricsHelper:
 
         # Set custom dimensions only (if any)
         if self.custom_dimensions:
-            metrics.set_dimensions(**self.custom_dimensions)
+            metrics.set_dimensions(self.custom_dimensions)
 
         # Set all as properties (no cardinality impact)
         if self.workspace_id:
