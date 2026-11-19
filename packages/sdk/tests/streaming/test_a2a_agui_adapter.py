@@ -600,3 +600,49 @@ class TestRelayedSubagentStream:
         out = adapt(force_stop_result_event("Jupiter is largest"), state)
         assert types(out) == [TextMessageEndEvent, RunFinishedEvent]
         assert out[0].message_id == state.force_stop_message_id
+
+
+class TestReplyTail:
+    """Text that the persist hook adds to the turn's reply goes out in the reply's message, before
+    the message closes."""
+
+    def test_tail_follows_the_reply_text_before_its_message_closes(self):
+        state = fresh_state()
+        adapt(text_event("Here you go."), state)
+        state.reply_tail = "\n\n<surface>"
+
+        out = adapt(assistant_message_event("Here you go."), state)
+
+        assert types(out) == [TextMessageContentEvent, TextMessageEndEvent]
+        assert out[0].delta == "\n\n<surface>"
+        assert out[0].message_id == out[1].message_id == state.final_message_id
+        assert state.reply_tail == ""
+
+    def test_tail_follows_a_forced_stop_answer_in_its_message(self):
+        state = fresh_state()
+        state.reply_tail = "\n\n<surface>"
+
+        out = adapt(force_stop_result_event("Your job has been started."), state)
+
+        assert types(out) == [
+            RunStartedEvent,
+            TextMessageStartEvent,
+            TextMessageContentEvent,
+            TextMessageContentEvent,
+            TextMessageEndEvent,
+            RunFinishedEvent,
+        ]
+        assert [e.delta for e in out[2:4]] == ["Your job has been started.", "\n\n<surface>"]
+        assert {e.message_id for e in out[1:5]} == {state.force_stop_message_id}
+        assert state.open_message_id is None
+
+    def test_tail_follows_a_relayed_answer_in_its_message(self):
+        state = fresh_state()
+        adapt(tool_stream_event({"data": "Jupiter is largest"}), state)
+        state.reply_tail = "\n\n<surface>"
+
+        out = adapt(force_stop_result_event("Jupiter is largest"), state)
+
+        assert types(out) == [TextMessageContentEvent, TextMessageEndEvent, RunFinishedEvent]
+        assert out[0].delta == "\n\n<surface>"
+        assert out[0].message_id == out[1].message_id == state.force_stop_message_id

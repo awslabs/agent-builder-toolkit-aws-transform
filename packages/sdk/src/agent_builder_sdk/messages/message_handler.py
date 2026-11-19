@@ -34,6 +34,7 @@ from agent_builder_sdk.interfaces import AnyBaseAgent
 from agent_builder_sdk.message_queue import QueueResponse, QueueService
 from agent_builder_sdk.message_queue.interface import RequestPriority
 from agent_builder_sdk.task.task_manager import TaskManager
+from agent_builder_sdk.ui_chat.a2ui import add_missing_surfaces
 from agent_builder_sdk.utils import (
     convert_queue_response_to_send_message_output,
     convert_subagent_response_to_send_message_output,
@@ -219,7 +220,9 @@ class MessageHandler:
                 logger.debug("Agent result text: %s", extracted_agent_response)
 
             return convert_subagent_response_to_send_message_output(
-                context_id, request.message, response=extracted_agent_response
+                context_id,
+                request.message,
+                response=add_missing_surfaces(extracted_agent_response, agent_response),
             )
 
         except asyncio.TimeoutError:

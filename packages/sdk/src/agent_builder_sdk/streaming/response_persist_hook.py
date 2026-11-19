@@ -44,6 +44,7 @@ from agent_builder_sdk.constants import GUARDRAIL_STOP_REASONS
 from agent_builder_sdk.custom_types.common_types import A2AMessage
 from agent_builder_sdk.env_var import get_agent_context_from_env
 from agent_builder_sdk.streaming.config import StreamingConfig
+from agent_builder_sdk.ui_chat.a2ui import forget_surfaces_in, take_surfaces
 from agent_builder_sdk.util.suggestions_manager import get_and_consume_suggestions
 from agent_builder_sdk.utils import (
     A2A_CHAT_SUGGESTIONS_EXT,
@@ -154,6 +155,18 @@ def _format_tool_uses(message: Dict[str, Any]) -> str:
     return "\n\n".join(lines)
 
 
+def _reply_tail(text: str, request_state: Any, stop_reason: Optional[str], is_partial: bool = False) -> str:
+    """The text to add after the turn's reply ``text``: the block of each A2UI surface that the
+    turn rendered and no streamed text holds. Empty before the end of the turn (``is_partial``).
+
+    A surface in a text that is already on the stream is delivered, so each call drops those from
+    the turn's record. The streamed text cannot change, so the rest comes after it."""
+    forget_surfaces_in(text, request_state)
+    if is_partial:
+        return ""
+    return "".join(f"\n\n{block}" for block in take_surfaces(request_state, stop_reason).values())
+
+
 class StreamingResponsePersistHook(HookProvider):
     """Persists a streaming turn's messages to ATX Chat.
 
@@ -210,6 +223,10 @@ class StreamingResponsePersistHook(HookProvider):
             # path, which attaches suggestions on every final response).
             force_stop_message_id = stream_state.ensure_force_stop_message_id()
             suggestions = get_and_consume_suggestions()
+            # The adapter streams reply_tail in the answer's message, so the live and stored copies match.
+            stream_state.reply_tail = _reply_tail(force_stop_text, state, getattr(result, "stop_reason", None))
+            if stream_state.reply_tail:
+                force_stop_text += stream_state.reply_tail
             persisted = await self._persist_final(
                 stream_state,
                 force_stop_text,
@@ -301,8 +318,19 @@ class StreamingResponsePersistHook(HookProvider):
             # final_message_id, the id of the text block the adapter streamed in this call. A
             # tool-only step (no narration) has no text and persists nothing here.
             text = _extract_assistant_text(message)
+            text_id = getattr(stream_state, "final_message_id", None) or str(uuid.uuid4())
+            if stream_state is not None:
+                tail = _reply_tail(text, invocation_state.get("request_state"), stop_reason, is_partial)
+                if tail and stream_state.open_message_id is not None:
+                    # Strands runs this hook before the adapter closes the model's message, so the
+                    # adapter still streams reply_tail in that message.
+                    stream_state.reply_tail = tail
+                    text = f"{text}{tail}" if text else tail.lstrip()
+                elif tail and not text:
+                    # The model wrote no reply: the surfaces are the reply, in a message of their own.
+                    text, text_id = tail.lstrip(), str(uuid.uuid4())
+                    self._queue_text_message(stream_state, text, text_id)
             if text:
-                text_id = getattr(stream_state, "final_message_id", None) or str(uuid.uuid4())
                 if is_partial or stream_state is None:
                     persisted = await self._safe_persist(
                         text, context_id, text_id, is_partial=is_partial, suggestions=suggestions
@@ -367,6 +395,19 @@ class StreamingResponsePersistHook(HookProvider):
                 create_job_suggestion=None,
                 message_id=message_id,
             )
+        )
+
+    def _queue_text_message(self, stream_state: Any, text: str, message_id: str) -> None:
+        """Queue ``text`` as a whole assistant message on the stream, ahead of the terminal, for a
+        reply that the model did not write. Lazy import, as in _queue_suggestion_side_event."""
+        from ag_ui.core import TextMessageContentEvent, TextMessageEndEvent, TextMessageStartEvent
+
+        stream_state.side_events.extend(
+            [
+                TextMessageStartEvent(message_id=message_id, role="assistant"),
+                TextMessageContentEvent(message_id=message_id, delta=text),
+                TextMessageEndEvent(message_id=message_id),
+            ]
         )
 
     async def _persist_final(

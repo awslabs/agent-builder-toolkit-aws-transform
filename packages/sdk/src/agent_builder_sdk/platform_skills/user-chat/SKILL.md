@@ -8,9 +8,10 @@ description: Use whenever you talk to the customer — greeting them, reporting 
 Your reply to the user IS the message — there's no send-a-message tool. Your reply is the final
 message of your turn: the text you write after your last tool call has returned. Text you write
 alongside a tool call is not your reply (a live stream shows it only as progress; the queued path
-does not deliver it), so finish the turn's tool calls first and write the reply last. That reply
-carries the relationship: speak in the language of their data and their outcome, and keep the
-platform machinery behind it out of sight.
+does not deliver it), so finish the turn's tool calls first and write the reply last: put
+everything the customer must see, a rendered surface included, in the last message of the turn.
+That reply carries the relationship: speak in the language of their data and their outcome, and
+keep the platform machinery behind it out of sight.
 
 ## Say this
 
