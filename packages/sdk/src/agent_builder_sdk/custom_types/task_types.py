@@ -6,7 +6,7 @@ Task-related types for A2A protocol compliance
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, FrozenSet, List, Literal, Optional
 
 from .common_types import A2AError, A2AMessage
 
@@ -25,6 +25,12 @@ class TaskState(Enum):
     REJECTED = "rejected"
     AUTH_REQUIRED = "auth-required"
     UNKNOWN = "unknown"
+
+
+# A2A task lifecycle: a task in one of these states gets no further status update.
+TERMINAL_TASK_STATES: FrozenSet[TaskState] = frozenset(
+    {TaskState.COMPLETED, TaskState.CANCELED, TaskState.FAILED, TaskState.REJECTED}
+)
 
 
 @dataclass

@@ -4489,9 +4489,9 @@
     "kind": "class",
     "file": "agent_builder_sdk/task/file_task_store.py",
     "module": "agent_builder_sdk.task.file_task_store",
-    "docstring": "File-based task storage using JSON files.\n\nPersistent storage suitable for:\n- Single-instance deployments needing persistence across restarts\n- Development and testing with state preservation\n- Checkpointing task state for recovery\n\nEach task is stored as a separate JSON file named {task_id}.json\nin the configured storage directory.\n\nFor checkpointing: Use the same storage_dir as AgentRuntimeServer\nto ensure tasks are included in checkpoint artifacts and restored\non agent restart or failover.",
+    "docstring": "File-based task storage using JSON files.\n\nPersistent storage suitable for:\n- Single-instance deployments needing persistence across restarts\n- Development and testing with state preservation\n- Checkpointing task state for recovery\n\nEach task is stored as a separate JSON file named {task_id}.json\nin the configured storage directory.\n\nFor checkpointing: Use the same storage_dir as AgentRuntimeServer\nto ensure tasks are included in checkpoint artifacts and restored\non agent restart or failover. Each write goes to a temporary file\n.<random>.tmp that is then renamed to {task_id}.json. The checkpoint does\nnot wait for writes, so a checkpoint taken while a task is written can:\n- fail with a logged error, when the temporary file is renamed after the\n  checkpoint lists it and before it reads it. A later checkpoint can\n  succeed; the final checkpoint at shutdown has no later one.\n- lack that task, on filesystems where a directory scan can miss an entry\n  that is renamed (tmpfs).\n- hold the temporary file. list_tasks ignores it after a restore.",
     "signature": "FileTaskStore(storage_dir: str)",
-    "description": "Extends: TaskStore\n\nParameters:\n  storage_dir: str (required) - Directory path where task files will be stored\n\nMethods:\n  async store_task(task: A2ATask) -> None\n  async get_task(task_id: str) -> Optional[A2ATask]\n  async update_task(task: A2ATask) -> None"
+    "description": "Extends: TaskStore\n\nParameters:\n  storage_dir: str (required) - Directory path where task files will be stored\n\nMethods:\n  async store_task(task: A2ATask) -> None\n  async get_task(task_id: str) -> Optional[A2ATask]\n  async update_task(task: A2ATask) -> None\n  async list_tasks() -> List[A2ATask]"
   },
   {
     "name": "FileTaskStore.get_task",
@@ -4500,6 +4500,14 @@
     "module": "agent_builder_sdk.task.file_task_store",
     "docstring": "Retrieve a task from a JSON file.",
     "signature": "async get_task(task_id: str) -> Optional[A2ATask]"
+  },
+  {
+    "name": "FileTaskStore.list_tasks",
+    "kind": "method",
+    "file": "agent_builder_sdk/task/file_task_store.py",
+    "module": "agent_builder_sdk.task.file_task_store",
+    "docstring": "List every task file in the storage directory, ordered by task ID.\n\nThe files are read in a worker thread, so a large store does not block the\nevent loop. A file that cannot be read or parsed as a task is skipped with a\nwarning and the other tasks are still returned; ``get_task`` raises for it.\n\nA task that already exists and that this store instance updates during the\nlisting is always listed: ``store_task`` and ``update_task`` wait for the\ndirectory scan (not for the file reads) before they rename. A task that is\nfirst stored after the directory scan is not in the result. A task that\nanother process, or another store instance on the same directory, writes\nduring the scan can be absent from the result on filesystems where a\ndirectory scan can miss an entry that is renamed (tmpfs).",
+    "signature": "async list_tasks() -> List[A2ATask]"
   },
   {
     "name": "FileTaskStore.store_task",
@@ -4524,7 +4532,7 @@
     "module": "agent_builder_sdk.task.in_memory_task_store",
     "docstring": "In-memory task storage using a dictionary.\n\nFast and simple storage suitable for:\n- Testing and development\n- Single-instance deployments\n- Short-lived tasks that don't need persistence\n\nNote: All tasks are lost when the process restarts.",
     "signature": "InMemoryTaskStore()",
-    "description": "Extends: TaskStore\n\nMethods:\n  async store_task(task: A2ATask) -> None\n  async get_task(task_id: str) -> Optional[A2ATask]\n  async update_task(task: A2ATask) -> None"
+    "description": "Extends: TaskStore\n\nMethods:\n  async store_task(task: A2ATask) -> None\n  async get_task(task_id: str) -> Optional[A2ATask]\n  async update_task(task: A2ATask) -> None\n  async list_tasks() -> List[A2ATask]"
   },
   {
     "name": "InMemoryTaskStore.get_task",
@@ -4533,6 +4541,14 @@
     "module": "agent_builder_sdk.task.in_memory_task_store",
     "docstring": "Retrieve a task from memory.",
     "signature": "async get_task(task_id: str) -> Optional[A2ATask]"
+  },
+  {
+    "name": "InMemoryTaskStore.list_tasks",
+    "kind": "method",
+    "file": "agent_builder_sdk/task/in_memory_task_store.py",
+    "module": "agent_builder_sdk.task.in_memory_task_store",
+    "docstring": "List every task in memory, ordered by task ID.",
+    "signature": "async list_tasks() -> List[A2ATask]"
   },
   {
     "name": "InMemoryTaskStore.store_task",
@@ -4638,7 +4654,7 @@
     "module": "agent_builder_sdk.task.task_store",
     "docstring": "Abstract interface for task storage that consumers implement.",
     "signature": "TaskStore()",
-    "description": "Extends: ABC\n\nMethods:\n  async store_task(task: A2ATask) -> None\n  async get_task(task_id: str) -> Optional[A2ATask]\n  async update_task(task: A2ATask) -> None"
+    "description": "Extends: ABC\n\nMethods:\n  async store_task(task: A2ATask) -> None\n  async get_task(task_id: str) -> Optional[A2ATask]\n  async update_task(task: A2ATask) -> None\n  async list_tasks() -> List[A2ATask]"
   },
   {
     "name": "TaskStore.get_task",
@@ -4647,6 +4663,14 @@
     "module": "agent_builder_sdk.task.task_store",
     "docstring": "Retrieve a task by ID.\n\nArgs:\n    task_id: Task ID to retrieve\n\nReturns:\n    Task if found, None otherwise",
     "signature": "async get_task(task_id: str) -> Optional[A2ATask]"
+  },
+  {
+    "name": "TaskStore.list_tasks",
+    "kind": "method",
+    "file": "agent_builder_sdk/task/task_store.py",
+    "module": "agent_builder_sdk.task.task_store",
+    "docstring": "List every stored task, ordered by task ID (ascending string order).\n\nUse it to find tasks without tracking their IDs elsewhere, for example to\nresume after a restart the tasks whose state is not in\n``agent_builder_sdk.custom_types.task_types.TERMINAL_TASK_STATES``.\n\nNot abstract: a subclass that implements only the abstract methods stays\nvalid. A store that supports listing overrides this method.\n\nReturns:\n    All stored tasks, or an empty list when the store holds none\n\nRaises:\n    NotImplementedError: If the store does not override this method",
+    "signature": "async list_tasks() -> List[A2ATask]"
   },
   {
     "name": "TaskStore.store_task",
