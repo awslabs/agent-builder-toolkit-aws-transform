@@ -9,7 +9,10 @@ agent execution environments through JSON-RPC endpoints.
 
 import asyncio
 import logging
+import os
 from multiprocessing import Event as MPEvent
+from pathlib import Path
+from typing import Any, Optional
 from unittest import mock
 from unittest.mock import MagicMock, create_autospec, patch
 
@@ -28,9 +31,13 @@ from agent_builder_sdk.extensions.base_extension_handler import BaseExtensionHan
 from agent_builder_sdk.interfaces import BaseAgent, StreamingCapable
 from agent_builder_sdk.messages.message_handler import MessageHandler
 from agent_builder_sdk.orchestrator_strands.conversation.constants import MessageSourceType
+from agent_builder_sdk.orchestrator_strands.conversation.file_repository import (
+    FileMultiSourceConversationRepository,
+)
 from agent_builder_sdk.server.agent_runtime_server import AgentRuntimeServer
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
 from agent_builder_sdk.streaming.config import StreamingConfig
+from agent_builder_sdk.util import paths
 from agent_builder_sdk.utils import MessageInfo
 
 
@@ -111,6 +118,28 @@ def test_start_sends_connection_close_when_streaming(mock_agent_factory):
     with mock.patch("agent_builder_sdk.server.agent_runtime_server.uvicorn.run") as run:
         non_streaming.start()
         assert run.call_args.kwargs["headers"] is None
+
+
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
+@pytest.mark.parametrize("queue_dir", [None, "old-queue"], ids=["unified storage", "deprecated queue path"])
+def test_storage_dirs_are_refused_to_file_tools_and_still_written_by_the_sdk(
+    mock_agent_factory: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, queue_dir: Optional[str]
+) -> None:
+    monkeypatch.setattr(paths, "_protected", set())
+    with mock.patch("agent_builder_sdk.server.agent_runtime_server.NotificationHandler"):
+        with mock.patch("agent_builder_sdk.server.agent_runtime_server.MessageHandler"):
+            server = AgentRuntimeServer(
+                agent_factory=mock_agent_factory,
+                storage_dir=str(tmp_path / "runtime"),
+                queue_storage_path=str(tmp_path / queue_dir) if queue_dir else None,
+            )
+
+    for state_dir in (server.storage_dir, server.queue_storage_path):
+        assert "runtime state" in (paths.unwritable(os.path.join(state_dir, "x.json"), [str(tmp_path)]) or "")
+    assert paths.unwritable(str(tmp_path / "report.md"), [str(tmp_path)]) is None
+    repository = FileMultiSourceConversationRepository(storage_dir=server.storage_dir)
+    repository.save()
+    assert os.path.exists(os.path.join(server.storage_dir, "conversations.json"))
 
 
 class TestAgentRuntimeServer:

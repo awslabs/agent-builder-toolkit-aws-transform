@@ -103,6 +103,7 @@
       - [Optional Environment Variables](#optional-environment-variables)
       - [Bedrock Guardrails](#bedrock-guardrails)
       - [Available Tools & Integrations](#available-tools-integrations)
+        - [Experimental: write_file for an agent without a shell](#experimental-write_file-for-an-agent-without-a-shell)
   - [AWS Transform Agentic API Specification](#aws-transform-agentic-api-specification)
     - [Common Error Responses](#common-error-responses)
     - [Data Types and Constraints](#data-types-and-constraints)
@@ -2898,6 +2899,48 @@ Bedrock guardrails provide content filtering and safety controls for your agent 
 #### Available Tools & Integrations
 
 Your agent automatically has access to AWS Transform tools via MCP integration (AWS Transform MCP).
+
+##### Experimental: write_file for an agent without a shell
+
+`write_file` lets the model author a text file (a report, HTML, a config) in the agent container
+when the agent has no shell tool. It is off by default. Add it with `custom_tools`:
+
+```python
+from agent_builder_sdk.agent_factory import create_default_async_orchestrator
+from agent_builder_sdk.experimental.write_file import write_file
+
+agent = create_default_async_orchestrator(mcp_client, storage_dir, custom_tools=[write_file])
+```
+
+| Rule | Value |
+|---|---|
+| Root | `/tmp` only; the path must be absolute |
+| Size | 256 KiB per call; the model writes long files one section per call with `append=True` |
+| Overwrite | Atomic: the tool writes a temp file, then renames it over the target |
+| Append | In place, at the end of the file; a failed append (for example on a full disk) can leave part of its section. Nothing caps the total file size |
+| File mode | A new file gets `0666` less the umask (usually `0644`); an overwrite keeps the old mode |
+| Refused | Paths outside `/tmp`, `..` components, NUL bytes, symlinks, directories, FIFOs, sockets, devices, and the agent's own runtime state |
+
+Runtime state is the SDK's default state locations under `/tmp` (for example `/tmp/agent_runtime`,
+`/tmp/orchestrator_agent`, `/tmp/agent_state` and the agentic MCP server log files), plus every
+`storage_dir` that `AgentRuntimeServer`, `StatelessAgentRuntimeServer` or the file conversation
+repository gets (default `/tmp/orchestrator/conversations`) and every checkpoint location. If your agent keeps other state under `/tmp`, call
+`agent_builder_sdk.util.paths.protect(path)` for it before the agent starts.
+
+To keep credentials out of text that your own tools return to the model or write to logs, use
+`agent_builder_sdk.util.redact.scrub(text, secrets)`. It is best effort. It replaces with
+`<redacted>` AWS access-key ids, the key and value of every key whose name ends in `client_secret`,
+`api_secret`, `api_key`, `secret_access_key`, `session_token` or `password` (after a prefix of
+letters and `_`, such as `aws_` or `db_`) in JSON (also JSON nested in a JSON string, such as a
+Secrets Manager `SecretString`), env-file, INI (such as `~/.aws/credentials`) and YAML text, and
+the exact `secrets` values you pass (one string or a list; `None` entries are skipped).
+
+| Limit | Effect |
+|---|---|
+| Whole pair replaced | `{"user": "bob", "password": "..."}` becomes `{"user": "bob", <redacted>}`: no longer valid JSON, and the key name is gone |
+| Values shorter than 8 characters | Not matched, and not removed when passed in `secrets` |
+| Indented env or INI lines | `  password = ...` is not matched |
+| Other key names and shapes | A secret under another name (for example `token`, `secret`, `access_token` or `private_key`), or in a URL or a header, passes unless you pass its value |
 
 ## AWS Transform Agentic API Specification
 

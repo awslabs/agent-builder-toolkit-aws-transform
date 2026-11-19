@@ -25,6 +25,7 @@ from agent_builder_sdk.orchestrator_strands.conversation.repository import (
     conversation_source_id,
     conversation_source_type,
 )
+from agent_builder_sdk.util import paths
 from agent_builder_sdk.utils import (
     reconcile_dangling_tool_uses,
     reconcile_unanswered_user_turns,
@@ -73,6 +74,7 @@ class FileMultiSourceConversationRepository(ConversationRepository):
         self.storage_dir = storage_dir or os.path.join(
             tempfile.gettempdir(), "orchestrator", "conversations"
         )
+        paths.protect(self.storage_dir)
 
         # Create storage directory if it doesn't exist
         os.makedirs(self.storage_dir, exist_ok=True)

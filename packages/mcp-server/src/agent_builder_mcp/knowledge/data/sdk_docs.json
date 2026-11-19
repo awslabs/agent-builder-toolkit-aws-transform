@@ -2014,6 +2014,15 @@
     "description": "Parameters:\n  code: str (required) - Python code to execute. Can be multiple lines.\n  timeout_seconds: Optional[int] (default=30) - Maximum execution time in seconds. Default 30."
   },
   {
+    "name": "write_file",
+    "kind": "function",
+    "file": "agent_builder_sdk/experimental/write_file.py",
+    "module": "agent_builder_sdk.experimental.write_file",
+    "docstring": "Write text content to a file in the agent's container.\n\nUse this to author files (reports, HTML, scripts, configs). The content\nis written as-is, so quotes and special characters need no escaping.\n\nWrite a long document one section per call: the first call creates the\nfile, and each later call passes append=True. Do not compose a whole\nreport in one call. The content is streamed to this tool while you\ngenerate it; past a few thousand words the call can time out before this\ntool runs, and the file is not written. At most 256 KiB per call.\n\nArgs:\n    path: Absolute file path under /tmp. Parent directories are created.\n        Refused: paths outside /tmp, '..' components, symlinks,\n        directories, other special files (FIFOs, sockets, devices),\n        and the agent's own runtime state.\n    content: The exact text to write, encoded as UTF-8.\n    append: Append to the file instead of replacing it. Defaults to False.\n\nReturns:\n    The bytes written and the resulting file size, or an error message.",
+    "signature": "write_file(path: str, content: str, append: bool = False) -> str",
+    "description": "Parameters:\n  path: str (required) - Absolute file path under /tmp. Parent directories are created.\n  content: str (required) - The exact text to write, encoded as UTF-8.\n  append: bool (default=False) - Append to the file instead of replacing it. Defaults to False."
+  },
+  {
     "name": "AcknowledgmentHandler",
     "kind": "class",
     "file": "agent_builder_sdk/extensions/acknowledgments/acknowledgment_handler.py",
@@ -4847,6 +4856,51 @@
     "docstring": "Decorator to mark classes or functions as experimental.\n\nEmits a FutureWarning when the decorated item is instantiated or called.\n\nArgs:\n    message: Custom warning message (optional)\n\nExample:\n    @experimental(\"TaskManager may change in future versions\")\n    class TaskManager:\n        pass",
     "signature": "experimental(message: str = 'This is experimental and subject to breaking changes') -> Any",
     "description": "Parameters:\n  message: str (default='This is experimental and subject to breaking changes') - Custom warning message (optional)"
+  },
+  {
+    "name": "is_under",
+    "kind": "function",
+    "file": "agent_builder_sdk/util/paths.py",
+    "module": "agent_builder_sdk.util.paths",
+    "docstring": "Whether ``path`` resolves to one of ``roots`` or below, and not into protected state unless\na root deeper than that state holds it. ``path`` must not hold a NUL byte.",
+    "signature": "is_under(path: str, roots: Sequence[str]) -> bool",
+    "description": "Parameters:\n  path: str (required)\n  roots: Sequence[str] (required)"
+  },
+  {
+    "name": "protect",
+    "kind": "function",
+    "file": "agent_builder_sdk/util/paths.py",
+    "module": "agent_builder_sdk.util.paths",
+    "docstring": "Refuse ``root`` and everything below it to the file tools, even under an allowed root.\n\n``root`` may be a directory or a single file. A tool root that lies inside ``root`` stays\nallowed below itself.",
+    "signature": "protect(root: str) -> None",
+    "description": "Parameters:\n  root: str (required)"
+  },
+  {
+    "name": "unreadable",
+    "kind": "function",
+    "file": "agent_builder_sdk/util/paths.py",
+    "module": "agent_builder_sdk.util.paths",
+    "docstring": "Why a file tool must not read ``path`` (None if it may).",
+    "signature": "unreadable(path: str, roots: Sequence[str]) -> Optional[str]",
+    "description": "Parameters:\n  path: str (required)\n  roots: Sequence[str] (required)"
+  },
+  {
+    "name": "unwritable",
+    "kind": "function",
+    "file": "agent_builder_sdk/util/paths.py",
+    "module": "agent_builder_sdk.util.paths",
+    "docstring": "Why a file tool must not write ``path`` (None if it may): the checks of :func:`unreadable`,\nand ``path`` must not end in a separator or be a symlink itself, and must be a regular file if\nit exists (not a directory, FIFO, socket or device).",
+    "signature": "unwritable(path: str, roots: Sequence[str]) -> Optional[str]",
+    "description": "Parameters:\n  path: str (required)\n  roots: Sequence[str] (required)"
+  },
+  {
+    "name": "scrub",
+    "kind": "function",
+    "file": "agent_builder_sdk/util/redact.py",
+    "module": "agent_builder_sdk.util.redact",
+    "docstring": "``text`` with every credential match and every exact ``secrets`` value replaced by\n<redacted>. ``secrets`` is one value or several; a ``None`` entry (an unset environment\nvariable) is skipped. A value shorter than 8 characters is left in place.",
+    "signature": "scrub(text: str, secrets: Optional[Union[str, Iterable[Optional[str]]]] = None) -> str",
+    "description": "Parameters:\n  text: str (required)\n  secrets: Optional[Union[str, Iterable[Optional[str]]]] (default=None)"
   },
   {
     "name": "SuggestionsManager",

@@ -22,6 +22,7 @@ from agent_builder_sdk.agentic_framework.client_factory import get_agentic_api_c
 from agent_builder_sdk.agentic_framework.common import calculate_digest
 from agent_builder_sdk.env_var import get_agent_context_from_env, get_max_checkpoints
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
+from agent_builder_sdk.util import paths
 from agent_builder_types.type_defs import ArtifactTypeDef
 
 logger = logging.getLogger(__name__)
@@ -48,6 +49,7 @@ class CheckpointRepository:
         self.job_id = job_id
         self.agent_instance_id = agent_instance_id
         self.checkpoint_location = checkpoint_location or self._get_default_location()
+        paths.protect(self.checkpoint_location)
         self.auto_check_state_object = auto_check_state_object
         self.max_checkpoints = max_checkpoints
         # Opt-in: retain up to N checkpoints instead of overwriting a single one.

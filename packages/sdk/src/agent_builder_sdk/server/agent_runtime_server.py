@@ -94,6 +94,7 @@ from agent_builder_sdk.server.streaming_agent_pool import StreamingAgentPool
 from agent_builder_sdk.streaming.config import StreamingConfig
 from agent_builder_sdk.task.task_manager import TaskManager
 from agent_builder_sdk.task_handler import TaskHandler
+from agent_builder_sdk.util import paths
 from agent_builder_sdk.utils import build_agentic_api_endpoint_from_env, mcp_session_active
 
 if TYPE_CHECKING:
@@ -216,6 +217,8 @@ class AgentRuntimeServer(BaseServer):
             self.base_storage_dir = storage_dir
             self.storage_dir = os.path.join(self.base_storage_dir, "agent")
             self.queue_storage_path = os.path.join(self.base_storage_dir, "queue")
+        paths.protect(self.base_storage_dir)
+        paths.protect(self.queue_storage_path)
 
         self.binary_location = binary_location
         self.mcp_client = mcp_client

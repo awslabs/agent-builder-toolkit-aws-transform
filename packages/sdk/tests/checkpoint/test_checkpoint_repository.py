@@ -22,6 +22,7 @@ from agent_builder_sdk.checkpoint.checkpoint_repository import (
     create_checkpoint_repository,
 )
 from agent_builder_sdk.server.server_models import AgentRuntimeContext
+from agent_builder_sdk.util import paths
 
 
 @pytest.fixture
@@ -94,6 +95,20 @@ class TestCheckpointRepository:
         assert checkpoint_repository.job_id == "job1"
         assert checkpoint_repository.agent_instance_id == "agent1"
         assert checkpoint_repository.checkpoint_location == "/tmp/agent_state"
+
+    def test_a_custom_checkpoint_location_is_refused_to_file_tools(
+        self, mock_artifact_store: Mock, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(paths, "_protected", set())
+        location = tmp_path / "state" / "checkpoint.zip"
+        with patch(
+            "agent_builder_sdk.checkpoint.checkpoint_repository.ArtifactStore",
+            return_value=mock_artifact_store,
+        ):
+            CheckpointRepository("ws1", "job1", "agent1", checkpoint_location=str(location))
+
+        assert "runtime state" in (paths.unwritable(str(location), [str(tmp_path)]) or "")
+        assert paths.unwritable(str(tmp_path / "state" / "notes.md"), [str(tmp_path)]) is None
 
 
 class TestCreateCheckpointRepository:
