@@ -6,6 +6,7 @@ import tempfile
 from importlib.resources import read_text
 from multiprocessing import Process
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Dict, List, Optional, Sequence, Set
 
 from pydantic import BaseModel
@@ -461,6 +462,17 @@ def build_mcp_args_from_parsed_args(args) -> Dict[str, str]:
     }
 
 
+def _tool_name(tool: Any) -> str:
+    """The name Strands registers ``tool`` under.
+
+    A module-style tool (a module with ``TOOL_SPEC`` and a function named like the module) is
+    registered under its module name; any other tool has ``tool_name``.
+    """
+    if isinstance(tool, ModuleType) and getattr(tool, "TOOL_SPEC", None):
+        return tool.__name__.rsplit(".", 1)[-1]
+    return tool.tool_name
+
+
 def combine_tools(
     mcp_clients: Optional[List[Any]] = None,
     custom_tools: Optional[List[Any]] = None,
@@ -472,7 +484,8 @@ def combine_tools(
 
     Args:
         mcp_clients: List of MCP clients to get tools from
-        custom_tools: List of custom tools to include
+        custom_tools: List of custom tools to include: ``@tool`` functions, ``AgentTool``
+            objects or module-style tools
         excluded_tool_names: Set of tool names to exclude
 
     Returns:
@@ -487,12 +500,13 @@ def combine_tools(
     excluded_mcp_tool_names = excluded_mcp_tool_names or set()
 
     def add_tool(tool):
-        if tool.tool_name in excluded_tool_names:
-            logger.info(f"Excluding tool: {tool.tool_name}")
+        name = _tool_name(tool)
+        if name in excluded_tool_names:
+            logger.info(f"Excluding tool: {name}")
             return
-        if tool.tool_name in tool_names:
-            raise ValueError(f"Duplicate tool name found: '{tool.tool_name}'")
-        tool_names.add(tool.tool_name)
+        if name in tool_names:
+            raise ValueError(f"Duplicate tool name found: '{name}'")
+        tool_names.add(name)
         all_tools.append(tool)
 
     # Add MCP tools

@@ -3534,6 +3534,23 @@
     "signature": "register_hooks(registry: HookRegistry, **kwargs: Any) -> None"
   },
   {
+    "name": "ImageBlockGuardHook",
+    "kind": "class",
+    "file": "agent_builder_sdk/orchestrator_strands/hooks/image_block_guard.py",
+    "module": "agent_builder_sdk.orchestrator_strands.hooks.image_block_guard",
+    "docstring": "Keep the image blocks of tool results within 3.75 MB and 1568 px per side.\n\n3.75 MB is the Bedrock Converse limit: Converse rejects a request that holds a larger image,\nor an image whose bytes do not match its declared format. The tool result stays in history,\nso one such image fails every later model call of the conversation. 1568 px is not a\nConverse limit (that is 8000 px). It is the edge above which, by Anthropic's vision\nguidance, a Claude model resizes an image before it reads it. The edge is fixed, so a model\nthat reads larger images still gets them downscaled. After each tool call this hook:\n\n- leaves as is a png, jpeg, gif or webp block of at most 3.75 MB and 1568 px per side\n  whose first frame decodes (later frames of an animation are not checked);\n- corrects a wrong declared format;\n- downscales and re-encodes any other image (first frame only; png when it has\n  transparency, jpeg at quality 85 otherwise);\n- replaces an image that cannot be read or made to fit, that is over 20 MiB, that needs\n  more than 20 million pixels decoded (40 million for a JPEG), or whose conversion takes\n  more than 30 s, with a text block that names the reason, so the model knows an image was\n  there. The text never quotes the image bytes.\n\nA conversion can take about 370 MB of memory, and two run at a time. Only blocks with a\n``bytes`` source are checked. Other blocks keep their place and content.",
+    "signature": "ImageBlockGuardHook()",
+    "description": "Extends: HookProvider\n\nMethods:\n  register_hooks(registry: HookRegistry, **kwargs: Any) -> None"
+  },
+  {
+    "name": "ImageBlockGuardHook.register_hooks",
+    "kind": "method",
+    "file": "agent_builder_sdk/orchestrator_strands/hooks/image_block_guard.py",
+    "module": "agent_builder_sdk.orchestrator_strands.hooks.image_block_guard",
+    "docstring": "",
+    "signature": "register_hooks(registry: HookRegistry, **kwargs: Any) -> None"
+  },
+  {
     "name": "MemoryHookProvider",
     "kind": "class",
     "file": "agent_builder_sdk/orchestrator_strands/hooks/memory_hook_provider.py",
@@ -3584,6 +3601,15 @@
     "docstring": "Conduct research on a topic.\n\nPerforms comprehensive research on the specified topic, including gathering sources,\nanalyzing findings, cross-referencing data, and synthesizing insights. Progress updates\nare sent during the research process.\n\nArgs:\n    topic: The research topic to investigate\n\nReturns:\n    Confirmation that research has started",
     "signature": "async research_topic(topic: str, tool_context: ToolContext) -> str",
     "description": "Parameters:\n  topic: str (required) - The research topic to investigate\n  tool_context: ToolContext (required)"
+  },
+  {
+    "name": "image_reader",
+    "kind": "function",
+    "file": "agent_builder_sdk/orchestrator_strands/tools/image_reader.py",
+    "module": "agent_builder_sdk.orchestrator_strands.tools.image_reader",
+    "docstring": "Return the image at ``tool[\"input\"][\"image_path\"]`` as one Converse image block.\n\nThe path may be any file the agent process can read: ``~`` is expanded, a relative path\nis resolved against the working directory, and symbolic links are followed. The file must\nbe a regular file of at most MAX_IMAGE_FILE_BYTES that holds a PNG, JPEG, GIF, WebP or BMP\nimage. An image over 3.75 MB (the Converse limit) or 1568 px per side is downscaled and\nre-encoded; one that needs more than 20 million pixels decoded (40 million for a JPEG), or\nwhose conversion takes more than 30 s, is an error.\nFile content is returned only as an image; every failure is an ``error`` result with a\nmessage for the model that quotes no file content, never an exception.",
+    "signature": "async image_reader(tool: ToolUse, **kwargs: Any) -> ToolResult",
+    "description": "Parameters:\n  tool: ToolUse (required)"
   },
   {
     "name": "MemoryTool",
@@ -4840,6 +4866,24 @@
     "signature": "build() -> str"
   },
   {
+    "name": "ImageConversionError",
+    "kind": "class",
+    "file": "agent_builder_sdk/util/converse_image.py",
+    "module": "agent_builder_sdk.util.converse_image",
+    "docstring": "The bytes are not an image that can be brought within MAX_IMAGE_BYTES and MAX_EDGE.",
+    "signature": "ImageConversionError()",
+    "description": "Extends: ValueError"
+  },
+  {
+    "name": "convert_image",
+    "kind": "function",
+    "file": "agent_builder_sdk/util/converse_image.py",
+    "module": "agent_builder_sdk.util.converse_image",
+    "docstring": "``raw`` as image bytes and a format that Converse accepts.\n\nThe result is ``raw`` itself, with its real format, when it is a png, jpeg, gif or webp of\nat most MAX_IMAGE_BYTES and MAX_EDGE px per side whose first frame decodes. Later frames of\nan animation are not checked. Any other image is decoded (first frame only), downscaled\nuntil it fits and encoded again: png when it has transparency, jpeg otherwise. The EXIF\norientation is not applied.\n\nAt most two conversions run at a time, on their own threads; the others wait in a queue.\nRaises ImageConversionError when the bytes are over MAX_INPUT_BYTES or are not a readable\npng, jpeg, gif, webp or bmp image, when the image to encode again is over MAX_DECODE_PIXELS\n(MAX_JPEG_PIXELS for a JPEG), when it is still over MAX_IMAGE_BYTES at MIN_EDGE px, or when\nno result came within CONVERSION_TIMEOUT_SECONDS. The message never quotes the bytes.",
+    "signature": "async convert_image(raw: bytes) -> tuple[bytes, ImageFormat]",
+    "description": "Parameters:\n  raw: bytes (required)"
+  },
+  {
     "name": "experimental",
     "kind": "function",
     "file": "agent_builder_sdk/util/decorators.py",
@@ -5007,9 +5051,9 @@
     "kind": "function",
     "file": "agent_builder_sdk/utils.py",
     "module": "agent_builder_sdk.utils",
-    "docstring": "Combine tools from MCP clients with custom tools, with optional filtering.\n\nArgs:\n    mcp_clients: List of MCP clients to get tools from\n    custom_tools: List of custom tools to include\n    excluded_tool_names: Set of tool names to exclude\n\nReturns:\n    Combined list of tools with duplicates checked and exclusions applied\n\nRaises:\n    ValueError: If duplicate tool names are found",
+    "docstring": "Combine tools from MCP clients with custom tools, with optional filtering.\n\nArgs:\n    mcp_clients: List of MCP clients to get tools from\n    custom_tools: List of custom tools to include: ``@tool`` functions, ``AgentTool``\n        objects or module-style tools\n    excluded_tool_names: Set of tool names to exclude\n\nReturns:\n    Combined list of tools with duplicates checked and exclusions applied\n\nRaises:\n    ValueError: If duplicate tool names are found",
     "signature": "combine_tools(mcp_clients: Optional[List[Any]] = None, custom_tools: Optional[List[Any]] = None, excluded_tool_names: Optional[Set[str]] = None, excluded_mcp_tool_names: Optional[Set[str]] = None) -> Optional[List[Any]]",
-    "description": "Parameters:\n  mcp_clients: Optional[List[Any]] (default=None) - List of MCP clients to get tools from\n  custom_tools: Optional[List[Any]] (default=None) - List of custom tools to include\n  excluded_tool_names: Optional[Set[str]] (default=None) - Set of tool names to exclude\n  excluded_mcp_tool_names: Optional[Set[str]] (default=None)"
+    "description": "Parameters:\n  mcp_clients: Optional[List[Any]] (default=None) - List of MCP clients to get tools from\n  custom_tools: Optional[List[Any]] (default=None) - List of custom tools to include: ``@tool`` functions, ``AgentTool`` objects or module-style tools\n  excluded_tool_names: Optional[Set[str]] (default=None) - Set of tool names to exclude\n  excluded_mcp_tool_names: Optional[Set[str]] (default=None)"
   },
   {
     "name": "convert_queue_response_to_send_message_output",

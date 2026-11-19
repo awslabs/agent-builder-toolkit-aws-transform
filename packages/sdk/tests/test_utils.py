@@ -2,16 +2,20 @@
 # SPDX-License-Identifier: Apache-2.0
 import os
 import tempfile
+import types
 from unittest.mock import Mock, patch
 
 import pytest
+from strands import tool
 from strands.agent import AgentResult
 from strands.telemetry import EventLoopMetrics
+from strands.tools.registry import ToolRegistry
 from strands.types.content import ContentBlock, Message
 
 from agent_builder_sdk.custom_types.common_types import A2AErrorCode, InvocationRequest
 from agent_builder_sdk.custom_types.extension_types import ExtensionResponse
 from agent_builder_sdk.message_queue import QueueResponse
+from agent_builder_sdk.orchestrator_strands.tools import image_reader
 from agent_builder_sdk.util.suggestions_manager import add_suggestions, clear_suggestions
 from agent_builder_sdk.utils import (
     A2A_CHAT_SUGGESTIONS_EXT,
@@ -765,6 +769,12 @@ class TestExtractSourceInformation:
         assert extract_source_information(m) == (None, None)
 
 
+@tool(name="function_tool")
+def _function_tool() -> str:
+    """A function-style tool."""
+    return "ok"
+
+
 class TestCombineTools:
     """Tests for the combine_tools function."""
 
@@ -808,6 +818,45 @@ class TestCombineTools:
         )
         assert len(result) == 1
         assert result[0] == mock_tool1
+
+    def test_combine_tools_accepts_both_tool_styles_under_their_registered_names(self) -> None:
+        tools = combine_tools(custom_tools=[_function_tool, image_reader])
+        assert tools == [_function_tool, image_reader]
+        assert ToolRegistry().process_tools(tools) == ["function_tool", "image_reader"]
+
+    @pytest.mark.parametrize(
+        "excluded,kept",
+        [("function_tool", [image_reader]), ("image_reader", [_function_tool])],
+    )
+    def test_combine_tools_excludes_either_tool_style_by_name(
+        self, excluded: str, kept: list[object]
+    ) -> None:
+        tools = combine_tools(
+            custom_tools=[_function_tool, image_reader], excluded_tool_names={excluded}
+        )
+        assert tools == kept
+
+    def test_combine_tools_names_a_module_tool_by_its_module_not_its_spec(self) -> None:
+        module = types.ModuleType("package.spec_differs")
+        module.__file__ = "spec_differs.py"
+        module.TOOL_SPEC = {"name": "other", "description": "d", "inputSchema": {"json": {}}}
+        module.spec_differs = lambda tool, **kwargs: {"status": "success", "content": []}
+
+        assert ToolRegistry().process_tools([module]) == ["spec_differs"]
+        assert combine_tools(custom_tools=[module], excluded_tool_names={"spec_differs"}) == []
+        assert combine_tools(custom_tools=[module], excluded_tool_names={"other"}) == [module]
+
+    def test_combine_tools_rejects_a_module_without_a_tool_spec(self) -> None:
+        module = types.ModuleType("package.function_tools")
+        module.function_tool = _function_tool
+        with pytest.raises(AttributeError, match="tool_name"):
+            combine_tools(custom_tools=[module])
+
+    def test_combine_tools_detects_a_duplicate_across_tool_styles(self) -> None:
+        same_name = Mock()
+        same_name.tool_name = "image_reader"
+        with pytest.raises(ValueError, match="Duplicate tool name found: 'image_reader'"):
+            combine_tools(custom_tools=[image_reader, same_name])
 
     def test_combine_tools_duplicate_error(self):
         """Test combine_tools raises error for duplicate tool names."""
