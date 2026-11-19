@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agent-builder-sdk-aws-transform"
-version = "1.1.0"
+version = "1.2.1"
 description = "Base agent SDK for building orchestrator and subagents on AWS Transform"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
@@ -27,6 +27,8 @@ dependencies = [
     # Pin to the mcp 1.x major the toolkit is tested against; mcp 2.0.0 is a
     # breaking release (see issue #77). Widen once verified against 2.x.
     "mcp>=1.0,<2.0",
+    # 1.30.0 is the first release that ships strands.vended_plugins.skills, which
+    # enable_skills and enable_platform_skills load.
     "strands-agents>=1.30.0",
     "strands-agents-tools>=0.2",
     "uvicorn>=0.20",
@@ -42,7 +44,7 @@ dependencies = [
 
 [project.optional-dependencies]
 full = [
-    "agent-builder-agentic-mcp-aws-transform>=1.0",
+    "agent-builder-agentic-mcp-aws-transform>=1.1",
     "agent-builder-mcp-aws-transform>=1.0",
 ]
 test = ["pytest", "pytest-asyncio"]

@@ -1,6 +1,6 @@
 ---
 name: artifact-io
-description: Use whenever a file or result must outlive the conversation - persisting outputs, delivering a file to the user, or reading a user-uploaded file back. Covers the upload ritual, the delivery decision (internal vs customer-visible), attaching output to a plan step, downloads, and verifying an upload actually landed.
+description: Use whenever a file or result must outlive the conversation - persisting outputs, delivering a file to the user, or reading a user-uploaded file back. Covers the upload ritual, the delivery decision (internal vs customer-visible), attaching output to a plan step, downloads, and verifying an upload actually landed before you tell the user a deliverable is done.
 ---
 
 # Artifact I/O
@@ -8,6 +8,20 @@ description: Use whenever a file or result must outlive the conversation - persi
 The artifact store is the job's file system of record. Anything worth keeping — reports, schemas,
 generated code, results, approval summaries — is an artifact. Files in `/tmp` die with the
 container, and content pasted into chat is not a deliverable.
+
+## What "delivered" means (overrides any skill's local-file step)
+
+A deliverable exists only once it is an artifact-store upload you have **completed and verified**:
+`complete_artifact_upload` succeeded and `get_artifact_metadata` shows
+`isS3ObjectPresent.publicBucket` true. Verify each deliverable this way before you answer. A file
+you only wrote locally and text pasted into chat are **not** deliverables, however finished they
+look.
+
+This platform rule overrides a job skill's own wording: if a domain skill's "package the
+deliverables" or "present to the user" step is satisfied by writing local files, that step is
+**not done** until those files are uploaded and verified here. Never tell the user a result is
+complete, ready, or downloadable before you have verified the upload landed — if you could not
+upload it, say so plainly instead of claiming completion.
 
 ## Decide visibility BEFORE you upload
 
@@ -32,6 +46,10 @@ already uploaded as `INTERNAL` and have since decided to surface. Never plan an 
 followed by a copy when you already know the file is for the user.
 
 ## Upload: four calls, none optional
+
+Steps 1 and 3 work on a local file, so they need a tool that can write the file and compute its
+digest (a code-execution tool, or one your builder added). If you have no such tool, do not guess
+a digest or a path: make no upload call, and say plainly that the result could not be uploaded.
 
 ```
 1. digest = python3 -c "import hashlib,base64,sys; \
@@ -72,9 +90,10 @@ true` and a `customer_facing_message` — relay that message to the user instead
 must include `"path"`, or the call fails locally.
 
 **Verify it landed** before citing the id to the user: `complete_artifact_upload` returns the full
-artifact, so compare its `sizeInBytes` with the local size from step 3. If unsure whether you ever
-completed one, `get_artifact_metadata(artifact_id)` and read `isS3ObjectPresent` — an
-uncompleted upload is the classic silent failure and this is the only way to see it.
+artifact, so compare its `sizeInBytes` with the local size from step 3, then call
+`get_artifact_metadata(artifact_id)` and read `isS3ObjectPresent` — for a customer deliverable
+`publicBucket` must be true, and an uncompleted upload is the classic silent failure that only this
+call shows.
 
 ## Attaching output to the plan: two separate indexes
 
@@ -110,6 +129,7 @@ returns base64-decoded content inline instead of a reference (see `hitl-loop`).
 
 At the end of every step that produced content, ask whether it landed in the artifact store.
 Upload as soon as results are final — don't wait to be asked, and don't treat chat as delivery.
+Do not report a step or the job as complete while its output lives only in a local file or chat.
 
 ## Symptoms and causes
 
@@ -123,6 +143,7 @@ Upload as soon as results are final — don't wait to be asked, and don't treat 
 | Downloaded file has no extension | `file_name` omitted | always pass it, from `fileMetadata` |
 | 404 on an artifact id you cited | id fabricated or from a failed upload | cite only verified ids |
 | Deliverables lost after container restart | outputs kept in `/tmp` | upload as artifacts as soon as produced |
+| You told the user a deliverable is "done" but it is only a local file | mistook writing a file for delivery | delivered only once uploaded + `isS3ObjectPresent.publicBucket`; upload, verify, then say it's ready |
 
 ## References
 

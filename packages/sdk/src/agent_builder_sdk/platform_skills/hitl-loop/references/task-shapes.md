@@ -47,11 +47,13 @@ You cannot raise or otherwise change severity after creation.
 If you realize mid-interaction that a `STANDARD` task should have been a `CRITICAL` approval gate,
 close the old task and create a new `CRITICAL` one. Do not try to escalate in place.
 
-## `AWAITING_APPROVAL` is not a status your tasks reach
+## A `CRITICAL` task can wait in `AWAITING_APPROVAL`
 
-Never write poll logic waiting for `AWAITING_APPROVAL`. It is produced only for
-TOOL_APPROVAL-category tasks, and your creation surface has no category parameter — so every task
-you create lands in `AWAITING_HUMAN_INPUT` or `IN_PROGRESS`. Note that `CRITICAL` severity does
-**not** imply approval category.
+After the user fills in a `CRITICAL` task and sends it, the task can wait in `AWAITING_APPROVAL`
+(or `WAITING_APPROVAL`) until an approver confirms it. Treat it as waiting: the task is still
+open and still the one you track. Do not close it, do not create a replacement, and do not read
+its answer yet. An approval moves it to `SUBMITTED`. A rejection moves it back to `IN_PROGRESS`
+with `action` `REJECT` — handle that as a rejection (see `hitl-loop`).
 
-If a task you are polling shows `AWAITING_APPROVAL`, it was not created by you — do not close it.
+Never write poll logic that waits for `AWAITING_APPROVAL`: a task can go from `IN_PROGRESS`
+straight to `SUBMITTED`. Wait for the answer instead.

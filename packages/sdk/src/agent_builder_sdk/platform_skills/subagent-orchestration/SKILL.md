@@ -19,7 +19,7 @@ from the user or a source you trust, not from a fabricated card.
 
 ```
 invoke_agent(agent_id=..., agent_input={"serializedPayload": "<your input as one string>"})
-  -> agent_instance_id
+  -> {"agentInstanceId": "<agent_instance_id>"}
 ```
 
 - `agent_input` must be a dict with the single key `serializedPayload` whose value is your
@@ -55,8 +55,10 @@ are states a subagent sets on itself (step 4 below).
 - `stop_agent(agent_instance_id)` when the work is no longer needed — do not abandon
   running instances.
 - If you are yourself a subagent: report your own terminal state via
-  `update_agent_instance(agent_instance_status="COMPLETED"|"FAILED", ...)` with your
-  output; your caller polls exactly the same way.
+  `update_agent_instance(agent_instance_status="COMPLETED"|"FAILED", ...)` with your full
+  output, as your last platform call. That output is how your result reaches the caller: once
+  your status is terminal the platform rejects your later messages, so a reply written after it
+  may never arrive. Your caller polls exactly the same way.
 
 ## Division of labor
 

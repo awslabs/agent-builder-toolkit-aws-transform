@@ -7,7 +7,7 @@ description: Use whenever you need anything from the human - input, a decision, 
 
 A HITL task is the only way to get structured input or a recorded decision from the user. The
 lifecycle is a strict protocol, and most of it is the platform's work — your job is to create,
-start, announce, poll, read, close, in that order.
+start, ask, wait, read, close, in that order.
 
 ## The protocol
 
@@ -15,11 +15,28 @@ start, announce, poll, read, close, in that order.
 1. step_id  = a platform plan step id            (list_job_plan_steps if unsure)
 2. create   = create_hitl_task(...)              -> hitl_task_id   [exists, INVISIBLE]
 3. start    = start_hitl_task(hitl_task_id)                        [now visible]
-4. tell     = tell the user in chat what you need and why
-5. poll     = get_hitl_task(hitl_task_id) until the ANSWER EXISTS  (see below)
+4. ask      = say what you need and why, as the FINAL message of a turn  (see below)
+5. wait     = get_hitl_task(hitl_task_id) until the ANSWER EXISTS  (see below)
 6. read     = retrieve_hitl_output_as_string(hitl_task_id)
 7. close    = close_hitl_task(hitl_task_id, closure_type="CLOSED")
 ```
+
+Chat reaches the user as your reply only when the turn ends (contract rule 11). An ask you write
+and then keep polling past is not that reply: a live stream shows it only as progress, and the
+queued path sends only the turn's final message — after they have answered, or, if the turn
+outlasts the agent's wait for a delayed reply, just a note that no response came in time. So how
+you run steps 4 and 5 depends on `blocking_type`:
+
+- **`BLOCKING`** — end the turn at step 4: the ask is your final message, with no tool call after
+  it. Step 5 belongs to a later turn. When the user submits, a new turn starts with the message
+  "HITL Task <hitl_task_id> is submitted"; a chat message from the user starts one too. In either,
+  call `get_hitl_task` first and continue from what it shows.
+- **`NON_BLOCKING`** — the job does not pause. Do the work that does not depend on the answer,
+  check `get_hitl_task` between pieces of it, and put the ask in the turn's final message. Do not
+  count on a "submitted" turn: a task that goes straight to `CLOSED` on submit starts none.
+
+A turn that a platform event started has no reply, so there the ask goes in a worklog on the
+task's step (contract rule 11).
 
 The `create_autoform_hitl_task` and `create_autotable_hitl_task` helpers do steps 2 AND 3 in one call, and return the
 `hitl_task_id` plus the status start landed in. Read those off the response and go straight to
@@ -35,9 +52,12 @@ re-upload the request artifact, never write the task status yourself, and never 
 update to announce the task — you would create a duplicate body or a conflicting step state.
 
 Start is deliberately not idempotent. A second start throws *"Cannot call StartHitlTask on
-already started task"* — read that as proof the task is live, and go poll.
+already started task"* — read that as proof the task is live, and go on to step 4.
 
 ## Polling: the answer, not the status word
+
+A poll is one `get_hitl_task` check: in a later turn for a `BLOCKING` task, between pieces of
+work for a `NON_BLOCKING` one.
 
 **Poll with `get_hitl_task`. Never poll with `retrieve_hitl_output_as_string`** — that raises
 whenever the human hasn't answered yet, which is the normal state of every poll before
@@ -47,22 +67,25 @@ End the loop when **the answer exists**: `humanArtifact.artifactId` is present, 
 `SUBMITTED` or `CLOSED`. Do not wait for the literal `SUBMITTED` — a `NON_BLOCKING` feedback task
 goes straight to `CLOSED` on submit, and a loop watching for `SUBMITTED` hangs forever on a task
 the user already answered. When you land on `CLOSED`, read the output and skip step 7; the
-platform already closed it.
+platform already closed it. A task that waits for an approver (`AWAITING_APPROVAL`) or that was
+rejected (`action` is `REJECT`) is not answered, even when an answer artifact is present.
 
 Branch on what you see:
 
 | Status | Meaning | Do |
 |---|---|---|
 | `CREATED` | start never landed | call `start_hitl_task` |
-| `AWAITING_HUMAN_INPUT` / `IN_PROGRESS` | healthy, waiting | keep polling (check `action` — see rejection) |
-| `SUBMITTED` / answer artifact present | answered | read it |
+| `AWAITING_HUMAN_INPUT` / `IN_PROGRESS` | healthy, waiting | keep waiting (check `action` — see rejection) |
+| `AWAITING_APPROVAL` / `WAITING_APPROVAL` | healthy, the user sent it and an approver has to confirm it | keep waiting and leave it open: never close or recreate it, do not read it yet |
+| `SUBMITTED` / answer artifact present | answered, unless rejected | read it, unless `action` is `REJECT` (see rejection) |
 | `CLOSED` | answered and auto-closed | read it, do not close |
+| `CLOSED_PENDING_NEXT_TASK` | you closed it to chain a follow-up | poll the follow-up task |
 | `CANCELLED` | someone killed it | stop polling |
+| `DELIVERED` | a display-only (`DASHBOARD`) task was shown; no answer comes | stop polling |
 
-While you wait: announce in chat what you need and why — nothing pushes a regular task to the
-user, so an unannounced task sits in a list nobody is looking at. Then let `blocking_type` decide
-your behavior: on `BLOCKING`, the next step depends on the answer, so wait; on `NON_BLOCKING`, the
-job does not pause, so go do the work that does not depend on the answer and poll back later.
+Nothing pushes a regular task to the user, so a task without the step-4 ask sits in a list
+nobody is looking at. When a later turn finds the task still waiting, repeat the ask in that
+turn's final message and leave the task open.
 
 ## Approval gates (mandatory before mutations)
 
@@ -75,7 +98,9 @@ Before anything that changes customer resources or spends money, run exactly thi
    the helper defaults does not pause the job and does not mark the plan step: it is a suggestion,
    not a gate.
 3. Start it (the helpers already did).
-4. Poll, 5. read the answer, 6. close with `closure_type="CLOSED"`.
+4. Ask and end the turn (protocol step 4 for `BLOCKING`). Say in the ask that an approver may
+   have to confirm the task after the user sends it. Once the answer exists, 5. read it,
+   6. close with `closure_type="CLOSED"`.
 7. **Only then** perform the mutation.
 
 Your creation surface has no task-category parameter, so this is a regular task marked CRITICAL,
@@ -86,11 +111,13 @@ record. A chat "yes go ahead" is not an approval: it leaves no record the platfo
 
 `IN_PROGRESS` is ambiguous — a rejected task and a freshly started chained task both sit there.
 Read the task's **`action`** field on every poll: `REJECT` is a rejection, `APPROVE` is a
-submission. Treat `SUBMITTED` → `IN_PROGRESS` as "rework requested".
+submission. Treat a task that goes back to `IN_PROGRESS` from `AWAITING_APPROVAL` or `SUBMITTED`
+as "rework requested".
 
-On rejection, reuse the SAME task: acknowledge it in chat, ask what needs to change, and resume
-polling the same `hitl_task_id`. Do not create a replacement, do not call start again, and do not
-try to read the artifact of a rejected task — get the reason from the user in chat.
+On rejection, reuse the SAME task: end the turn with a final message that acknowledges it and
+asks what needs to change, and check the same `hitl_task_id` again in the turns that follow. Do
+not create a replacement, do not call start again, and do not try to read the artifact of a
+rejected task — get the reason from the user in chat.
 
 ## Which creation tool
 
@@ -112,7 +139,8 @@ after you have the answer** — closing a task the human is mid-form on destroys
 | Symptom | Cause | Fix |
 |---|---|---|
 | User says "I don't see any task" | `start_hitl_task` never called, or step id invalid | start it; verify the step id |
-| "Cannot call StartHitlTask on already started task" | the task is already live | stop starting, start polling |
+| Task is live but the user was never asked | the ask was written before more tool calls in the same turn | end the turn with the ask as the final message |
+| "Cannot call StartHitlTask on already started task" | the task is already live | stop starting, go on to step 4 |
 | Poll never terminates | waiting for literal `SUBMITTED` on a task that went to `CLOSED` | exit on the answer artifact or `CLOSED` too |
 | `retrieve_hitl_output_as_string` keeps raising | used as the poll signal before submission | poll `get_hitl_task`; read only once the answer exists |
 | Task recorded as cancelled though the user answered | `close_hitl_task` without `closure_type` | always pass `closure_type="CLOSED"` |

@@ -4,13 +4,20 @@
 Unit tests for agent factory functions.
 """
 
+import json
+import logging
 import os
+import re
+from pathlib import Path
+from typing import Any, Optional
 from unittest import mock
 
 import pytest
-from strands.vended_plugins.skills import Skill
+from strands import Agent, tool
+from strands.vended_plugins.skills import AgentSkills, Skill
 
 from agent_builder_sdk.agent_factory import (
+    _PLATFORM_CONTRACT_TOOL_NAMES,
     _PLATFORM_SKILLS_DIR,
     create_default_async_orchestrator,
     create_default_async_orchestrator_with_subagent,
@@ -902,6 +909,42 @@ class TestOrchestratorOptions:
         )
         assert mock_orchestrator.call_args.kwargs["enable_prompt_caching"] is True
 
+    @pytest.mark.parametrize(
+        ("skills_dir", "env_dir", "source"),
+        [
+            ("/team/skills", "/env/skills", "/team/skills"),
+            (None, "/env/skills", "/env/skills"),
+            (None, None, "./skills"),
+        ],
+    )
+    def test_enable_skills_alone_reads_skills_dir_then_the_env_variable_then_the_default(
+        self,
+        skills_dir: Optional[str],
+        env_dir: Optional[str],
+        source: str,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        if env_dir is None:
+            monkeypatch.delenv("STRANDS_SKILLS_DIR", raising=False)
+        else:
+            monkeypatch.setenv("STRANDS_SKILLS_DIR", env_dir)
+
+        with mock.patch(
+            "agent_builder_sdk.agent_factory.AsyncBaseOrchestrator"
+        ) as mock_orchestrator, mock.patch(
+            "strands.vended_plugins.skills.AgentSkills"
+        ) as mock_skills:
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt",
+                storage_dir=str(tmp_path),
+                enable_skills=True,
+                skills_dir=skills_dir,
+            )
+
+        mock_skills.assert_called_once_with(skills=[source])
+        assert mock_orchestrator.call_args.kwargs["plugins"] == [mock_skills.return_value]
+
 
 # The released (1.1.0) positional order of each orchestrator factory. New parameters go after these, so a
 # caller passing arguments by position keeps binding them to the same names.
@@ -945,6 +988,24 @@ def test_factory_keeps_its_positional_parameter_order(name):
     assert params[: len(_V1_POSITIONAL[name])] == _V1_POSITIONAL[name]
 
 
+_CONTRACT_TOOL_NAMES = [
+    "close_hitl_task", "complete_artifact_upload", "create_artifact_upload_url",
+    "create_hitl_task", "create_worklog", "get_artifact_metadata", "get_hitl_task", "get_job",
+    "list_job_plan_steps", "list_worklogs", "put_job_plan", "retrieve_hitl_output_as_string",
+    "start_hitl_task", "update_job_plan_step", "update_job_status", "upload_artifact",
+]
+
+
+def _agentic_service_shapes() -> dict[str, Any]:
+    import agent_builder_sdk
+
+    model_path = Path(agent_builder_sdk.__file__).parent.joinpath(
+        "botocore_models", "transformagenticservice", "2018-05-10", "service-2.json"
+    )
+    shapes: dict[str, Any] = json.loads(model_path.read_text(encoding="utf-8"))["shapes"]
+    return shapes
+
+
 class TestPlatformKnowledge:
     """enable_platform_skills loads the platform skills and appends the platform contract;
     with it off (the default for every 1.0 consumer) neither happens."""
@@ -959,7 +1020,7 @@ class TestPlatformKnowledge:
     @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
     @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
     @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
-    def test_platform_skills_on_loads_skills_and_appends_contract(self, *mocks):
+    def test_platform_skills_on_loads_skills_and_appends_contract(self, *mocks: mock.Mock) -> None:
         mock_orchestrator = mocks[-1]
         mock_orchestrator.return_value = mock.Mock()
 
@@ -988,7 +1049,7 @@ class TestPlatformKnowledge:
     @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
     @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
     @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
-    def test_platform_skills_off_leaves_prompt_and_plugins_untouched(self, *mocks):
+    def test_platform_skills_off_leaves_prompt_and_plugins_untouched(self, *mocks: mock.Mock) -> None:
         mock_orchestrator = mocks[-1]
         mock_orchestrator.return_value = mock.Mock()
 
@@ -999,7 +1060,181 @@ class TestPlatformKnowledge:
         assert call_kwargs["plugins"] is None
         assert not {read_platform_skill_file, render_a2ui_surface, suggest_replies} & set(call_kwargs["custom_tools"])
 
-    def test_packaged_platform_skills_load_strictly(self):
+    def test_team_skill_replaces_the_platform_skill_of_the_same_name(self, tmp_path: Path) -> None:
+        team_skill = tmp_path / "team" / "hitl-loop"
+        team_skill.mkdir(parents=True)
+        (team_skill / "SKILL.md").write_text(
+            "---\nname: hitl-loop\ndescription: Team override.\n---\n\nTEAM HITL BODY\n"
+        )
+
+        with mock.patch(
+            "agent_builder_sdk.agent_factory.AsyncBaseOrchestrator"
+        ) as mock_orchestrator, mock.patch(
+            "strands.vended_plugins.skills.AgentSkills", wraps=AgentSkills
+        ) as mock_skills:
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt",
+                mcp_client=mock.Mock(),
+                storage_dir=str(tmp_path / "storage"),
+                enable_skills=True,
+                skills_dir=str(tmp_path / "team"),
+                enable_platform_skills=True,
+            )
+
+        assert mock_skills.call_args.kwargs["skills"] == [
+            str(_PLATFORM_SKILLS_DIR),
+            str(tmp_path / "team"),
+        ]
+        (plugin,) = mock_orchestrator.call_args.kwargs["plugins"]
+        agent = Agent(model=mock.Mock(), plugins=[plugin], callback_handler=None)
+        assert "TEAM HITL BODY" in agent.tool.skills(skill_name="hitl-loop")["content"][0]["text"]
+        assert "# Job Plan" in agent.tool.skills(skill_name="job-plan")["content"][0]["text"]
+
+    @pytest.mark.parametrize(
+        ("mcp_client", "excluded", "reason"),
+        [
+            (None, None, f"no {_CONTRACT_TOOL_NAMES}: no mcp_client was given"),
+            (
+                mock.Mock(),
+                {"list_artifacts", "start_hitl_task"},
+                "no ['start_hitl_task']: excluded_mcp_tool_names removes them",
+            ),
+            (
+                mock.Mock(),
+                {"get_job", "close_hitl_task", "get_artifact_metadata"},
+                "no ['close_hitl_task', 'get_artifact_metadata', 'get_job']: excluded_mcp_tool_names",
+            ),
+            (
+                mock.Mock(),
+                {"retrieve_hitl_output_as_string"},
+                "no ['retrieve_hitl_output_as_string']: excluded_mcp_tool_names removes them",
+            ),
+        ],
+    )
+    def test_platform_skills_without_the_contract_tools_logs_a_warning(
+        self,
+        mcp_client: Optional[mock.Mock],
+        excluded: Optional[set[str]],
+        reason: str,
+        tmp_path: Path,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        with mock.patch(
+            "agent_builder_sdk.agent_factory.AsyncBaseOrchestrator"
+        ) as mock_orchestrator, caplog.at_level(
+            logging.WARNING, logger="agent_builder_sdk.agent_factory"
+        ):
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt",
+                mcp_client=mcp_client,
+                storage_dir=str(tmp_path),
+                excluded_mcp_tool_names=excluded,
+                enable_platform_skills=True,
+            )
+
+        (warning,) = [r for r in caplog.records if r.name == "agent_builder_sdk.agent_factory"]
+        assert warning.levelno == logging.WARNING
+        assert reason in warning.getMessage()
+        assert "# Platform Contract" in mock_orchestrator.call_args.kwargs["system_prompt"]
+
+    def test_platform_skills_with_the_contract_tools_logs_no_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator"), caplog.at_level(
+            logging.WARNING, logger="agent_builder_sdk.agent_factory"
+        ):
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt",
+                mcp_client=mock.Mock(),
+                storage_dir=str(tmp_path),
+                excluded_mcp_tool_names={"list_artifacts"},
+                enable_platform_skills=True,
+            )
+
+        assert [r for r in caplog.records if r.name == "agent_builder_sdk.agent_factory"] == []
+
+    def test_contract_tools_given_as_custom_tools_are_not_reported_missing(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        @tool
+        def get_job() -> str:
+            """Return the job."""
+            return "job"
+
+        with mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator"), caplog.at_level(
+            logging.WARNING, logger="agent_builder_sdk.agent_factory"
+        ):
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt",
+                mcp_client=mock.Mock(),
+                storage_dir=str(tmp_path),
+                custom_tools=[get_job],
+                excluded_mcp_tool_names={"get_job"},
+                enable_platform_skills=True,
+            )
+            assert [r for r in caplog.records if r.name == "agent_builder_sdk.agent_factory"] == []
+
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="task prompt",
+                storage_dir=str(tmp_path),
+                custom_tools=[get_job],
+                enable_platform_skills=True,
+            )
+
+        (warning,) = [r for r in caplog.records if r.name == "agent_builder_sdk.agent_factory"]
+        assert "'get_job'" not in warning.getMessage()
+        assert "'put_job_plan'" in warning.getMessage()
+
+    def test_contract_tool_names_are_taught_by_the_packaged_skills(self) -> None:
+        taught = "".join(p.read_text(encoding="utf-8") for p in _PLATFORM_SKILLS_DIR.rglob("*.md"))
+        assert [name for name in sorted(_PLATFORM_CONTRACT_TOOL_NAMES) if name not in taught] == []
+
+    def test_job_plan_skill_teaches_the_status_info_shape_of_the_service_model(self) -> None:
+        shapes = _agentic_service_shapes()
+        taught = (_PLATFORM_SKILLS_DIR / "job-plan" / "SKILL.md").read_text(encoding="utf-8")
+
+        needed = [f'"{m}"' for m in shapes["StatusInfo"]["members"]]
+        needed += [f'"{c}"' for c in shapes["FailureCategory"]["enum"]]
+        assert [text for text in needed if text not in taught] == []
+
+    def test_hitl_loop_poll_table_has_a_row_for_every_task_status_of_the_service_model(
+        self,
+    ) -> None:
+        skill = (_PLATFORM_SKILLS_DIR / "hitl-loop" / "SKILL.md").read_text(encoding="utf-8")
+        table = skill.split("Branch on what you see:\n\n")[1].split("\n\n")[0]
+        do_by_status = {
+            status: row.split("|")[3]
+            for row in table.splitlines()[2:]
+            for status in re.findall(r"`([A-Z_]+)`", row.split("|")[1])
+        }
+
+        assert set(do_by_status) == set(_agentic_service_shapes()["HitlTaskStatus"]["enum"])
+        assert "keep waiting" in do_by_status["AWAITING_APPROVAL"]
+
+    def test_hitl_loop_answer_rule_leaves_out_an_approver_wait_and_a_rejected_task(self) -> None:
+        skill = (_PLATFORM_SKILLS_DIR / "hitl-loop" / "SKILL.md").read_text(encoding="utf-8")
+        rule = skill.split("End the loop when **the answer exists**")[1].split("\n\n")[0]
+        (answered_row,) = [row for row in skill.splitlines() if row.startswith("| `SUBMITTED`")]
+
+        assert "`AWAITING_APPROVAL`" in rule
+        assert "`REJECT`" in rule
+        assert "`REJECT`" in answered_row.split("|")[3]
+
+    @pytest.mark.parametrize(
+        ("skill_name", "response_shape"),
+        [
+            ("knowledge-base", "RetrievalResultContent"),
+            ("subagent-orchestration", "InvokeAgentResponse"),
+        ],
+    )
+    def test_skill_shows_a_tool_result_with_the_member_names_of_the_service_model(
+        self, skill_name: str, response_shape: str
+    ) -> None:
+        taught = (_PLATFORM_SKILLS_DIR / skill_name / "SKILL.md").read_text(encoding="utf-8")
+        members = _agentic_service_shapes()[response_shape]["members"]
+        assert [m for m in members if f'{{"{m}": ' not in taught] == []
+
+    def test_packaged_platform_skills_load_strictly(self) -> None:
         names = {Skill.from_file(p, strict=True).name for p in _PLATFORM_SKILLS_DIR.glob("*/SKILL.md")}
         assert names == {
             "a2ui-rendering",
@@ -1014,17 +1249,18 @@ class TestPlatformKnowledge:
             "user-chat",
         }
 
-    def test_read_platform_skill_file_reads_the_a2ui_catalog(self):
+    def test_read_platform_skill_file_reads_the_a2ui_catalog(self) -> None:
         text = read_platform_skill_file(skill_name="a2ui-rendering", path="references/catalog.json")
         assert '"catalogId": "atx-hitl/v1"' in text
 
-    def test_read_platform_skill_file_reads_a_reference(self):
+    def test_read_platform_skill_file_reads_a_reference(self) -> None:
         text = read_platform_skill_file(skill_name="hitl-loop", path="references/recovery.md")
         assert text.startswith("# HITL Recovery")
 
-    def test_read_platform_skill_file_stays_inside_platform_skills(self):
+    def test_read_platform_skill_file_stays_inside_platform_skills(self) -> None:
         for skill_name, path in [
             ("hitl-loop", "../../agent_factory.py"),
+            ("hitl-loop", "../job-plan/SKILL.md"),
             ("..", "agent_factory.py"),
             ("hitl-loop", "/etc/passwd"),
             ("/etc", "passwd"),
@@ -1032,7 +1268,9 @@ class TestPlatformKnowledge:
         ]:
             assert read_platform_skill_file(skill_name=skill_name, path=path).startswith("Error:")
 
-    def test_read_platform_skill_file_rejects_symlink_escape_and_oversize(self, tmp_path, monkeypatch):
+    def test_read_platform_skill_file_rejects_symlink_escape_and_oversize(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         skill_dir = tmp_path / "skills" / "demo"
         skill_dir.mkdir(parents=True)
         (tmp_path / "outside.md").write_text("outside")
@@ -1042,3 +1280,17 @@ class TestPlatformKnowledge:
 
         assert read_platform_skill_file(skill_name="demo", path="link.md").startswith("Error:")
         assert read_platform_skill_file(skill_name="demo", path="big.md").startswith("Error:")
+
+    def test_read_platform_skill_file_returns_an_error_for_an_unresolvable_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        skill_dir = tmp_path / "skills" / "demo"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "loop.md").symlink_to(skill_dir / "loop.md")
+        monkeypatch.setattr(
+            "agent_builder_sdk.agent_factory._PLATFORM_SKILLS_DIR", tmp_path / "skills"
+        )
+
+        for path in ["a\x00b", "x" * 300, "loop.md"]:
+            result = read_platform_skill_file(skill_name="demo", path=path)
+            assert result.startswith("Error: no platform skill file")

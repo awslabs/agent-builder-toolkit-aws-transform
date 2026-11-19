@@ -55,29 +55,64 @@ logger = logging.getLogger(__name__)
 
 _PLATFORM_SKILLS_DIR = Path(__file__).parent / "platform_skills"
 _MAX_PLATFORM_SKILL_FILE_BYTES = 128 * 1024  # the A2UI catalog is ~84 KB
+# The MCP tools that the platform contract's rules need on every job: orient (rule 1), plan,
+# status and worklogs (rules 2, 3, 7, 9), the approval round trip (rule 4) and a verified
+# customer deliverable (rule 6).
+_PLATFORM_CONTRACT_TOOL_NAMES = frozenset(
+    {
+        "get_job",
+        "list_job_plan_steps",
+        "list_worklogs",
+        "put_job_plan",
+        "update_job_plan_step",
+        "update_job_status",
+        "create_worklog",
+        "create_hitl_task",
+        "start_hitl_task",
+        "get_hitl_task",
+        "retrieve_hitl_output_as_string",
+        "close_hitl_task",
+        "create_artifact_upload_url",
+        "upload_artifact",
+        "complete_artifact_upload",
+        "get_artifact_metadata",
+    }
+)
 
 
 @tool
 def read_platform_skill_file(skill_name: str, path: str) -> str:
     """Read a file that ships with a platform skill, such as one listed under its References.
 
+    Reads only the skills packaged with the SDK, never a skill loaded from skills_dir: when a
+    skills_dir skill replaces a platform skill of the same name, this tool still returns the
+    packaged skill's files. Files larger than 64 KiB are refused.
+
     Args:
         skill_name: Name of the platform skill, e.g. "hitl-loop".
         path: File path inside that skill, e.g. "references/recovery.md".
 
     Returns:
-        The file's text, or an error message.
+        The file's text, or a message that starts with "Error:" when the path is absolute,
+        contains "..", does not name a readable file inside the packaged skills, or the file is
+        too large.
     """
     relative = Path(skill_name, path)
     if relative.is_absolute() or ".." in relative.parts:
         return f"Error: '{relative}' must be a relative path without '..'"
     root = _PLATFORM_SKILLS_DIR.resolve()
-    target = (root / relative).resolve()
-    if not target.is_relative_to(root) or not target.is_file():
-        return f"Error: no platform skill file '{relative}'"
-    if target.stat().st_size > _MAX_PLATFORM_SKILL_FILE_BYTES:
-        return f"Error: '{relative}' is larger than {_MAX_PLATFORM_SKILL_FILE_BYTES} bytes"
-    return target.read_text(encoding="utf-8")
+    try:
+        target = (root / relative).resolve()
+        if not target.is_relative_to(root) or not target.is_file():
+            return f"Error: no platform skill file '{relative}'"
+        if target.stat().st_size > _MAX_PLATFORM_SKILL_FILE_BYTES:
+            return f"Error: '{relative}' is larger than {_MAX_PLATFORM_SKILL_FILE_BYTES} bytes"
+        return target.read_text(encoding="utf-8")
+    except (OSError, ValueError, RuntimeError) as e:
+        # pathlib raises ValueError for a NUL byte, OSError for an over-long name and, before
+        # Python 3.13, RuntimeError for a symlink loop.
+        logger.warning(f"read_platform_skill_file cannot read {str(relative)!r}: {e}")
+        return f"Error: no platform skill file {str(relative)!r}"
 
 
 def _create_default_orchestrator(
@@ -137,7 +172,8 @@ def _create_default_orchestrator(
     # Build the skills plugin from whichever sources are turned on. The packaged platform skills
     # (HITL protocol, job plan, artifact I/O, ...) teach an agent the platform; a team's
     # own skills_dir layers on top. Both are opt-in, so with neither flag set no plugin is built
-    # and behavior is unchanged.
+    # and behavior is unchanged. The order is load-bearing: AgentSkills keeps the later source
+    # when two skills share a name, so the team's skill replaces the packaged one.
     skills_sources: list[Any] = []
     if enable_platform_skills:
         skills_sources.append(str(_PLATFORM_SKILLS_DIR))
@@ -191,9 +227,26 @@ def _create_default_orchestrator(
         system_prompt += "\n" + guardrail_prompt
 
     # A platform-skills agent must obey the platform contract (plan-first, HITL approval before
-    # mutations, artifacts as the durable sink, connectors for customer resources) whatever its
-    # task prompt says, so it is appended rather than left to the caller's system_prompt.
+    # mutations, artifacts as the durable sink) whatever its task prompt says, so it is appended
+    # rather than left to the caller's system_prompt.
     if enable_platform_skills:
+        not_from_mcp = (
+            _PLATFORM_CONTRACT_TOOL_NAMES
+            if mcp_client is None
+            else _PLATFORM_CONTRACT_TOOL_NAMES.intersection(excluded_mcp_tool_names or ())
+        )
+        missing = sorted(not_from_mcp - {getattr(t, "tool_name", None) for t in custom_tools})
+        if missing:
+            reason = (
+                "no mcp_client was given"
+                if mcp_client is None
+                else "excluded_mcp_tool_names removes them"
+            )
+            logger.warning(
+                "enable_platform_skills appends a contract that tells the model the job plan, "
+                "job status, worklog, HITL and artifact tools are always available, but this "
+                f"agent has no {missing}: {reason} and custom_tools do not provide them."
+            )
         contract_prompt = get_platform_skills_contract_prompt()
         if contract_prompt:
             system_prompt += "\n\n" + contract_prompt
@@ -457,7 +510,22 @@ def create_default_async_orchestrator_with_subagent(
             platform-skills contract to the system prompt. For agents running inside an
             AWS Transform job; off by default.
             USE WITH CAUTION: this also rewrites the system prompt (the contract is appended to
-            whatever system_prompt you pass).
+            whatever system_prompt you pass). The contract tells the model that the job plan,
+            job status, worklog, HITL and artifact tools are available, so pass an mcp_client
+            that serves them. A warning is logged, and the contract is still appended, when a
+            tool that the contract's rules need is in excluded_mcp_tool_names or no mcp_client
+            is given, unless a tool of the same name is in custom_tools. The tools that the
+            mcp_client itself serves are not checked.
+            The mcp_client is not enough for uploads: the artifact tools take the path of a
+            local file and the base64 SHA-256 digest of its bytes, and no tool of this agent
+            writes a file or computes a digest. The contract makes an upload mandatory for
+            each result the user receives and for each approval summary, so also set
+            enable_code_execution=True (not sandboxed) or pass a tool in custom_tools that
+            does both. This is not checked and gives no warning.
+            With enable_skills also set, a skill in skills_dir replaces the packaged skill of
+            the same name. read_platform_skill_file never reads skills_dir: for a replaced
+            skill it still returns the packaged skill's reference files, so put the reference
+            text of a replacing skill in its SKILL.md.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools

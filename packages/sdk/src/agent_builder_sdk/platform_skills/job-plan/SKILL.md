@@ -21,9 +21,9 @@ and a plan you create once and never touch is a static list that makes a working
 A step id is **not** a bare UUID: it is `<4-digit plan version>-<uuid>`. That prefix matters —
 see "Changing the plan".
 
-`put_job_plan` returns `mappings` from each `stepLabel` to its step id. Save them, and choose
-labels unique across the whole job: the label is your only stable handle for re-deriving ids
-later, and the platform only rejects duplicates within a single request.
+`put_job_plan` returns `mappings`, a list that pairs each `stepLabel` with its step id. Save
+them, and choose labels unique across the whole job: the label is your only stable handle for
+re-deriving ids later, and the platform only rejects duplicates within a single request.
 
 ## Creating the plan
 
@@ -35,7 +35,7 @@ put_job_plan(
     ]},
     mode={"override": {}},
 )
-# returns {"status": ..., "mappings": {"gather-reqs": "0001-<uuid>", ...}}
+# returns {"status": ..., "mappings": [{"stepLabel": "gather-reqs", "stepId": "0001-<uuid>"}, ...]}
 ```
 
 - Use `mode={"override": {}}` for the **first** plan of a run — and only then. Append before any
@@ -46,8 +46,8 @@ put_job_plan(
 - Limits, enforced: `stepLabel`/`stepName` max 100 chars, `description` **max 350**, at most **80
   nodes per call** (sub-steps count).
 - Write 2–6 top-level steps in the user's language. A one-step plan renders as a lone stub card.
-- Verify success from the returned `mappings`, not the status — an empty `nodes` list is accepted
-  as a no-op with zero mappings.
+- Verify success from the returned `mappings`, not the status: find the step id of each
+  `stepLabel` you sent. An empty `nodes` list is rejected — a plan call needs at least one node.
 
 ## Changing the plan mid-job
 
@@ -77,11 +77,15 @@ Each step gets exactly one forward path, and each transition is paired with a wo
 user sees progress:
 
 ```
-begin a step   -> update_job_plan_step(stepId, status="IN_PROGRESS", startTime=<now>)
-                  + create_worklog(plan_step_id=stepId, description="what you're starting")
-finish a step  -> create_worklog(plan_step_id=stepId, description="what you found/did")
-                  + update_job_plan_step(stepId, status="SUCCEEDED"|"FAILED", endTime=<now>)
+begin a step   -> update_job_plan_step(plan_step={"stepId": <step id>, "status": "IN_PROGRESS"})
+                  + create_worklog(plan_step_id=<step id>, description="what you're starting")
+finish a step  -> create_worklog(plan_step_id=<step id>, description="what you found/did")
+                  + update_job_plan_step(plan_step={"stepId": <step id>,
+                                                    "status": "SUCCEEDED"})   # or "FAILED"
 ```
+
+- `startTime` and `endTime` (unix epoch seconds) are optional. Pass one only when a tool gave you
+  the current time; otherwise omit it. Never invent a time.
 
 - `NOT_STARTED` is the platform's initial value — don't set it. `SUCCEEDED` and `FAILED` are
   terminal: stop writing to that step afterward.
@@ -93,8 +97,10 @@ finish a step  -> create_worklog(plan_step_id=stepId, description="what you foun
 ## Blocking on a human
 
 To pause the job for a human **without** a HITL task (for example, a plain-chat question), set
-the owning step to `PENDING_HUMAN_INPUT` and stop. The platform detects that status and, in the
-same write, flips the job to `AWAITING_HUMAN_INPUT` — so do **not** also call `update_job_status`.
+the owning step to `PENDING_HUMAN_INPUT`, then end your turn by asking the question as your final
+message (from a turn a platform event started, which has no reply, put the question in a worklog
+instead — contract rule 11). The platform detects that status and, in the same write, flips the
+job to `AWAITING_HUMAN_INPUT` — so do **not** also call `update_job_status`.
 For a **BLOCKING HITL task**, don't set the step yourself on the way in — `start_hitl_task`
 already moves it to `PENDING_HUMAN_INPUT` (see `hitl-loop`).
 
@@ -111,6 +117,16 @@ the step or job back.
 `status_info`. If the runtime already moved the job to `EXECUTING` before your first turn, stay
 there and get the plan approved through a HITL approval task instead of `PLANNED`.
 
+With `FAILED`, pass `status_info` in exactly this shape — any other key, or a plain string, is
+rejected:
+
+```
+update_job_status(status="FAILED", status_info={
+    "status": "FAILED",                    # required: repeat the status
+    "failureCategory": "CUSTOMER_ERROR",   # or "SERVICE_ERROR" | "EXPECTED_FAILURE"
+    "failureType": "<short reason>"})      # optional, like failureCategory
+```
+
 `CREATED`, `STARTING`, and `ASSESSING` describe the job *before* you are running. The platform
 owns them and you never set one: the product reads them as "the agent hasn't started" and takes
 the chat input away from the user. Gather requirements while the status is `PLANNING`.
@@ -118,7 +134,10 @@ the chat input away from the user. Gather requirements while the status is `PLAN
 
 Two ordering rules: never walk the status backwards (revise the plan while staying in
 `EXECUTING`), and make `COMPLETED`/`FAILED` your **last** platform call — once terminal, every
-plan write is rejected. Close open steps and post final worklogs first.
+plan write is rejected. Close open steps, post final worklogs, and close any open HITL task first.
+Your summary is not a platform call: write it after the status call returns, as your final
+message — unless the turn started from a platform event, which has no reply: put the summary in
+the last worklog, before the terminal status (contract rule 11).
 
 ## Reorienting on an existing job
 
