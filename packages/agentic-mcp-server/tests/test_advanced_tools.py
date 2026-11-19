@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import base64
 import json
+import re
 from unittest import mock
 
 import pytest
@@ -32,10 +33,13 @@ from agent_builder_agentic_mcp.datamodels import (
     CategoryType,
     FileType,
 )
+from agent_builder_agentic_mcp.server import mcp
 from agent_builder_agentic_mcp.server._advanced_tools import (
+    _PLATFORM_CONNECTORS,
     create_autoform_hitl_task,
     create_autotable_hitl_task,
     create_hitl_task_with_json_input,
+    create_platform_connector_hitl_task,
     create_s3_connector_hitl_task,
     download_artifact_to_string,
     retrieve_hitl_output_as_string,
@@ -511,6 +515,99 @@ class TestCreateS3ConnectorHitlTask:
             assert connector["fields"][1]["fieldName"] == "s3BucketKmsKeyArn"
 
             assert result == expected_response
+
+
+class TestCreatePlatformConnectorHitlTask:
+    """Test cases for create_platform_connector_hitl_task function."""
+
+    @pytest.mark.anyio
+    async def test_create_platform_connector_hitl_task_s3(self):
+        """Test successful creation of a platform S3 connector HITL task."""
+        step_id = "test-step-id"
+        expected_response = {"hitl_task_id": "test-hitl-id", "success": True}
+
+        with mock.patch(
+            "agent_builder_agentic_mcp.server._advanced_tools.create_hitl_task_with_json_input"
+        ) as mock_create:
+            mock_create.return_value = expected_response
+
+            result = await create_platform_connector_hitl_task(step_id, "s3")
+
+            mock_create.assert_called_once()
+            call_args = mock_create.call_args
+            assert call_args[1]["ux_component_id"] == "GeneralConnector"
+            assert call_args[1]["step_id"] == step_id
+            assert call_args[1]["blocking_type"] == "NON_BLOCKING"
+            assert call_args[1]["title"] == "Configure Amazon S3 connector"
+
+            json_input = call_args[1]["json_input"]
+            assert list(json_input) == ["properties"]
+            assert list(json_input["properties"]) == ["connector"]
+            connector = json_input["properties"]["connector"]
+            assert connector["connectorType"] == "platform|s3|1"
+            assert connector["maxInstances"] == 1
+            fields = connector["fields"]
+            assert [f["fieldName"] for f in fields] == ["s3BucketArn", "s3BucketKmsKeyArn"]
+            assert [f["fieldName"] for f in fields if f["fieldRequired"]] == ["s3BucketArn"]
+
+            assert result == {**expected_response, "connectorType": "platform|s3|1"}
+
+    @pytest.mark.anyio
+    async def test_create_platform_connector_hitl_task_unknown_connector(self):
+        """Test that an unknown connector key raises KeyError and creates no task."""
+        with mock.patch(
+            "agent_builder_agentic_mcp.server._advanced_tools.create_hitl_task_with_json_input"
+        ) as mock_create:
+            with pytest.raises(KeyError):
+                await create_platform_connector_hitl_task("test-step-id", "github")
+
+            mock_create.assert_not_called()
+
+    @pytest.mark.anyio
+    async def test_create_platform_connector_hitl_task_is_registered(self):
+        """Test that the tool is registered and its description does not hold the type id."""
+        tools = {tool.name: tool for tool in await mcp.list_tools()}
+
+        assert "create_platform_connector_hitl_task" in tools
+        assert "platform|s3|1" not in tools["create_platform_connector_hitl_task"].description
+
+    def test_platform_s3_connector_field_validation(self):
+        """Test that the S3 field patterns take only bucket and key ARNs, of any partition."""
+        fields = _PLATFORM_CONNECTORS["s3"]["fields"]
+        patterns = {f["fieldName"]: f["fieldValidation"] for f in fields}
+
+        for value in (
+            "arn:aws:s3:::my-bucket",
+            "arn:aws-cn:s3:::my-bucket",
+            "arn:aws-us-gov:s3:::my.bucket-1",
+            "arn:aws:s3:::Legacy_Bucket",
+        ):
+            assert re.search(patterns["s3BucketArn"], value), value
+            # The bucket parse of the SDK and FAQ sample must accept what the form accepts.
+            assert re.fullmatch(r"arn:aws[\w-]*:s3:::([^/]+)", value), value
+        for value in (
+            "my-bucket",
+            "s3://my-bucket",
+            "arn:aws:s3:::ab",
+            "arn:aws:s3:::my-bucket/prefix",
+            "arn:aws:s3:us-east-1:123456789012:accesspoint/my-ap",
+            "arn:awsx:s3:::my-bucket",
+            "arn:aws:s3:::...",
+            "arn:aws:s3:::-ab-",
+        ):
+            assert not re.search(patterns["s3BucketArn"], value), value
+        for value in (
+            "arn:aws:kms:us-east-1:123456789012:key/1234abcd-12ab-34cd-56ef-1234567890ab",
+            "arn:aws-cn:kms:cn-north-1:123456789012:key/mrk-1234abcd12ab34cd56ef1234567890ab",
+        ):
+            assert re.search(patterns["s3BucketKmsKeyArn"], value), value
+        # An IAM policy on an alias ARN does not grant access to the key.
+        for value in (
+            "arn:aws:kms:us-east-1:123456789012:alias/my-key",
+            "1234abcd-12ab-34cd-56ef-1234567890ab",
+            "arn:aws:kms:us-east-1:x:y:123456789012:key/abc",
+        ):
+            assert not re.search(patterns["s3BucketKmsKeyArn"], value), value
 
 
 class TestCreateAutoformHitlTask:

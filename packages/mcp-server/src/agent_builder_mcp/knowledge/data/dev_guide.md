@@ -53,6 +53,7 @@
     - [May I use langgraph to build my agent instead of strands agent?](#may-i-use-langgraph-to-build-my-agent-instead-of-strands-agent)
     - [How the orchestrator agent select subagents?](#how-the-orchestrator-agent-select-subagents)
     - [What's the difference between BaseAgent AgentRuntimeServer and the traditional CLI approach?](#whats-the-difference-between-baseagent-agentruntimeserver-and-the-traditional-cli-approach)
+    - [How can my agent read files from a customer's S3 bucket?](#how-can-my-agent-read-files-from-a-customers-s3-bucket)
   - [HITL (Human-in-the-Loop) Task FAQs](#hitl-human-in-the-loop-task-faqs)
     - [What are HITL (Human-in-the-Loop) Tasks?](#what-are-hitl-human-in-the-loop-tasks)
     - [HITL (Human-in-the-Loop) blocking vs non-blocking](#hitl-human-in-the-loop-blocking-vs-non-blocking)
@@ -1719,12 +1720,6 @@ A skill that declares a source uses `extensions.source`:
               "displayName": "S3 Source Code Connector",
               "required": true,
               "description": "S3 bucket for uploading and accessing .NET application source code."
-            },
-            {
-              "connectorTypeId": "platform|github|1",
-              "displayName": "GitHub Repository Connector",
-              "required": false,
-              "description": "GitHub repository for pulling source code and creating PRs."
             }
           ]
         }
@@ -2088,6 +2083,65 @@ AgentRuntimeServer: Designed for Bedrock AgentCore, uses JSON-RPC, single endpoi
 - Base Agent Package: Supports both approaches through different entry points
 
 Both use the same BaseOrchestrator and agent factory pattern, so you can switch between deployment models with minimal code changes.
+
+### How can my agent read files from a customer's S3 bucket?
+
+Ask the user for the platform S3 connector with the MCP tool `create_platform_connector_hitl_task`, then get temporary credentials for it with the SDK class `ConnectorClient`.
+
+```
+1. model  -> create_platform_connector_hitl_task(step_id, "s3")
+2. user   -> creates or selects the connector in the task
+3. admin  -> an administrator of the target AWS account approves it (status PENDING becomes ACTIVE)
+4. user   -> submits the task
+5. model  -> retrieve_hitl_output_as_string(hitl_task_id) returns {"connectorId": "..."} in its payload
+6. agent  -> your code gets temporary credentials for the connector and calls S3
+```
+
+The connector type is `platform|s3|1`. It works for every agent. Its settings are `s3BucketArn` (required) and `s3BucketKmsKeyArn` (optional: the ARN of a KMS key, not of an alias).
+
+In a custom tool, with the connector id that the model passes:
+
+```python
+import logging
+import re
+
+import boto3
+from agent_builder_sdk.agentic_framework.client_factory import create_agentic_api_client
+from agent_builder_sdk.agentic_framework.connector import ConnectorClient
+from agent_builder_sdk.env_var import get_agent_context_from_env
+
+# At DEBUG, botocore logs requests and responses, and they hold secrets. The SDK's
+# configure_logging() sets DEBUG when STAGE is not prod.
+logging.getLogger("botocore").setLevel(logging.INFO)
+ctx = get_agent_context_from_env()
+connector_client = ConnectorClient(workspace_id=ctx.workspace_id, job_id=ctx.job_id,
+                                   agent_instance_id=ctx.agent_instance_id,
+                                   client=create_agentic_api_client())
+info = connector_client.get_connector(connector_id)
+account = info.get("accountConnection", {}).get("awsAccountConnection", {})
+status = account.get("status", "not connected to an AWS account")
+if status != "ACTIVE":
+    raise RuntimeError(f"Connector {connector_id} is {status}: it needs approval first")
+arn = info.get("configuration", {}).get("s3BucketArn", "")
+match = re.fullmatch(r"arn:aws[\w-]*:s3:::([^/]+)", arn)
+if not match:
+    raise ValueError(f"Connector {connector_id}: {arn!r} is not an S3 bucket ARN")
+bucket = match.group(1)
+creds = connector_client.get_temporary_credentials_for_connector(connector_id)
+s3 = boto3.client("s3", aws_access_key_id=creds["accessKey"],
+                  aws_secret_access_key=creds["secretKey"], aws_session_token=creds["accessToken"])
+```
+
+- Check the connector status before you ask for credentials, as the sample does. The web application enables the Submit button of the task only after the approval, but the model can pass any connector id. For a connector that is not ACTIVE, `get_temporary_credentials_for_connector` raises a `ValidationException` that says the connector "is not in active state".
+- A connector belongs to its workspace. Another job in the same workspace can use it with no new task, and the write prefix is then that job's `transform-output/<jobId>/`. A connector of another workspace is not found (`ResourceNotFoundException`).
+- The credentials last about one hour. Call `get_temporary_credentials_for_connector` again after that.
+- The credentials allow reading the bucket and writing under `transform-output/<jobId>/`.
+- Never return key material to the model. Keep the `botocore` logger at INFO or above in an agent that uses these credentials: at DEBUG, botocore logs the session token of each request.
+- Give the model only the fields of the `get_connector` response that the agent needs, for example the status and the bucket ARN, never the whole response: it also holds `accountConnection.awsAccountConnection.connectionToken`.
+- The tool needs the step id of an existing job plan step. A subagent cannot create plan steps (`put_job_plan` is not among its tools by default), so it gets the step id from its orchestrator.
+- The error "Partner '<name>' is not authorized to access this type of connector" means that the connector has a workload-owned type. Ask for the platform connector instead.
+- An agent that is allowlisted for a mainframe or .NET modernization S3 connector type also gets `create_platform_connector_hitl_task`. To keep its type, its system prompt asks for that connector by name (for example "the mainframe modernization S3 connector"), or the agent hides the new tool: pass `excluded_mcp_tool_names={"create_platform_connector_hitl_task"}` to the `BaseOrchestrator`, `AsyncBaseOrchestrator`, `BaseSubagent` or `AsyncBaseSubagent` constructor, or to `create_default_async_orchestrator_with_subagent`. The other `create_default_*` helpers do not take it: the orchestrator helpers raise `TypeError`, and the subagent helpers ignore it.
+- The customer-side setup (who approves the connector, the connector role) is in the [AWS Transform User Guide](https://docs.aws.amazon.com/transform/latest/userguide/transform-user-connectors.html).
 
 ## HITL (Human-in-the-Loop) Task FAQs
 
@@ -3252,13 +3306,18 @@ Request Parameters:
 ```
 - requestContext (RequestContext) - REQUIRED
 - nextToken (String) - Pagination token
-- maxResults (Integer) - Max results per page (1-100)
+- maxResults (Integer) - Max results per page
 ```
 
 Response:
 
 ```
-- connectors (List) - REQUIRED - List of connectors
+- connectorsList (List) - List of connectors
+  - connectorId (String) - REQUIRED - UUID of the connector
+  - connectorName (String)
+  - description (String)
+  - connectorType (String)
+  - targetRegions (List)
 - nextToken (String) - Next pagination token
 ```
 
@@ -3270,10 +3329,26 @@ Request Parameters:
 
 ```
 - requestContext (RequestContext) - REQUIRED
-- connectorId (String) - REQUIRED - Connector identifier
+- connectorId (String) - REQUIRED - UUID of the connector
 ```
 
-Response: - connector (Connector) - REQUIRED - Connector details
+Response:
+
+```
+- connectorName (String) - Connector name
+- description (String) - Connector description
+- connectorType (String) - Connector type
+- configuration (Map<String, String>) - Connector type specific settings, for example the S3 bucket ARN
+- accountConnection (AccountConnection)
+  - awsAccountConnection (AwsAccountConnection)
+    - status (String) - ACTIVE, PENDING or REJECTED
+    - createdDate (Timestamp)
+    - expirationDate (Timestamp)
+    - accountId (String)
+    - roleArn (String)
+    - connectionToken (String)
+- targetRegions (List) - Target regions of the connector
+```
 
 ### GetTemporaryCredentialsForConnector
 
@@ -3283,15 +3358,21 @@ Request Parameters:
 
 ```
 - requestContext (RequestContext) - REQUIRED
-- connectorId (String) - REQUIRED - Connector identifier
-- durationSeconds (Integer) - Credential duration (900-43200 seconds)
+- connectorId (String) - REQUIRED - UUID of the connector
+- targetRegion (String) - Target region
 ```
 
 Response:
 
 ```
-- credentials (TemporaryCredentials) - REQUIRED - SENSITIVE - Temporary credentials
-- expiration (Timestamp) - REQUIRED - Credential expiration time
+- temporaryCredentials (TemporaryCredentials)
+  - awsTemporaryCredentials (AwsTemporaryCredentials)
+    - accessKey (String) - SENSITIVE
+    - secretKey (String) - SENSITIVE
+    - accessToken (String) - SENSITIVE
+    - expirationTime (Timestamp) - Credential expiration time
+- connectorConfiguration (Map<String, String>) - Connector type specific settings
+- targetRegion (String) - Target region
 ```
 
 ### RefreshAuthToken
@@ -4198,6 +4279,8 @@ Output schema
 
 Input schema
 
+The input artifact must hold this object under a top-level `properties` key (`{"properties": {"connector": {...}}}`), as `create_platform_connector_hitl_task` does.
+
 ```json
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
@@ -4211,7 +4294,7 @@ Input schema
       "properties": {
         "connectorType": {
           "type": "string",
-          "description": "The type of connector required (e.g. '.NET', 'AWS', 'VMware'). This is used to identify the connector in the system."
+          "description": "The id of the connector type required, in owner|shortName|version form (for example 'platform|s3|1'). This is used to identify the connector in the system."
         },
         "title": {
           "type": "string",
