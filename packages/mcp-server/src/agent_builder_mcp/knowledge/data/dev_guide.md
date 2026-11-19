@@ -3103,6 +3103,8 @@ Response:
 - s3UrlExpiryTimestamp (Timestamp) - REQUIRED - URL expiration time
 ```
 
+The SDK's `ArtifactStore.download_artifact` streams the body to disk and fails a body over 5 GiB. The limit applies to every artifact, also one in a customer bucket. When the response declares a Content-Length over 5 GiB, the download fails before any of the body is read.
+
 ### CompleteArtifactUpload
 
 Purpose: Complete the artifact upload process
