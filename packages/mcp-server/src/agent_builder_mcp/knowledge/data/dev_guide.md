@@ -84,6 +84,7 @@
     - [Building Orchestrator Agents](#building-orchestrator-agents)
       - [Create Your Orchestrator Class](#create-your-orchestrator-class)
       - [Create Custom Tools (Optional)](#create-custom-tools-optional)
+      - [Add the Web Search Tool (Optional)](#add-the-web-search-tool-optional)
       - [Create Your Entry Point - Old CLI Approach](#create-your-entry-point---old-cli-approach)
       - [Local Testing](#local-testing)
     - [Building Subagents](#building-subagents)
@@ -2610,6 +2611,54 @@ def another_tool(value: int) -> bool:
 ```
 
 See Strands Tools Documentation for more details.
+
+#### Add the Web Search Tool (Optional)
+
+`create_web_search_tool()` returns a `web_search` tool that searches the public web through Amazon Bedrock AgentCore and returns result snippets with their source URLs. The tool is off by default. It exists only when you set one environment variable in the agent container and pass the tool in `custom_tools`:
+
+```python
+from agent_builder_sdk.agent_factory import create_default_orchestrator
+from agent_builder_sdk.orchestrator_strands.tools.web_search import create_web_search_tool
+def agent_factory(mcp_client, storage_dir):
+    web_search = create_web_search_tool()  # None when web search is not configured
+    return create_default_orchestrator(
+        mcp_client=mcp_client,
+        storage_dir=storage_dir,
+        custom_tools=[web_search] if web_search else None,
+    )
+```
+
+Choose one of two paths. When both are configured, the Web Search API path is used.
+
+| | Web Search API | Gateway |
+| --- | --- | --- |
+| Environment variable | `ATX_WEB_SEARCH_REGION`: the Region to call, for example `us-east-1` | `ATX_WEB_SEARCH_GATEWAY_URL`: the `https://` URL of the Gateway MCP endpoint. `ATX_WEB_SEARCH_GATEWAY_REGION`: the Region of the Gateway (default: `AWS_REGION`; when neither is set, `us-east-1` with one warning) |
+| Resource you create | None | An AgentCore Gateway with `AWS_IAM` inbound authorization, MCP version `2025-11-25` in its `supportedVersions`, MCP sessions off (no `sessionConfiguration`), and one `web-search` connector target |
+| Permission on AgentCoreExecutionRole | `bedrock-agentcore:InvokeWebSearch` on `arn:aws:bedrock-agentcore:<region>:aws:tool/web-search.v1` | `bedrock-agentcore:InvokeGateway` on the Gateway ARN |
+| Other permission | None | The Gateway service role needs `bedrock-agentcore:InvokeWebSearch` |
+| botocore in the agent image | 1.43.127 or later | No added requirement |
+
+Policy statement for the Web Search API path (the account field of the ARN is the literal `aws`):
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "bedrock-agentcore:InvokeWebSearch",
+  "Resource": "arn:aws:bedrock-agentcore:us-east-1:aws:tool/web-search.v1"
+}
+```
+
+Things to know:
+
+- Set the variable in your Dockerfile (`ENV ATX_WEB_SEARCH_REGION=us-east-1`) or in the environment variables of the AgentCore runtime. The toolkit's deploy tool sets only `REGION` and `STAGE`.
+- A value that cannot be served logs one warning that names the cause, and `create_web_search_tool()` returns `None`: a Region name that is not valid, a botocore older than 1.43.127 on the API path, a Gateway URL that is not `https://` or that holds a user name or password.
+- Web search is available in a subset of Regions. See [Search the web using Amazon Bedrock AgentCore Web Search](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/web-search-api.html) and [Web Search Tool](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/gateway-target-connector-web-search-tool.html). `ATX_WEB_SEARCH_REGION` can differ from the Region of the agent; search queries then go to that Region.
+- Searches are billed to your AWS account. See the Amazon Bedrock AgentCore pricing page.
+- Limits per search: a query of at most 200 characters, at most 10 results (default 5), at most 4,000 characters of text per result, 60 seconds of wall-clock time.
+- Results are untrusted text. The tool returns them between `<<<BEGIN UNTRUSTED WEB CONTENT>>>` and `<<<END UNTRUSTED WEB CONTENT>>>` with a notice that tells the model to treat them as data and to cite the source URL of every fact. Keep these citations and links in the output you show to users; the service's acceptable use terms require it.
+- The tool description tells the model not to put customer data, file contents or credentials in a query. Add the same rule to your system prompt when your agent handles sensitive data.
+- On the Gateway path the tool sends `tools/list` and `tools/call` with the headers `Accept: application/json` and `MCP-Protocol-Version: 2025-11-25` and reads one JSON reply. A Gateway with response streaming turned on also replies with JSON to a request that accepts only JSON. The tool does not open an MCP session. A Gateway that does not accept that MCP version, or that has MCP sessions turned on, gives an `Error: ...` text for each search.
+- A failed search does not raise. The model gets an `Error: ...` text. A refused call names the permission to check; on the Gateway path an HTTP 403 also names the Region the request was signed for, because a wrong `ATX_WEB_SEARCH_GATEWAY_REGION` gives the same 403 as a missing permission.
 
 ```
 #### Create Your Entry Point - Bedrock AgentCore (Recommended)
