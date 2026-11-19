@@ -99,6 +99,46 @@ if __name__ == "__main__":
 
 **Custom agent initialization**: Extend `AgentRuntimeServer` and override `_get_agent_params` to pass additional arguments to your factory. See `_get_agent_params` in `agent_runtime_server.py` for the defaults.
 
+### 4. Add plugins or leave tools off (optional)
+
+`create_default_async_orchestrator` and `create_default_async_orchestrator_with_subagent` take two optional arguments:
+
+| Argument | Effect |
+|---|---|
+| `plugins` | Strands plugins (`strands.plugins.Plugin` instances) attached to the agent in the given order, after the `AgentSkills` plugin that `enable_skills=True` adds. Anything else raises `TypeError`. |
+| `excluded_tool_names` | A set of names of tools to leave off the agent: the factory's own tools, `custom_tools` and MCP tools. A bare `str` raises `TypeError`. |
+
+```python
+from strands import tool
+from strands.plugins import Plugin
+
+from agent_builder_sdk.agent_factory import create_default_async_orchestrator_with_subagent
+
+
+class ReleaseNotesPlugin(Plugin):
+    name = "release_notes"
+
+    @tool
+    def get_release_marker(self) -> str:
+        """Return the release marker of this agent."""
+        return "2026.1"
+
+
+def agent_factory(mcp_client, storage_dir):
+    return create_default_async_orchestrator_with_subagent(
+        system_prompt="Your custom system prompt here",
+        mcp_client=mcp_client,
+        storage_dir=storage_dir,
+        plugins=[ReleaseNotesPlugin()],
+        excluded_tool_names={"discover_subagents", "send_message_to_subagent"},
+    )
+```
+
+- `excluded_mcp_tool_names` filters MCP tools only. An MCP tool named in either set is left off.
+- Tools that a plugin registers are not filtered by `excluded_tool_names`. The `skills` tool that `enable_skills=True` adds comes from a plugin, so `excluded_tool_names` does not remove it.
+- A plugin tool replaces a factory, custom or MCP tool of the same name without an error. A duplicate name in `custom_tools` raises `ValueError`.
+- Strands rejects two plugins with the same name, so do not pass an `AgentSkills` plugin together with `enable_skills=True`.
+
 ## Building a subagent
 
 ### 1. Create your subagent class

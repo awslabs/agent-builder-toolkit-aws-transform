@@ -4,10 +4,18 @@
 Unit tests for agent factory functions.
 """
 
+import inspect
 import os
+from pathlib import Path
+from typing import Any, Callable
 from unittest import mock
 
 import pytest
+from strands import tool
+from strands.models.model import Model
+from strands.plugins import Plugin
+from strands.tools.mcp import MCPClient
+from strands.vended_plugins.skills import AgentSkills
 
 from agent_builder_sdk.agent_factory import (
     create_default_async_orchestrator,
@@ -899,6 +907,156 @@ class TestOrchestratorOptions:
         assert mock_orchestrator.call_args.kwargs["enable_prompt_caching"] is True
 
 
+class _GreeterPlugin(Plugin):
+    name = "greeter"
+
+    @tool
+    def say_hello(self) -> str:
+        """Say hello."""
+        return "hello"
+
+
+class _MemoryPlugin(Plugin):
+    name = "memory-override"
+
+    @tool
+    def memory(self) -> str:
+        """Carry the name of a factory tool."""
+        return "plugin"
+
+
+def _mcp_client_listing(*names: str) -> MCPClient:
+    def make_tool(name: str) -> Any:
+        @tool(name=name)
+        def listed() -> str:
+            """A tool listed by the MCP client."""
+            return name
+
+        return listed
+
+    client = mock.create_autospec(MCPClient, spec_set=True, instance=True)
+    client._is_session_active.return_value = False
+    client.list_tools_sync.return_value = [make_tool(name) for name in names]
+    return client
+
+
+class TestPluginsAndExcludedToolNames:
+    """Tool names are read from real orchestrators built around a mock model."""
+
+    def test_defaults_keep_the_factory_tool_set(self, mock_model: Model, tmp_path: Path) -> None:
+        plain = create_default_async_orchestrator(model=mock_model, storage_dir=str(tmp_path))
+        with_subagent = create_default_async_orchestrator_with_subagent(
+            system_prompt="p", model=mock_model, storage_dir=str(tmp_path)
+        )
+
+        assert set(plain.tool_names) == {"memory"}
+        assert set(with_subagent.tool_names) == {
+            "memory",
+            "discover_subagents",
+            "send_message_to_subagent",
+        }
+
+    def test_plugin_tools_are_added_and_excluded_factory_tools_are_left_off(
+        self, mock_model: Model, tmp_path: Path
+    ) -> None:
+        agent = create_default_async_orchestrator_with_subagent(
+            system_prompt="p",
+            model=mock_model,
+            storage_dir=str(tmp_path),
+            plugins=[_GreeterPlugin()],
+            excluded_tool_names={"discover_subagents", "send_message_to_subagent"},
+        )
+
+        assert set(agent.tool_names) == {"memory", "say_hello"}
+
+    def test_plugins_given_as_a_one_shot_iterable_are_attached(self, mock_model: Model, tmp_path: Path) -> None:
+        agent = create_default_async_orchestrator(
+            model=mock_model,
+            storage_dir=str(tmp_path),
+            plugins=(plugin for plugin in [_GreeterPlugin()]),
+        )
+
+        assert set(agent.tool_names) == {"memory", "say_hello"}
+
+    def test_excluded_tool_names_do_not_filter_plugin_tools(self, mock_model: Model, tmp_path: Path) -> None:
+        agent = create_default_async_orchestrator(
+            model=mock_model,
+            storage_dir=str(tmp_path),
+            plugins=(_GreeterPlugin(),),
+            excluded_tool_names={"memory", "say_hello"},
+        )
+
+        assert set(agent.tool_names) == {"say_hello"}
+
+    def test_a_plugin_tool_replaces_the_factory_tool_of_the_same_name(self, mock_model: Model, tmp_path: Path) -> None:
+        plugin = _MemoryPlugin()
+
+        agent = create_default_async_orchestrator(model=mock_model, storage_dir=str(tmp_path), plugins=[plugin])
+
+        assert set(agent.tool_names) == {"memory"}
+        assert agent.tool_registry.registry["memory"] in plugin.tools
+
+    def test_two_plugins_with_the_same_name_are_rejected(self, mock_model: Model, tmp_path: Path) -> None:
+        with pytest.raises(ValueError, match="plugin already registered"):
+            create_default_async_orchestrator(
+                model=mock_model, storage_dir=str(tmp_path), plugins=[_GreeterPlugin(), _GreeterPlugin()]
+            )
+
+    def test_an_mcp_tool_named_in_either_exclusion_set_is_left_off(self, mock_model: Model, tmp_path: Path) -> None:
+        agent = create_default_async_orchestrator_with_subagent(
+            system_prompt="p",
+            mcp_client=_mcp_client_listing("mcp_alpha", "mcp_beta", "mcp_gamma"),
+            model=mock_model,
+            storage_dir=str(tmp_path),
+            excluded_tool_names={"mcp_alpha", "memory"},
+            excluded_mcp_tool_names={"mcp_beta", "discover_subagents"},
+        )
+
+        # excluded_mcp_tool_names names a factory tool here and must leave it on the agent.
+        assert set(agent.tool_names) == {"mcp_gamma", "discover_subagents", "send_message_to_subagent"}
+
+    def test_caller_plugins_follow_the_skills_plugin_in_the_given_order(self, tmp_path: Path) -> None:
+        first, second = _GreeterPlugin(), _GreeterPlugin()
+
+        with mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator") as orchestrator_class:
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="p",
+                storage_dir=str(tmp_path),
+                enable_skills=True,
+                skills_dir=str(tmp_path),
+                plugins=[first, second],
+            )
+
+        skills, *rest = orchestrator_class.call_args.kwargs["plugins"]
+        assert isinstance(skills, AgentSkills)
+        assert rest == [first, second]
+
+    @pytest.mark.parametrize("not_a_plugin", [None, object(), _GreeterPlugin])
+    def test_a_non_plugin_is_rejected_before_anything_is_built(self, not_a_plugin: Any, tmp_path: Path) -> None:
+        with pytest.raises(TypeError, match="strands Plugin instances"):
+            create_default_async_orchestrator(storage_dir=str(tmp_path), plugins=[not_a_plugin])
+
+        assert list(tmp_path.iterdir()) == []
+
+    def test_a_bare_string_for_excluded_tool_names_is_rejected_before_anything_is_built(self, tmp_path: Path) -> None:
+        with pytest.raises(TypeError, match="excluded_tool_names must be a set of tool names"):
+            create_default_async_orchestrator_with_subagent(
+                system_prompt="p",
+                storage_dir=str(tmp_path),
+                excluded_tool_names="send_message_to_subagent",  # type: ignore[arg-type]
+            )
+
+        assert list(tmp_path.iterdir()) == []
+
+    @pytest.mark.parametrize(
+        "factory", [create_default_async_orchestrator, create_default_async_orchestrator_with_subagent]
+    )
+    def test_the_new_parameters_follow_the_existing_ones(self, factory: Callable[..., Any]) -> None:
+        params = list(inspect.signature(factory).parameters)
+
+        assert params.index("boto_client_config") < min(params.index("plugins"), params.index("excluded_tool_names"))
+
+
 # The 1.0 positional order of each orchestrator factory. New parameters go after these, so a
 # caller passing arguments by position keeps binding them to the same names.
 _V1_POSITIONAL = {
@@ -924,8 +1082,6 @@ _V1_POSITIONAL = {
 
 @pytest.mark.parametrize("name", sorted(_V1_POSITIONAL))
 def test_factory_keeps_its_positional_parameter_order(name):
-    import inspect
-
     factories = {
         "create_default_orchestrator": create_default_orchestrator,
         "create_default_async_orchestrator": create_default_async_orchestrator,
