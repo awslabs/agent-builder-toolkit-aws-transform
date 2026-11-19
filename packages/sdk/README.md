@@ -182,7 +182,7 @@ The `simple_cli_agent_core.py` entry point exposes the same option as `--concurr
 - `send_message_to_subagent_and_relay` streams the subagent's answer live to the user as the orchestrator's final answer, and ends the turn.
 - `stream_message_to_subagent` returns the subagent's answer (its last model cycle) to the orchestrator without streaming it to the user, like `send_message_to_subagent`.
 
-**History repair**: when a turn is interrupted (timeout, client disconnect, crash), the next history load gives the unanswered message a placeholder reply, so the next turn answers its own prompt. A turn ended by a terminating tool (`stop_event_loop`) stores its `force_stop_response` as the reply.
+**History repair**: when a turn is interrupted (timeout, client disconnect, crash), the next history load gives the unanswered message a placeholder reply, so the next turn answers its own prompt. A tool call left open, by the user's own turn or by a turn that handles a platform notification, gets an error result (`Tool did not complete; the turn was interrupted.`) in the loaded history only; nothing stored changes. A notification turn that is still inside its tool looks the same to a user's turn that runs at the same time, so the model can report that step as failed or call the tool again while the first call is still running. A turn ended by a terminating tool (`stop_event_loop`) stores its `force_stop_response` as the reply.
 
 ## Requirements
 

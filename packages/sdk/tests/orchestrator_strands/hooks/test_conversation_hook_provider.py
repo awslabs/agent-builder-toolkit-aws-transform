@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the ConversationHookProvider class."""
 
+import copy
+from pathlib import Path
+from typing import Any, List, Tuple
 from unittest.mock import Mock, patch
 
 import pytest
@@ -207,3 +210,83 @@ def test_force_stopped_turn_is_stored_with_its_answer(tmp_path):
     assert [m["role"] for m in second_input] == ["user", "assistant", "user", "assistant", "user"]
     assert second_input[3]["content"] == [{"text": "FORCED ANSWER"}]
     assert INTERRUPTED_TURN_TEXT not in str(second_input)
+
+
+def test_a_user_turn_beside_a_running_notification_turn_stores_no_repair_text(
+    tmp_path: Path,
+) -> None:
+    """A user turn that runs while a notification turn is inside a tool sends the model a request
+    with that call answered, and stores none of the repair: the notification turn's own result
+    arrives later and is what every later view holds."""
+    from agent_builder_sdk.orchestrator_strands.conversation.constants import (
+        DEFAULT_SOURCE_ID,
+        MessageSourceType,
+    )
+    from agent_builder_sdk.orchestrator_strands.conversation.file_repository import (
+        FileMultiSourceConversationRepository,
+    )
+    from agent_builder_sdk.orchestrator_strands.conversation.repository import (
+        conversation_source_id,
+        conversation_source_type,
+    )
+    from agent_builder_sdk.utils import INTERRUPTED_TURN_TEXT
+
+    def as_source(source_type: MessageSourceType, source_id: str) -> None:
+        conversation_source_type.set(source_type)
+        conversation_source_id.set(source_id)
+
+    repository = FileMultiSourceConversationRepository(storage_dir=str(tmp_path))
+    notification_agent = Mock(spec=Agent)
+    notification = Message(role="user", content=[ContentBlock(text="HITL task 1 is submitted")])
+    tool_use = ContentBlock(toolUse={"toolUseId": "N1", "name": "preflight", "input": {}})
+    as_source(MessageSourceType.NOTIFICATION, DEFAULT_SOURCE_ID)
+    repository.add_message_for_agent(notification, notification_agent)
+    repository.add_message_for_agent(
+        Message(role="assistant", content=[tool_use]), notification_agent
+    )
+
+    def stored(source_type: MessageSourceType, source_id: str) -> List[Tuple[str, Any]]:
+        # Role and content only: Strands stamps a tracking id into each message it loads.
+        conversation = repository.conversations[source_type.value][source_id]
+        return [(entry.message["role"], entry.message["content"]) for entry in conversation]
+
+    before = copy.deepcopy(stored(MessageSourceType.NOTIFICATION, DEFAULT_SOURCE_ID))
+
+    model = _ScriptedModel([_text_turn("It is still checking.")])
+    agent = Agent(
+        model=model,
+        hooks=[ConversationHookProvider(repository=repository)],
+        callback_handler=None,
+    )
+    as_source(MessageSourceType.USER, "u1")
+    agent("is it working?")
+
+    request = model.seen[0]
+    assert [message["role"] for message in request] == ["user", "assistant"] * 2 + ["user"]
+    assert request[2]["content"][0]["toolResult"]["toolUseId"] == "N1"
+    assert request[3]["content"] == [{"text": INTERRUPTED_TURN_TEXT}]
+    assert stored(MessageSourceType.NOTIFICATION, DEFAULT_SOURCE_ID) == before
+    assert stored(MessageSourceType.USER, "u1") == [
+        ("user", [{"text": "is it working?"}]),
+        ("assistant", [{"text": "It is still checking."}]),
+    ]
+
+    real_result = ContentBlock(
+        toolResult={"toolUseId": "N1", "content": [{"text": "preflight ok"}], "status": "success"}
+    )
+    as_source(MessageSourceType.NOTIFICATION, DEFAULT_SOURCE_ID)
+    repository.add_message_for_agent(
+        Message(role="user", content=[real_result]), notification_agent
+    )
+    repository.add_message_for_agent(
+        Message(role="assistant", content=[ContentBlock(text="verified")]), notification_agent
+    )
+    as_source(MessageSourceType.USER, "u1")
+    view = repository.get_conversation_history_for_agent(agent)
+
+    assert [message["content"] for message in view[2:]] == [
+        [{"text": "HITL task 1 is submitted"}],
+        [tool_use],
+        [real_result],
+        [{"text": "verified"}],
+    ]

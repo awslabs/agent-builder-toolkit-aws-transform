@@ -2,14 +2,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for the FileMultiSourceConversationRepository class."""
 
+import copy
 import os
 import tempfile
-from typing import cast
+from typing import Any, List, Tuple, cast
 from unittest.mock import Mock
 
 import pytest
 from strands.agent import Agent
-from strands.types.content import ContentBlock, Message
+from strands.types.content import ContentBlock, Message, Role
 
 from agent_builder_sdk.orchestrator_strands.conversation.constants import (
     DEFAULT_SOURCE_ID,
@@ -386,3 +387,185 @@ def test_get_conversation_history_leaves_tool_use_unpaired_during_an_interrupt(
 
     assert len(history) == 2
     assert "toolResult" not in str(history)
+
+
+TOOL_REPAIR_TEXT = "Tool did not complete; the turn was interrupted."
+
+
+def _as_source(source_type: MessageSourceType, source_id: str) -> None:
+    conversation_source_type.set(source_type)
+    conversation_source_id.set(source_id)
+
+
+def _text(role: Role, text: str) -> Message:
+    return Message(role=role, content=[ContentBlock(text=text)])
+
+
+def _tool_uses(*tool_use_ids: str) -> Message:
+    return Message(
+        role="assistant",
+        content=[
+            ContentBlock(toolUse={"name": "preflight", "toolUseId": tool_use_id, "input": {}})
+            for tool_use_id in tool_use_ids
+        ],
+    )
+
+
+def _tool_results(*tool_use_ids: str) -> Message:
+    return Message(
+        role="user",
+        content=[
+            ContentBlock(
+                toolResult={
+                    "toolUseId": tool_use_id,
+                    "content": [{"text": "ok"}],
+                    "status": "success",
+                }
+            )
+            for tool_use_id in tool_use_ids
+        ],
+    )
+
+
+def _pairing_errors(messages: List[Message]) -> List[str]:
+    """Bedrock's rule for a request: the toolResult blocks of a message answer exactly the toolUse
+    blocks of the message right before it, so no toolUse may come last."""
+
+    def ids(message: Message, kind: str) -> List[str]:
+        blocks = cast(List[Any], message["content"])
+        return sorted(block[kind]["toolUseId"] for block in blocks if kind in block)
+
+    errors = []
+    open_tool_uses: List[str] = []
+    for index, message in enumerate(messages):
+        if ids(message, "toolResult") != open_tool_uses:
+            errors.append(f"messages.{index} does not answer exactly {open_tool_uses}")
+        open_tool_uses = ids(message, "toolUse")
+    if open_tool_uses:
+        errors.append(f"the last message leaves {open_tool_uses} open")
+    return errors
+
+
+def _tool_result_texts(messages: List[Message]) -> List[Tuple[str, str, str]]:
+    """(toolUseId, status, text) of every toolResult, in order."""
+    return [
+        (result["toolUseId"], result["status"], cast(str, result["content"][0]["text"]))
+        for message in messages
+        for block in message["content"]
+        if (result := block.get("toolResult")) is not None
+    ]
+
+
+def _stored(repository: FileMultiSourceConversationRepository) -> Tuple[bytes, Any]:
+    """What the repository holds: the bytes on disk and a copy of the conversations in memory."""
+    with open(os.path.join(repository.storage_dir, "conversations.json"), "rb") as file:
+        return file.read(), copy.deepcopy(repository.conversations)
+
+
+def _store_notifications_beside_a_user_turn(
+    repository: FileMultiSourceConversationRepository, agent: Agent, *notifications: Message
+) -> None:
+    """userA has had a turn and the notification conversation holds ``notifications``; userA is
+    the source again afterwards."""
+    _as_source(MessageSourceType.USER, "userA")
+    repository.add_message_for_agent(_text("user", "hi"), agent)
+    repository.add_message_for_agent(_text("assistant", "hello"), agent)
+    _as_source(MessageSourceType.NOTIFICATION, DEFAULT_SOURCE_ID)
+    for message in notifications:
+        repository.add_message_for_agent(message, agent)
+    _as_source(MessageSourceType.USER, "userA")
+
+
+def test_user_view_answers_a_notification_tool_use_left_open_at_the_end(
+    repository: FileMultiSourceConversationRepository, mock_agent: Agent
+) -> None:
+    """A notification turn that stopped inside a tool leaves its toolUse last in the notification
+    conversation. Every later user turn still gets a request Bedrock accepts, and nothing stored
+    changes."""
+    _store_notifications_beside_a_user_turn(
+        repository, mock_agent, _text("user", "HITL task 1 is submitted"), _tool_uses("N1")
+    )
+
+    for prompt in ("any news?", "hello?"):
+        before = _stored(repository)
+        history = repository.get_conversation_history_for_agent(mock_agent)
+
+        assert _stored(repository) == before
+        assert _pairing_errors([*history, _text("user", prompt)]) == []
+        assert _tool_result_texts(history) == [("N1", "error", TOOL_REPAIR_TEXT)]
+        assert history[-1] == _text("assistant", INTERRUPTED_TURN_TEXT)
+        repository.add_message_for_agent(_text("user", prompt), mock_agent)
+        repository.add_message_for_agent(_text("assistant", "nothing yet"), mock_agent)
+
+
+def test_user_view_answers_a_notification_tool_use_left_open_before_a_later_notification(
+    repository: FileMultiSourceConversationRepository, mock_agent: Agent
+) -> None:
+    """The open toolUse of an earlier notification turn is answered in place, ahead of the
+    notification turns stored after it."""
+    _store_notifications_beside_a_user_turn(
+        repository,
+        mock_agent,
+        _text("user", "an earlier notification"),
+        _tool_uses("open"),
+        _text("user", "HITL task 1 is submitted"),
+        _tool_uses("N2"),
+        _tool_results("N2"),
+        _text("assistant", "done"),
+    )
+    before = _stored(repository)
+
+    history = repository.get_conversation_history_for_agent(mock_agent)
+
+    assert _stored(repository) == before
+    assert _pairing_errors([*history, _text("user", "any news?")]) == []
+    assert [message["role"] for message in history] == ["user", "assistant"] * 5
+    assert _tool_result_texts(history) == [
+        ("open", "error", TOOL_REPAIR_TEXT),
+        ("N2", "success", "ok"),
+    ]
+    assert history[5] == _text("assistant", INTERRUPTED_TURN_TEXT)
+
+
+@pytest.mark.parametrize("answered", [(), ("B",)], ids=["none answered", "one answered"])
+def test_user_view_answers_every_open_tool_use_of_one_notification_message(
+    repository: FileMultiSourceConversationRepository, mock_agent: Agent, answered: Tuple[str, ...]
+) -> None:
+    """One assistant message can call several tools. Each call without a stored result gets one,
+    in the same message as the results that did arrive."""
+    notifications = [_text("user", "HITL task 1 is submitted"), _tool_uses("A", "B", "C")]
+    if answered:
+        notifications.append(_tool_results(*answered))
+    _store_notifications_beside_a_user_turn(repository, mock_agent, *notifications)
+    before = _stored(repository)
+
+    history = repository.get_conversation_history_for_agent(mock_agent)
+
+    assert _stored(repository) == before
+    assert _pairing_errors([*history, _text("user", "any news?")]) == []
+    assert sorted(_tool_result_texts(history[4:5])) == [
+        ("A", "error", TOOL_REPAIR_TEXT),
+        ("B", "success", "ok") if answered else ("B", "error", TOOL_REPAIR_TEXT),
+        ("C", "error", TOOL_REPAIR_TEXT),
+    ]
+
+
+def test_user_view_leaves_answered_notification_tool_uses_identical(
+    repository: FileMultiSourceConversationRepository, mock_agent: Agent
+) -> None:
+    """A well-formed notification conversation reaches the user's view as the same message
+    objects, with nothing added."""
+    _store_notifications_beside_a_user_turn(
+        repository,
+        mock_agent,
+        _text("user", "HITL task 1 is submitted"),
+        _tool_uses("N1"),
+        _tool_results("N1"),
+        _text("assistant", "done"),
+    )
+    stored = repository.conversations[MessageSourceType.NOTIFICATION.value][DEFAULT_SOURCE_ID]
+
+    history = repository.get_conversation_history_for_agent(mock_agent)
+
+    assert len(history) == 6
+    assert all(actual is original.to_message() for actual, original in zip(history[2:], stored))
