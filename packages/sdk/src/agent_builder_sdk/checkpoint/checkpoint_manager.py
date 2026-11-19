@@ -17,6 +17,10 @@ from agent_builder_sdk.checkpoint.checkpoint_triggers import (
 
 logger = logging.getLogger(__name__)
 
+# Attempts made for one requested checkpoint. Bounded, so a checkpoint that cannot succeed
+# (for example, restore never verified) is not retried on every background tick.
+REQUEST_ATTEMPTS = 3
+
 
 class CheckpointManager:
     """Manages checkpoint operations based on triggers."""
@@ -33,6 +37,25 @@ class CheckpointManager:
         # observe an empty list_checkpoint() and each create_checkpoint(), yielding
         # duplicate checkpoint artifacts.
         self._checkpoint_lock = threading.Lock()
+        # Attempts left for a requested checkpoint. Guarded by its own lock, which is never
+        # held during checkpoint I/O, so a request does not wait behind a running upload.
+        self._requested_attempts = 0
+        self._request_lock = threading.Lock()
+
+    def request_checkpoint(self) -> None:
+        """Make the next ``attempt_checkpoint`` take a checkpoint whatever the trigger says.
+
+        Only records the request: it does no I/O and is safe to call from the event loop or any
+        thread. An attempt that fails is repeated by the following ``attempt_checkpoint`` calls,
+        ``REQUEST_ATTEMPTS`` attempts in all.
+        """
+        with self._request_lock:
+            self._requested_attempts = REQUEST_ATTEMPTS
+
+    def _keep_failed_request(self, requested: int) -> None:
+        """Leave a failed request the attempts it has left; a newer request keeps its own."""
+        with self._request_lock:
+            self._requested_attempts = max(self._requested_attempts, requested - 1)
 
     def _execute_checkpoint(self) -> bool:
         """Execute checkpoint creation/update logic."""
@@ -80,8 +103,12 @@ class CheckpointManager:
         return success
 
     def attempt_checkpoint(self) -> bool:
-        """Attempt to create a checkpoint if trigger conditions are met."""
-        if self.trigger.should_checkpoint():
+        """Attempt to create a checkpoint if trigger conditions are met or one was requested."""
+        # Taken before the attempt: a request made while it runs is for a later state.
+        with self._request_lock:
+            requested, self._requested_attempts = self._requested_attempts, 0
+
+        if requested or self.trigger.should_checkpoint():
             try:
                 success = self._execute_checkpoint()
 
@@ -92,11 +119,13 @@ class CheckpointManager:
                     logger.info("Checkpoint completed successfully")
                 else:
                     logger.info("Checkpoint attempt completed but failed")
+                    self._keep_failed_request(requested)
 
                 return success
 
             except Exception:
                 logger.warning("Checkpointing error:", exc_info=True)
+                self._keep_failed_request(requested)
                 return False
 
         return False

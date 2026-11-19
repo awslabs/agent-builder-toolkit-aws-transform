@@ -925,14 +925,14 @@
     "module": "agent_builder_sdk.checkpoint.checkpoint_manager",
     "docstring": "Manages checkpoint operations based on triggers.",
     "signature": "CheckpointManager(checkpoint_repository: CheckpointRepository, trigger: CheckpointTrigger)",
-    "description": "Parameters:\n  checkpoint_repository: CheckpointRepository (required)\n  trigger: CheckpointTrigger (required)\n\nMethods:\n  attempt_checkpoint() -> bool\n  force_checkpoint() -> bool\n  restore_checkpoint(artifact_id: str) -> bool"
+    "description": "Parameters:\n  checkpoint_repository: CheckpointRepository (required)\n  trigger: CheckpointTrigger (required)\n\nMethods:\n  request_checkpoint() -> None\n  attempt_checkpoint() -> bool\n  force_checkpoint() -> bool\n  restore_checkpoint(artifact_id: str) -> bool"
   },
   {
     "name": "CheckpointManager.attempt_checkpoint",
     "kind": "method",
     "file": "agent_builder_sdk/checkpoint/checkpoint_manager.py",
     "module": "agent_builder_sdk.checkpoint.checkpoint_manager",
-    "docstring": "Attempt to create a checkpoint if trigger conditions are met.",
+    "docstring": "Attempt to create a checkpoint if trigger conditions are met or one was requested.",
     "signature": "attempt_checkpoint() -> bool"
   },
   {
@@ -942,6 +942,14 @@
     "module": "agent_builder_sdk.checkpoint.checkpoint_manager",
     "docstring": "Force a checkpoint creation bypassing trigger conditions.",
     "signature": "force_checkpoint() -> bool"
+  },
+  {
+    "name": "CheckpointManager.request_checkpoint",
+    "kind": "method",
+    "file": "agent_builder_sdk/checkpoint/checkpoint_manager.py",
+    "module": "agent_builder_sdk.checkpoint.checkpoint_manager",
+    "docstring": "Make the next ``attempt_checkpoint`` take a checkpoint whatever the trigger says.\n\nOnly records the request: it does no I/O and is safe to call from the event loop or any\nthread. An attempt that fails is repeated by the following ``attempt_checkpoint`` calls,\n``REQUEST_ATTEMPTS`` attempts in all.",
+    "signature": "request_checkpoint() -> None"
   },
   {
     "name": "CheckpointManager.restore_checkpoint",
@@ -1048,7 +1056,7 @@
     "module": "agent_builder_sdk.checkpoint.checkpoint_service",
     "docstring": "Manages checkpoint lifecycle for agent runtime.",
     "signature": "CheckpointService(storage_dir: str, strategy: Optional[CheckpointStrategy] = None, interval: int = 30)",
-    "description": "Parameters:\n  storage_dir: str (required) - Base directory for checkpoint storage\n  strategy: Optional[CheckpointStrategy] (default=None) - Checkpoint strategy enum (optional)\n  interval: int (default=30) - Checkpoint interval in turns or minutes\n\nMethods:\n  initialize(context: AgentRuntimeContext) -> None\n  create_callback() -> Optional[Callable]\n  async start_background_checkpointing() -> None\n  async shutdown() -> None"
+    "description": "Parameters:\n  storage_dir: str (required) - Base directory for checkpoint storage\n  strategy: Optional[CheckpointStrategy] (default=None) - Checkpoint strategy enum (optional)\n  interval: int (default=30) - Checkpoint interval in turns or minutes\n\nMethods:\n  initialize(context: AgentRuntimeContext) -> None\n  request_checkpoint() -> None\n  create_callback() -> Optional[Callable]\n  async start_background_checkpointing() -> None\n  async shutdown() -> None"
   },
   {
     "name": "CheckpointService.create_callback",
@@ -1065,6 +1073,14 @@
     "module": "agent_builder_sdk.checkpoint.checkpoint_service",
     "docstring": "Initialize checkpoint manager and restore if available.",
     "signature": "initialize(context: AgentRuntimeContext) -> None"
+  },
+  {
+    "name": "CheckpointService.request_checkpoint",
+    "kind": "method",
+    "file": "agent_builder_sdk/checkpoint/checkpoint_service.py",
+    "module": "agent_builder_sdk.checkpoint.checkpoint_service",
+    "docstring": "Ask for a checkpoint now instead of at the strategy's next trigger.\n\nThe background task takes it on its next pass (it polls every 10 seconds) on a worker\nthread; this call does no I/O and is safe on the event loop. A failed attempt is retried\non the following passes, three attempts in all. Does nothing when checkpointing is off:\nno strategy, before ``initialize`` or after ``shutdown``.",
+    "signature": "request_checkpoint() -> None"
   },
   {
     "name": "CheckpointService.shutdown",
@@ -3223,7 +3239,7 @@
     "module": "agent_builder_sdk.orchestrator_strands.conversation.file_repository",
     "docstring": "File-based implementation of the multi-source conversation repository.\n\nStores conversations in a JSON file on disk. If no storage directory is provided,\na default directory in the system's temporary directory is used.",
     "signature": "FileMultiSourceConversationRepository(storage_dir: Optional[str] = None)",
-    "description": "Extends: ConversationRepository\n\nParameters:\n  storage_dir: Optional[str] (default=None) - Directory to store conversation history. If None, a default directory in the system's temporary directory is used.\n\nMethods:\n  add_message_for_agent(message: Message, agent: Agent) -> None\n  get_conversation_history_for_agent(agent: Agent) -> List[Message]\n  save() -> None\n  load() -> None"
+    "description": "Extends: ConversationRepository\n\nParameters:\n  storage_dir: Optional[str] (default=None) - Directory to store conversation history. If None, a default directory in the system's temporary directory is used.\n\nMethods:\n  add_message_for_agent(message: Message, agent: Agent) -> None\n  get_conversation_history_for_agent(agent: Agent) -> List[Message]\n  fold_history_for_agent(folded: List[Message], replacement: List[Message], agent: Agent) -> bool\n  save() -> None\n  load() -> None"
   },
   {
     "name": "FileMultiSourceConversationRepository.add_message_for_agent",
@@ -3232,6 +3248,14 @@
     "module": "agent_builder_sdk.orchestrator_strands.conversation.file_repository",
     "docstring": "Add a message to the appropriate conversation based on agent state.\n\nArgs:\n    message: The message to add\n    agent: The agent whose state determines the message context",
     "signature": "add_message_for_agent(message: Message, agent: Agent) -> None"
+  },
+  {
+    "name": "FileMultiSourceConversationRepository.fold_history_for_agent",
+    "kind": "method",
+    "file": "agent_builder_sdk/orchestrator_strands/conversation/file_repository.py",
+    "module": "agent_builder_sdk.orchestrator_strands.conversation.file_repository",
+    "docstring": "Replace the oldest stored messages of the agent's source with ``replacement``.\n\nA stored message is folded when it is one of the ``folded`` objects, when it has the\n``tracking_id`` of one, or when its first content block is the first content block of one\nthat is not a stored object itself (the copy the load repair makes of a tool result\nanswered in part). Stored messages that only share a block object are kept. Messages in\n``folded`` that the source does not store (notifications in a user's view, placeholders\nthe load repair inserted) are ignored. On a Strands release whose ``Message`` has no\n``tracking_id``, stored messages get no id, so a deep copy of a message is not matched.\n\n``replacement`` becomes the start of the stored history, with the timestamp of the oldest\nfolded message. Every entry stored ahead of that message is removed with it, so pass in\n``replacement`` anything older that must stay. Entries behind it that are not folded keep\ntheir order, which includes turns appended after the view was read.\n\nThe file is rewritten atomically, and a failed write restores the history in memory.\nThe NOTIFICATION source is never folded: every user's view shares its history.\n\nArgs:\n    folded: The oldest messages of a view from ``get_conversation_history_for_agent``\n    replacement: The messages to store in their place; may be empty\n    agent: The agent whose state determines the conversation\n\nReturns:\n    True when the replacement is stored. False, with the stored history unchanged, when\n    no stored message is folded, the source is NOTIFICATION, or the write failed.",
+    "signature": "fold_history_for_agent(folded: List[Message], replacement: List[Message], agent: Agent) -> bool"
   },
   {
     "name": "FileMultiSourceConversationRepository.get_conversation_history_for_agent",
@@ -3332,7 +3356,7 @@
     "module": "agent_builder_sdk.orchestrator_strands.conversation.repository",
     "docstring": "Repository interface for managing multi-source conversations.\n\nProvides storage and retrieval of conversation histories for different\nmessage sources, with support for user-specific, task-specific, and\nnotification messages.",
     "signature": "ConversationRepository()",
-    "description": "Extends: ABC\n\nMethods:\n  add_message_for_agent(message: Message, agent: Agent) -> None\n  get_conversation_history_for_agent(agent: Agent) -> List[Message]\n  save() -> None\n  load() -> None"
+    "description": "Extends: ABC\n\nMethods:\n  add_message_for_agent(message: Message, agent: Agent) -> None\n  get_conversation_history_for_agent(agent: Agent) -> List[Message]\n  fold_history_for_agent(folded: List[Message], replacement: List[Message], agent: Agent) -> bool\n  save() -> None\n  load() -> None"
   },
   {
     "name": "ConversationRepository.add_message_for_agent",
@@ -3341,6 +3365,14 @@
     "module": "agent_builder_sdk.orchestrator_strands.conversation.repository",
     "docstring": "Store a message in the appropriate conversation context.\n\nArgs:\n    message: The message to store\n    agent: The agent providing the conversation context",
     "signature": "add_message_for_agent(message: Message, agent: Agent) -> None"
+  },
+  {
+    "name": "ConversationRepository.fold_history_for_agent",
+    "kind": "method",
+    "file": "agent_builder_sdk/orchestrator_strands/conversation/repository.py",
+    "module": "agent_builder_sdk.orchestrator_strands.conversation.repository",
+    "docstring": "Replace the oldest stored messages of the agent's context with ``replacement``.\n\nFor a conversation manager that summarizes or trims: history is read from the repository\nagain at the start of each turn, so a reduction that is not stored here is lost then.\n\nArgs:\n    folded: The oldest messages of the view ``get_conversation_history_for_agent``\n        returned, which the caller reduced.\n    replacement: What takes their place at the start of the stored history, for example\n        a summary. May be empty to store a trim.\n    agent: The agent providing the conversation context\n\nReturns:\n    True when the stored history was replaced, False when it is unchanged.\n\nRaises:\n    NotImplementedError: The repository does not store a folded history (the default).",
+    "signature": "fold_history_for_agent(folded: List[Message], replacement: List[Message], agent: Agent) -> bool"
   },
   {
     "name": "ConversationRepository.get_conversation_history_for_agent",

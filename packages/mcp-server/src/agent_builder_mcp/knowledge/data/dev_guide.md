@@ -98,6 +98,7 @@
         - [When to Use Each Strategy](#when-to-use-each-strategy)
         - [Components](#components)
         - [Usage](#usage)
+      - [Storing a Reduced Conversation History](#storing-a-reduced-conversation-history)
     - [Configuration](#configuration)
       - [Required Environment Variables](#required-environment-variables)
       - [Optional Environment Variables](#optional-environment-variables)
@@ -2862,6 +2863,43 @@ server = AgentRuntimeServer(
         storage_dir="/tmp/my_agent"
 )
 ```
+
+#### Storing a Reduced Conversation History
+
+The SDK does not summarize or trim history itself. If you give your orchestrator a Strands conversation manager that does, store its result: history is read from the conversation repository at the start of every turn, so a reduction that only changes `agent.messages` is gone on the next turn.
+
+```
+turn N     agent.messages : m0 m1 m2 m3 m4 m5       the manager folds m0..m3 into S
+           repository     : m0 m1 m2 m3 m4 m5  -- fold_history_for_agent -->  S m4 m5
+turn N+1   agent.messages : S m4 m5 + new prompt    read from the repository
+```
+
+| Call | Effect |
+|---|---|
+| `repository.fold_history_for_agent(folded, replacement, agent)` | Replaces the stored `folded` messages with `replacement` and returns `True`. The file is rewritten atomically. Messages added to the store while you summarize are kept. |
+| `server.checkpoint_service.request_checkpoint()` | Takes a checkpoint on the next background pass (about 10 seconds) instead of at the next trigger, so a restore keeps the reduction. A failed attempt is retried, three attempts in all. Does nothing when checkpointing is off. |
+
+Inside your manager, where `split` is the number of oldest messages you reduce and `summary` is the user-role message you built from them:
+
+```python
+folded = agent.messages[:split]
+replacement = [summary, {"role": "assistant", "content": [{"text": "Understood."}]}]
+agent.messages[:] = replacement + agent.messages[split:]
+if repository.fold_history_for_agent(folded, replacement, agent):
+    server.checkpoint_service.request_checkpoint()
+```
+
+Use the same `FileMultiSourceConversationRepository` instance for the manager and for `ConversationHookProvider(repository=...)`. Pass the manager as `conversation_manager=` when you construct your orchestrator class; `create_default_orchestrator` does not take it.
+
+| Rule | Reason |
+|---|---|
+| `folded` holds the oldest messages of `agent.messages`, as the objects you read (a copy must keep its `tracking_id`). | `replacement` becomes the start of the stored history. Anything stored before the first folded message is removed with it, so put in `replacement` what must stay. |
+| End `replacement` with an assistant message when the next kept message is the user's. | Two user messages in a row are read as an interrupted turn, and the next load puts a placeholder reply between them. |
+| Call it from the turn that reduces (`reduce_context` or `apply_management`). | The conversation to fold is the one of the running turn. |
+| Check the return value. | `False` means the stored history is unchanged: no folded message is stored, the write failed, or the turn is a system notification (that history is shared by every user and is never folded). |
+| In a user's turn, leave system notifications out of the summary, or accept that the model reads them twice. They are the `.message` objects in `repository.conversations[MessageSourceType.NOTIFICATION.value][DEFAULT_SOURCE_ID]` (names from `agent_builder_sdk.orchestrator_strands.conversation.constants`). | A user's view holds the whole notification history after the user's own, and it is not stored for that user. The fold does not remove those messages, every later view of the user holds them again, and the view never gets smaller than the notification history. |
+| On a Strands release whose `Message` type has no `tracking_id` key, fold only the message objects you read. | There the SDK adds no id to messages (that release would send the key to the model), so a deep copy of a message is not matched and stays in the store. |
+| A custom `ConversationRepository` must override `fold_history_for_agent`. | The default raises `NotImplementedError`. |
 
 ### Configuration
 

@@ -76,6 +76,19 @@ class CheckpointService:
         except Exception:
             logger.warning("Failed to initialize checkpointing:", exc_info=True)
 
+    def request_checkpoint(self) -> None:
+        """Ask for a checkpoint now instead of at the strategy's next trigger.
+
+        The background task takes it on its next pass (it polls every 10 seconds) on a worker
+        thread; this call does no I/O and is safe on the event loop. A failed attempt is retried
+        on the following passes, three attempts in all. Does nothing when checkpointing is off:
+        no strategy, before ``initialize`` or after ``shutdown``.
+        """
+        if self.manager is None:
+            logger.info("Checkpoint requested while checkpointing is off; nothing to take")
+            return
+        self.manager.request_checkpoint()
+
     def create_callback(self) -> Optional[Callable]:
         """Create checkpoint callback for conversation-based checkpointing."""
         if not self.manager or not isinstance(self.manager.trigger, ConversationTurnTrigger):
