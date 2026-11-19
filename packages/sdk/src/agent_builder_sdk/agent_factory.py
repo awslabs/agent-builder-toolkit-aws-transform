@@ -34,6 +34,9 @@ from agent_builder_sdk.orchestrator_strands.hooks.conversation_hook_provider imp
 from agent_builder_sdk.orchestrator_strands.hooks.memory_hook_provider import (
     MemoryHookProvider,
 )
+from agent_builder_sdk.orchestrator_strands.hooks.transient_retry_strategy import (
+    TransientRetryStrategy,
+)
 from agent_builder_sdk.orchestrator_strands.tools.memory_tool import MemoryTool
 from agent_builder_sdk.orchestrator_strands.tools.send_message_tools import SendMessageTools
 from agent_builder_sdk.orchestrator_strands.tools.subagent_registry_tools import (
@@ -70,6 +73,7 @@ def _create_default_orchestrator(
     locale: Optional[str] = None,
     conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
     memory_manager: Optional[MemoryManager] = None,
+    enable_transient_retry: bool = True,
 ) -> OrchestratorT:
     logger.info("Creating default orchestrator with full feature set")
 
@@ -144,6 +148,11 @@ def _create_default_orchestrator(
         guardrail_prompt = get_base_guardrail_prompt()
         system_prompt += "\n" + guardrail_prompt
 
+    # retry_strategy=None turns Strands' retries off; leave it out to keep Strands' default.
+    retry_kwargs: dict[str, Any] = (
+        {"retry_strategy": TransientRetryStrategy()} if enable_transient_retry else {}
+    )
+
     # Create orchestrator with explicit hooks
     orchestrator = agent_class(
         system_prompt=system_prompt,
@@ -160,6 +169,7 @@ def _create_default_orchestrator(
         plugins=[skills_plugin] if skills_plugin else None,
         locale=locale,
         enable_prompt_caching=enable_prompt_caching,
+        **retry_kwargs,
     )
 
     logger.info("Default orchestrator created successfully with memory and conversation support")
@@ -180,6 +190,7 @@ def create_default_orchestrator(
     conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
     memory_manager: Optional[MemoryManager] = None,
     boto_client_config: Optional[BotocoreConfig] = None,
+    enable_transient_retry: bool = True,
 ) -> BaseOrchestrator:
     """
     Create a BaseOrchestrator instance with full memory and conversation support.
@@ -201,6 +212,10 @@ def create_default_orchestrator(
         model_id: Optional model ID for Bedrock inference
         model: Optional Strands Model instance or model ID string (takes precedence over model_id)
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        enable_transient_retry: Retry transient model failures (read timeouts, dropped
+            connections, Bedrock 5xx) and end a user turn that still fails with a note and a
+            Continue chip, through TransientRetryStrategy. On by default; False keeps Strands'
+            default retry, which retries throttling only.
 
     Returns:
         Configured BaseOrchestrator instance with memory, hooks, and tools
@@ -224,6 +239,7 @@ def create_default_orchestrator(
         locale=locale,
         conversation_repository=conversation_repository,
         memory_manager=memory_manager,
+        enable_transient_retry=enable_transient_retry,
     )
 
 
@@ -240,6 +256,7 @@ def create_default_async_orchestrator(
     conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
     memory_manager: Optional[MemoryManager] = None,
     boto_client_config: Optional[BotocoreConfig] = None,
+    enable_transient_retry: bool = True,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support.
 
@@ -257,6 +274,10 @@ def create_default_async_orchestrator(
         model_id: Optional model ID for Bedrock inference
         model: Optional Strands Model instance or model ID string (takes precedence over model_id)
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        enable_transient_retry: Retry transient model failures (read timeouts, dropped
+            connections, Bedrock 5xx) and end a user turn that still fails with a note and a
+            Continue chip, through TransientRetryStrategy. On by default; False keeps Strands'
+            default retry, which retries throttling only.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
@@ -279,6 +300,7 @@ def create_default_async_orchestrator(
         locale=locale,
         conversation_repository=conversation_repository,
         memory_manager=memory_manager,
+        enable_transient_retry=enable_transient_retry,
     )
 
 
@@ -295,6 +317,7 @@ def create_default_orchestrator_with_subagent(
     conversation_repository: Optional[FileMultiSourceConversationRepository] = None,
     memory_manager: Optional[MemoryManager] = None,
     boto_client_config: Optional[BotocoreConfig] = None,
+    enable_transient_retry: bool = True,
 ) -> BaseOrchestrator:
     """Create a BaseOrchestrator instance with full memory and conversation support and subagent tools.
 
@@ -316,6 +339,10 @@ def create_default_orchestrator_with_subagent(
         model_id: Optional model ID for Bedrock inference
         model: Optional Strands Model instance or model ID string (takes precedence over model_id)
         metrics_config: Optional MetricsConfig for CloudWatch metrics (default: disabled)
+        enable_transient_retry: Retry transient model failures (read timeouts, dropped
+            connections, Bedrock 5xx) and end a user turn that still fails with a note and a
+            Continue chip, through TransientRetryStrategy. On by default; False keeps Strands'
+            default retry, which retries throttling only.
 
     Returns:
         Configured BaseOrchestrator instance with memory, hooks, and tools
@@ -339,6 +366,7 @@ def create_default_orchestrator_with_subagent(
         locale=locale,
         conversation_repository=conversation_repository,
         memory_manager=memory_manager,
+        enable_transient_retry=enable_transient_retry,
     )
 
 
@@ -362,6 +390,7 @@ def create_default_async_orchestrator_with_subagent(
     enable_blank_reply_continuation: bool = False,
     enable_prompt_caching: bool = False,
     boto_client_config: Optional[BotocoreConfig] = None,
+    enable_transient_retry: bool = True,
 ) -> AsyncBaseOrchestrator:
     """Create a AsyncBaseOrchestrator instance with full memory and conversation support and subagent tools.
 
@@ -397,6 +426,10 @@ def create_default_async_orchestrator_with_subagent(
             empty right after tool results (see BlankReplyHookProvider).
         enable_prompt_caching: Turn on Bedrock prompt caching for the orchestrator's model (see
             AsyncBaseOrchestrator). Off by default.
+        enable_transient_retry: Retry transient model failures (read timeouts, dropped
+            connections, Bedrock 5xx) and end a user turn that still fails with a note and a
+            Continue chip, through TransientRetryStrategy. On by default; False keeps Strands'
+            default retry, which retries throttling only.
 
     Returns:
         Configured AsyncBaseOrchestrator instance with memory, hooks, and tools
@@ -436,6 +469,7 @@ def create_default_async_orchestrator_with_subagent(
         locale=locale,
         conversation_repository=conversation_repository,
         memory_manager=memory_manager,
+        enable_transient_retry=enable_transient_retry,
     )
 
 

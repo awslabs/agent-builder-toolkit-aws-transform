@@ -20,6 +20,9 @@ from agent_builder_sdk.agent_factory import (
 from agent_builder_sdk.orchestrator_strands.hooks.blank_reply_hook_provider import (
     BlankReplyHookProvider,
 )
+from agent_builder_sdk.orchestrator_strands.hooks.transient_retry_strategy import (
+    TransientRetryStrategy,
+)
 
 
 class TestAgentFactory:
@@ -77,6 +80,7 @@ class TestAgentFactory:
         assert call_kwargs["system_prompt"] == "test prompt"
         assert call_kwargs["mcp_clients"] is None
         assert call_kwargs["region_name"] == os.getenv("AWS_REGION") or "us-east-1"
+        assert isinstance(call_kwargs["retry_strategy"], TransientRetryStrategy)
 
     @mock.patch("agent_builder_sdk.agent_factory.BaseOrchestrator")
     @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
@@ -886,6 +890,32 @@ class TestOrchestratorOptions:
     @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
     @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
     @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
+    def test_transient_retry_is_on_by_default_and_can_be_turned_off(self, *mocks: mock.Mock) -> None:
+        """With enable_transient_retry=False no retry_strategy is passed, so the orchestrator keeps
+        Strands' default retry."""
+        mock_orchestrator = mocks[-1]
+        mock_orchestrator.return_value = mock.Mock()
+
+        create_default_async_orchestrator_with_subagent(system_prompt="p")
+        assert isinstance(
+            mock_orchestrator.call_args.kwargs["retry_strategy"], TransientRetryStrategy
+        )
+
+        create_default_async_orchestrator_with_subagent(
+            system_prompt="p", enable_transient_retry=False
+        )
+        assert "retry_strategy" not in mock_orchestrator.call_args.kwargs
+
+    @mock.patch("agent_builder_sdk.agent_factory.AsyncBaseOrchestrator")
+    @mock.patch("agent_builder_sdk.agent_factory.FileSystemRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.EpisodicMemory")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryManager")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryTool")
+    @mock.patch("agent_builder_sdk.agent_factory.FileMultiSourceConversationRepository")
+    @mock.patch("agent_builder_sdk.agent_factory.ConversationHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.MemoryHookProvider")
+    @mock.patch("agent_builder_sdk.agent_factory.SubagentRegistryTools")
+    @mock.patch("agent_builder_sdk.agent_factory.SendMessageTools")
     def test_prompt_caching_is_forwarded_and_off_by_default(self, *mocks):
         mock_orchestrator = mocks[-1]
         mock_orchestrator.return_value = mock.Mock()
@@ -932,5 +962,8 @@ def test_factory_keeps_its_positional_parameter_order(name):
         "create_default_orchestrator_with_subagent": create_default_orchestrator_with_subagent,
         "create_default_async_orchestrator_with_subagent": create_default_async_orchestrator_with_subagent,
     }
-    params = list(inspect.signature(factories[name]).parameters)
+    parameters = inspect.signature(factories[name]).parameters
+    params = list(parameters)
     assert params[: len(_V1_POSITIONAL[name])] == _V1_POSITIONAL[name]
+    assert params[-2:] == ["boto_client_config", "enable_transient_retry"]
+    assert parameters["enable_transient_retry"].default is True

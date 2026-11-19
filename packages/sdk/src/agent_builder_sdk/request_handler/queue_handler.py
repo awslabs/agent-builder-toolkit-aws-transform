@@ -10,11 +10,18 @@ a queue and store responses for later retrieval.
 
 import asyncio
 import logging
-from typing import Any, Awaitable, Callable, Dict, Optional
+import time
+from contextvars import Token
+from datetime import datetime
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from strands.agent import AgentResult
 from structlog.contextvars import bound_contextvars
 
+from ..constants import (
+    DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS,
+    DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS,
+)
 from ..custom_types.orchestrator_agent_types import (
     A2AContext,
     ConversationContext,
@@ -22,7 +29,18 @@ from ..custom_types.orchestrator_agent_types import (
 )
 from ..interfaces import AnyBaseAgent
 from ..message_queue import QueueRequest, QueueResponse, RequestQueue, RequestStatus, ResponseStore
-from ..utils import describe_agent_result, extract_text_from_strands_agent_response
+from ..orchestrator_strands.conversation.constants import MessageSourceType, classify_source
+from ..orchestrator_strands.conversation.repository import (
+    TurnErrorNote,
+    turn_deadline,
+    turn_error_note,
+)
+from ..util.suggestions_manager import clear_suggestions
+from ..utils import (
+    A2A_CHAT_SUGGESTIONS_EXT,
+    describe_agent_result,
+    extract_text_from_strands_agent_response,
+)
 from .context import RequestContext
 from .interface import RequestHandler
 
@@ -39,16 +57,31 @@ class QueueRequestHandler(RequestHandler):
     3. Store responses in the response store
     """
 
-    def __init__(self, request_queue: RequestQueue, response_store: ResponseStore):
+    def __init__(
+        self,
+        request_queue: RequestQueue,
+        response_store: ResponseStore,
+        timeout: float = DEFAULT_SEND_MESSAGE_TIMEOUT_SECONDS,
+        delayed_timeout: float = DEFAULT_SEND_MESSAGE_DELAYED_TIMEOUT_SECONDS,
+    ):
         """
         Initialize the queue message processor.
 
         Args:
             request_queue: QueueRequest queue to receive messages from
             response_store: Response store to save processed results
+            timeout: Seconds the server waits for a reply before it acknowledges the request
+            delayed_timeout: Seconds after that acknowledgement during which the server still
+                delivers the reply. A user turn runs with ``turn_deadline`` set ``delayed_timeout``
+                seconds after the request's arrival (``timeout`` when the request has no sender
+                to deliver a late reply to), so hooks can skip work that would end after it. The
+                deadline leaves out ``timeout`` because an extension handler can acknowledge the
+                request at once, which starts the delayed wait at arrival.
         """
         self.request_queue = request_queue
         self.response_store = response_store
+        self.timeout = timeout
+        self.delayed_timeout = delayed_timeout
         self._current_request: Optional[QueueRequest] = None
 
     async def receive_request(self) -> Optional[Dict[str, Any]]:
@@ -94,13 +127,20 @@ class QueueRequestHandler(RequestHandler):
             logger.error(f"Error receiving request from queue: {e}")
             return None
 
-    async def store_response(self, message: str, recipient_id: Optional[str] = None) -> bool:
+    async def store_response(
+        self,
+        message: str,
+        recipient_id: Optional[str] = None,
+        suggestions: Optional[List[str]] = None,
+    ) -> bool:
         """
         Store response for the current request.
 
         Args:
             message: The response message content
             recipient_id: Not used in queue processor (responses are stored by request ID)
+            suggestions: Chat suggestion chips carried on this response only, so a reply that
+                nobody reads leaves no chip behind for the next one
 
         Returns:
             True if response was stored successfully, False otherwise
@@ -117,6 +157,8 @@ class QueueRequestHandler(RequestHandler):
                 task_id=self._current_request.context.get("task_id"),
                 message=message,
                 status=RequestStatus.COMPLETED,
+                metadata={A2A_CHAT_SUGGESTIONS_EXT: list(suggestions)} if suggestions else {},
+                extensions=[A2A_CHAT_SUGGESTIONS_EXT] if suggestions else [],
             )
 
             # Store response
@@ -196,6 +238,13 @@ class QueueRequestHandler(RequestHandler):
             logger.error(f"Error handling request error: {e}")
             return False
 
+    def _reply_deadline(self, created_at: Optional[str], has_sender: bool) -> float:
+        """time.monotonic() value at which the reply window of a request that arrived at
+        ``created_at`` (an ISO 8601 time with offset; None for now) ends."""
+        arrival = datetime.fromisoformat(created_at).timestamp() if created_at else time.time()
+        window = self.delayed_timeout if has_sender else self.timeout
+        return time.monotonic() + (arrival + window - time.time())
+
     async def start_processing(
         self,
         get_agent_func: Callable[[], Awaitable[AnyBaseAgent[ProcessMessageRequest, AgentResult]]],
@@ -204,6 +253,8 @@ class QueueRequestHandler(RequestHandler):
         """Start processing messages from the queue."""
         logger.info("Starting queue message processing...")
         log_context = {}
+        deadline_token: Optional[Token[Optional[float]]] = None
+        note_token: Optional[Token[Optional[TurnErrorNote]]] = None
 
         try:
             while True:
@@ -234,6 +285,14 @@ class QueueRequestHandler(RequestHandler):
                                 context_id=req_context.context_id, task_id=req_context.task_id
                             ),
                         )
+
+                        if classify_source(conv_context)[1] is MessageSourceType.USER:
+                            deadline_token = turn_deadline.set(
+                                self._reply_deadline(
+                                    message_data.get("created_at"), bool(req_context.sender)
+                                )
+                            )
+                            note_token = turn_error_note.set(TurnErrorNote())
 
                         # Process the message in thread pool to avoid blocking event loop
                         request = ProcessMessageRequest(message_data["message"], conv_context)
@@ -274,8 +333,21 @@ class QueueRequestHandler(RequestHandler):
                 except Exception as e:
                     with bound_contextvars(**log_context):
                         logger.error(f"Error processing request: {e}")
-                        await self.handle_request_error(e)
+                        note = turn_error_note.get()
+                        if note is not None and note.text is not None and note.explains(e):
+                            # Chips a tool left pending belong to a step the model never showed,
+                            # and the reply converter would put them in place of the note's chip.
+                            clear_suggestions()
+                            await self.store_response(note.text, suggestions=note.suggestions)
+                        else:
+                            await self.handle_request_error(e)
                 finally:
+                    if note_token is not None:
+                        turn_error_note.reset(note_token)
+                        note_token = None
+                    if deadline_token is not None:
+                        turn_deadline.reset(deadline_token)
+                        deadline_token = None
                     log_context.clear()
 
         except Exception as e:

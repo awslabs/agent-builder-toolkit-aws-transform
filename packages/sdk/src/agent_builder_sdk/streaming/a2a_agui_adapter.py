@@ -47,6 +47,7 @@ from ag_ui.core import (
 )
 from pydantic import BaseModel, Field
 
+from agent_builder_sdk.orchestrator_strands.conversation.repository import TurnErrorNote
 from agent_builder_sdk.streaming.a2a_frame_utils import (
     RELAY_CYCLE_SEPARATOR,
     RELAY_TOOL_NAME,
@@ -116,6 +117,15 @@ class StreamState:
     # events here; the stream loop drains them and yields their frames before the terminal. Kept off
     # the model stream because they are known only after the turn's final message is assembled.
     side_events: List[Any] = field(default_factory=list)
+    # True once text, reasoning or a tool call of the current model call reached the client, so a
+    # retry of that call would add a second attempt to output the client already has. The retry
+    # strategy clears it when a model call starts.
+    content_streamed: bool = False
+    # time.monotonic() value at which the turn's asyncio.timeout fires.
+    turn_deadline: float | None = None
+    # Filled by a hook that ends the turn with a message for the user (see TurnErrorNote); the
+    # terminal RUN_ERROR then carries that message instead of the generic error.
+    error_note: TurnErrorNote = field(default_factory=TurnErrorNote)
 
     def __post_init__(self) -> None:
         self.run_id = str(uuid.uuid4())
@@ -236,6 +246,14 @@ def _end_model_call(state: StreamState, out: List[BaseEvent]) -> None:
     state.reasoning_message_id = None
 
 
+_CONTENT_EVENTS = (
+    TextMessageContentEvent,
+    ReasoningMessageContentEvent,
+    ToolCallStartEvent,
+    ToolCallArgsEvent,
+)
+
+
 def adapt(
     event: Dict[str, Any],
     state: StreamState,
@@ -246,8 +264,16 @@ def adapt(
     Returns a list because one Strands event can synthesize several AG-UI events
     (e.g. a first text token emits RunStarted + TextMessageStart + TextMessageContent).
     Unrecognized events return [] (dropped). ``cfg`` gates the reasoning and tool-call
-    categories at the branch head; run lifecycle and text are always emitted.
+    categories at the branch head; run lifecycle and text are always emitted. Sets
+    ``state.content_streamed`` when the result carries content.
     """
+    out = _adapt(event, state, cfg)
+    if any(isinstance(agui_event, _CONTENT_EVENTS) for agui_event in out):
+        state.content_streamed = True
+    return out
+
+
+def _adapt(event: Dict[str, Any], state: StreamState, cfg: StreamingConfig) -> List[BaseEvent]:
     if not isinstance(event, dict):
         return []
 

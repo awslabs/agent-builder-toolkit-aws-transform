@@ -97,6 +97,8 @@ if __name__ == "__main__":
 - Decline PII information requests
 - Decline requests unrelated to transformation
 
+**Model retries**: An orchestrator built with one of the `create_default_*` orchestrator factories retries a model call that fails with a read timeout, a dropped connection or a Bedrock 5xx error, at most two times, about 5 s and then 10 s later. It does not start a retry that would end after the turn's reply window, or after part of a streamed answer reached the client. Throttling keeps the Strands retry schedule. When the turn still fails, the user gets a short note with a **Continue** chip instead of an error. Pass `enable_transient_retry=False` to keep the Strands default, which retries throttling only. To get the same behavior on an orchestrator you construct yourself, pass `retry_strategy=TransientRetryStrategy()` from `agent_builder_sdk.orchestrator_strands.hooks.transient_retry_strategy`.
+
 **Custom agent initialization**: Extend `AgentRuntimeServer` and override `_get_agent_params` to pass additional arguments to your factory. See `_get_agent_params` in `agent_runtime_server.py` for the defaults.
 
 ## Building a subagent

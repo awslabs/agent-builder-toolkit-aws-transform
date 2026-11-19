@@ -600,3 +600,37 @@ class TestRelayedSubagentStream:
         out = adapt(force_stop_result_event("Jupiter is largest"), state)
         assert types(out) == [TextMessageEndEvent, RunFinishedEvent]
         assert out[0].message_id == state.force_stop_message_id
+
+
+def test_content_streamed_marks_output_of_the_current_model_call() -> None:
+    """content_streamed turns True on the first text, reasoning or tool frame, so a retry hook can
+    tell whether a retry would add to output the client already has; events the adapter drops and
+    the model-call boundary leave it as it is."""
+    state = StreamState(thread_id="t", context_id="c")
+    adapt({"init_event_loop": True}, state)
+    assert state.content_streamed is False
+
+    for event in (
+        {"data": "Hel", "delta": {"text": "Hel"}},
+        {"reasoning": True, "reasoningText": "thinking", "delta": {}},
+        {
+            "type": "tool_use_stream",
+            "current_tool_use": {"toolUseId": "tu-1", "name": "t", "input": {}},
+            "delta": {"toolUse": {"input": "{}"}},
+        },
+    ):
+        state = StreamState(thread_id="t", context_id="c")
+        adapt(event, state)
+        assert state.content_streamed is True
+        adapt({"message": {"role": "assistant", "content": []}}, state)
+        assert state.content_streamed is True
+
+
+def test_content_streamed_ignores_reasoning_the_config_drops() -> None:
+    state = StreamState(thread_id="t", context_id="c")
+    adapt(
+        {"reasoning": True, "reasoningText": "thinking", "delta": {}},
+        state,
+        StreamingConfig(emit_reasoning=False),
+    )
+    assert state.content_streamed is False
