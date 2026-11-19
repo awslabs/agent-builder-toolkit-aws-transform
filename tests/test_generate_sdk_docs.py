@@ -285,6 +285,74 @@ class TestParameterExtraction:
         assert "configuration dictionary" in desc
         assert "multiple lines" in desc
 
+    def test_continuation_line_with_a_colon_stays_with_its_parameter(
+        self, generate_sdk_docs, tmp_sdk
+    ):
+        _write_module(
+            tmp_sdk,
+            "colon.py",
+            '''\
+            def run(retry: dict, execute: bool = False) -> None:
+                """Run once.
+
+                Args:
+                    retry: Retry settings, for example
+                        mode: adaptive and max_attempts: 3.
+                    execute: Run code locally.
+                        WARNING: Code executes without a sandbox.
+
+                Example:
+                    run({}, execute=True)
+                """
+            ''',
+        )
+        desc = generate_sdk_docs.extract_sdk(tmp_sdk)[0]["description"]
+        assert "Retry settings, for example mode: adaptive and max_attempts: 3." in desc
+        assert "Run code locally. WARNING: Code executes without a sandbox." in desc
+        assert "run({}" not in desc
+
+    def test_a_parameter_named_args_is_not_read_as_the_section_header(
+        self, generate_sdk_docs, tmp_sdk
+    ):
+        _write_module(
+            tmp_sdk,
+            "cli.py",
+            '''\
+            def setup(args) -> None:
+                """Set up from the command line.
+
+                Args:
+                    args: Parsed command line arguments
+                """
+            ''',
+        )
+        desc = generate_sdk_docs.extract_sdk(tmp_sdk)[0]["description"]
+        assert "args (required) - Parsed command line arguments" in desc
+
+    def test_keyword_args_section_and_a_wrapped_line_with_a_colon(
+        self, generate_sdk_docs, tmp_sdk
+    ):
+        _write_module(
+            tmp_sdk,
+            "kw.py",
+            '''\
+            def fetch(source: str, *, timeout: int = 5, **kwargs) -> None:
+                """Fetch once.
+
+                Args:
+                    source: See the guide
+                    at https://example.com/x for details.
+
+                Keyword Args:
+                    timeout: Seconds to wait.
+                    **kwargs: Ignored.
+                """
+            ''',
+        )
+        desc = generate_sdk_docs.extract_sdk(tmp_sdk)[0]["description"]
+        assert "See the guide at https://example.com/x for details." in desc
+        assert "timeout: int (default=5) - Seconds to wait.\n" in desc + "\n"
+
 
 class TestFileHandling:
     """Test file traversal and edge cases."""
